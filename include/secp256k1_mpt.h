@@ -263,6 +263,7 @@ SECP256K1_API int secp256k1_mpt_verify_same_plaintext_multi(
         const unsigned char* tx_context_id
 );
 
+
 /**
  * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
  *
@@ -423,7 +424,6 @@ size_t secp256k1_mpt_proof_equality_shared_r_size(size_t n);
 int secp256k1_mpt_prove_equality_shared_r(
         const secp256k1_context* ctx,
         unsigned char* proof_out,
-        size_t* proof_len,
         uint64_t amount,
         const unsigned char* r_shared,
         size_t n,
@@ -439,7 +439,6 @@ int secp256k1_mpt_prove_equality_shared_r(
 int secp256k1_mpt_verify_equality_shared_r(
         const secp256k1_context* ctx,
         const unsigned char* proof,
-        size_t proof_len,
         size_t n,
         const secp256k1_pubkey* C1,
         const secp256k1_pubkey* C2_vec,

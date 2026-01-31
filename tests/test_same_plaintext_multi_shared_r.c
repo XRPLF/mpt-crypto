@@ -2,21 +2,12 @@
 #include <string.h>
 #include <assert.h>
 #include <openssl/rand.h>
+#include <stdlib.h> // Added for malloc/free
 
-#include "secp256k1_mpt.h"
 #include "secp256k1_mpt.h"
 
 /* --- Test Constants --- */
 #define N_RECIPIENTS 3
-
-/* --- Helper: Print Hex --- */
-void print_hex(const char* label, const unsigned char* data, size_t len) {
-    printf("%s: ", label);
-    for (size_t i = 0; i < len; i++) {
-        printf("%02x", data[i]);
-    }
-    printf("\n");
-}
 
 /* --- Helper: Generate Valid Scalar --- */
 static int generate_random_scalar(const secp256k1_context* ctx, unsigned char* scalar) {
@@ -74,14 +65,17 @@ void run_test_equality_shared_r() {
     }
 
     /* 5. Generate Proof */
+    // User manually allocates correct size (Correct pattern!)
     size_t proof_len = secp256k1_mpt_proof_equality_shared_r_size(N_RECIPIENTS);
     unsigned char* proof = (unsigned char*)malloc(proof_len);
     unsigned char tx_id[32];
     RAND_bytes(tx_id, 32);
 
     printf("Generating proof for %d recipients...\n", N_RECIPIENTS);
+
+    // UPDATED CALL: Removed '&proof_len'
     int res = secp256k1_mpt_prove_equality_shared_r(
-            ctx, proof, &proof_len,
+            ctx, proof,
             amount, r_shared, N_RECIPIENTS,
             &C1, C2, Pk, tx_id
     );
@@ -90,8 +84,10 @@ void run_test_equality_shared_r() {
 
     /* 6. Verify Proof (Positive Case) */
     printf("Verifying proof (Expecting Success)...\n");
+
+    // UPDATED CALL: Removed 'proof_len'
     res = secp256k1_mpt_verify_equality_shared_r(
-            ctx, proof, proof_len,
+            ctx, proof,
             N_RECIPIENTS,
             &C1, C2, Pk, tx_id
     );
@@ -107,8 +103,9 @@ void run_test_equality_shared_r() {
     unsigned char one[32] = {0}; one[31] = 1;
     assert(secp256k1_ec_pubkey_tweak_add(ctx, &C2_tampered[0], one));
 
+    // UPDATED CALL: Removed 'proof_len'
     res = secp256k1_mpt_verify_equality_shared_r(
-            ctx, proof, proof_len,
+            ctx, proof,
             N_RECIPIENTS,
             &C1, C2_tampered, Pk, tx_id
     );
@@ -121,8 +118,9 @@ void run_test_equality_shared_r() {
     memcpy(tx_id_fake, tx_id, 32);
     tx_id_fake[0] ^= 0xFF; // Flip bits
 
+    // UPDATED CALL: Removed 'proof_len'
     res = secp256k1_mpt_verify_equality_shared_r(
-            ctx, proof, proof_len,
+            ctx, proof,
             N_RECIPIENTS,
             &C1, C2, Pk, tx_id_fake
     );

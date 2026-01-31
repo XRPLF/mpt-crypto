@@ -2,39 +2,23 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include <string.h>
-#include <assert.h>
+#include <stdlib.h>
 
-//Internal Helper Functions
+/* --- Internal Helpers --- */
 
-/**
- * Generates a cryptographically secure 32-byte scalar (private key).
- * Returns 1 on success, 0 on failure.
- */
-static int generate_random_scalar(
-        const secp256k1_context* ctx,
-        unsigned char* scalar_bytes)
-{
+static int pubkey_equal(const secp256k1_context* ctx, const secp256k1_pubkey* pk1, const secp256k1_pubkey* pk2) {
+    return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
+}
+
+static int generate_random_scalar(const secp256k1_context* ctx, unsigned char* scalar) {
     do {
-        if (RAND_bytes(scalar_bytes, 32) != 1) {
-            return 0; // Randomness failure
-        }
-    } while (secp256k1_ec_seckey_verify(ctx, scalar_bytes) != 1);
+        if (RAND_bytes(scalar, 32) != 1) return 0;
+    } while (!secp256k1_ec_seckey_verify(ctx, scalar));
     return 1;
 }
 
-/**
- * Computes the point M = amount * G.
- * IMPORTANT: This function MUST NOT be called with amount = 0.
- */
-static int compute_amount_point(
-        const secp256k1_context* ctx,
-        secp256k1_pubkey* mG,
-        uint64_t amount)
-{
+static int compute_amount_point(const secp256k1_context* ctx, secp256k1_pubkey* mG, uint64_t amount) {
     unsigned char amount_scalar[32] = {0};
-    /* This function assumes amount != 0 */
-    assert(amount != 0);
-
     /* Convert amount to 32-byte BIG-ENDIAN scalar */
     for (int i = 0; i < 8; ++i) {
         amount_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
@@ -42,72 +26,51 @@ static int compute_amount_point(
     return secp256k1_ec_pubkey_create(ctx, mG, amount_scalar);
 }
 
-
 /**
- * Builds the challenge hash input for the NON-ZERO amount case.
- * Format: DomainSep || C1(33) || C2(33) || Pk(33) || mG(33) || T1(33) || T2(33) || TxID(32)
- * Total size = 23 + 33*6 + 32 = 253 bytes
+ * Streaming Hash Builder (Avoids large stack buffers)
  */
-static void build_challenge_hash_input_nonzero(
-        unsigned char hash_input[253],
-        const secp256k1_pubkey* c1, const secp256k1_pubkey* c2,
-        const secp256k1_pubkey* pk, const secp256k1_pubkey* mG,
-        const secp256k1_pubkey* T1, const secp256k1_pubkey* T2,
-        const unsigned char* tx_context_id)
-{
-    const char* domain_sep = "MPT_POK_PLAINTEXT_PROOF"; // 23 bytes
-    size_t offset = 0;
-    size_t len;
-    secp256k1_context* ser_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
-
-    memcpy(hash_input + offset, domain_sep, strlen(domain_sep));
-    offset += strlen(domain_sep);
-
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, c1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, c2, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, pk, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, mG, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T2, SECP256K1_EC_COMPRESSED); offset += len;
-
-    memcpy(hash_input + offset, tx_context_id, 32); offset += 32;
-
-    assert(offset == 253);
-    secp256k1_context_destroy(ser_ctx);
-}
-
-/**
- * Builds the challenge hash input for the ZERO amount case.
- * Format: DomainSep || C1(33) || C2(33) || Pk(33) || T1(33) || T2(33) || TxID(32)
- * Total size = 23 + 33*5 + 32 = 220 bytes
- */
-static void build_challenge_hash_input_zero(
-        unsigned char hash_input[220],
+static void compute_challenge_equality(
+        const secp256k1_context* ctx,
+        unsigned char* e_out,
         const secp256k1_pubkey* c1, const secp256k1_pubkey* c2,
         const secp256k1_pubkey* pk,
+        const secp256k1_pubkey* mG, /* NULL if amount == 0 */
         const secp256k1_pubkey* T1, const secp256k1_pubkey* T2,
         const unsigned char* tx_context_id)
 {
-    const char* domain_sep = "MPT_POK_PLAINTEXT_PROOF"; // 23 bytes
-    size_t offset = 0;
+    SHA256_CTX sha;
+    unsigned char buf[33];
+    unsigned char h[32];
     size_t len;
-    secp256k1_context* ser_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    const char* domain = "MPT_POK_PLAINTEXT_PROOF";
 
-    memcpy(hash_input + offset, domain_sep, strlen(domain_sep));
-    offset += strlen(domain_sep);
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, domain, strlen(domain));
 
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, c1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, c2, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, pk, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T2, SECP256K1_EC_COMPRESSED); offset += len;
+    // C1, C2, Pk
+    len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, c1, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
+    len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, c2, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
+    len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
 
-    memcpy(hash_input + offset, tx_context_id, 32); offset += 32;
+    // mG (Only if nonzero, logic from original code implied this structure)
+    // Note: The original code had two separate functions. We unify them here.
+    if (mG) {
+        len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, mG, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
+    }
 
-    assert(offset == 220);
-    secp256k1_context_destroy(ser_ctx);
+    // T1, T2
+    len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, T1, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
+    len = 33; secp256k1_ec_pubkey_serialize(ctx, buf, &len, T2, SECP256K1_EC_COMPRESSED); SHA256_Update(&sha, buf, 33);
+
+    if (tx_context_id) {
+        SHA256_Update(&sha, tx_context_id, 32);
+    }
+
+    SHA256_Final(h, &sha);
+    secp256k1_mpt_scalar_reduce32(e_out, h);
 }
 
+/* --- Public API --- */
 
 int secp256k1_equality_plaintext_prove(
         const secp256k1_context* ctx,
@@ -119,70 +82,62 @@ int secp256k1_equality_plaintext_prove(
         const unsigned char* randomness_r,
         const unsigned char* tx_context_id)
 {
-    unsigned char t_scalar[32];
-    unsigned char e_scalar[32];
-    unsigned char s_scalar[32];
-    unsigned char er_scalar[32];
+    unsigned char t[32];
+    unsigned char e[32];
+    unsigned char s[32];
+    unsigned char term[32];
     secp256k1_pubkey T1, T2;
+    secp256k1_pubkey mG;
+    secp256k1_pubkey* mG_ptr = NULL;
     size_t len;
+    int ok = 0;
 
-    /* Executable Code */
+    /* 0. Validate witness */
+    if (!secp256k1_ec_seckey_verify(ctx, randomness_r)) goto cleanup;
 
-    /* 1. Generate random scalar t */
-    if (!generate_random_scalar(ctx, t_scalar)) return 0;
+    /* 1. Generate random t */
+    if (!generate_random_scalar(ctx, t)) goto cleanup;
 
     /* 2. Compute commitments T1 = t*G, T2 = t*Pk */
-    if (!secp256k1_ec_pubkey_create(ctx, &T1, t_scalar)) {
-        memset(t_scalar, 0, 32); return 0;
-    }
+    if (!secp256k1_ec_pubkey_create(ctx, &T1, t)) goto cleanup;
+
     T2 = *pk_recipient;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T2, t_scalar)) {
-        memset(t_scalar, 0, 32); return 0;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T2, t)) goto cleanup;
+
+    /* 3. Compute Challenge */
+    if (amount > 0) {
+        if (!compute_amount_point(ctx, &mG, amount)) goto cleanup;
+        mG_ptr = &mG;
     }
+    compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1, &T2, tx_context_id);
 
-    /* 3. Compute challenge e = H(...) */
-    if (amount == 0) {
-        unsigned char hash_input[220];
-        build_challenge_hash_input_zero(hash_input, c1, c2, pk_recipient, &T1, &T2, tx_context_id);
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
-    } else {
-        secp256k1_pubkey mG;
-        unsigned char hash_input[253];
-        if (!compute_amount_point(ctx, &mG, amount)) {
-            memset(t_scalar, 0, 32); return 0;
-        }
-        build_challenge_hash_input_nonzero(hash_input, c1, c2, pk_recipient, &mG, &T1, &T2, tx_context_id);
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
-    }
+    /* 4. Compute s = t + e * r */
+    memcpy(s, t, 32);
+    memcpy(term, randomness_r, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e)) goto cleanup; // term = e*r
+    if (!secp256k1_ec_seckey_tweak_add(ctx, s, term)) goto cleanup; // s = t + e*r
 
-    /* Ensure e is a valid scalar */
-    if (!secp256k1_ec_seckey_verify(ctx, e_scalar)) {
-        memset(t_scalar, 0, 32); return 0;
-    }
+    /* 5. Serialize Proof */
+    unsigned char* ptr = proof;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T1, SECP256K1_EC_COMPRESSED)) goto cleanup;
+    ptr += 33;
 
-    /* 4. Compute s = (t + e*r) mod q */
-    memcpy(er_scalar, randomness_r, 32);
-    if (!secp256k1_ec_seckey_tweak_mul(ctx, er_scalar, e_scalar)) {
-        memset(t_scalar, 0, 32); return 0;
-    }
-    memcpy(s_scalar, t_scalar, 32);
-    if (!secp256k1_ec_seckey_tweak_add(ctx, s_scalar, er_scalar)) {
-        memset(t_scalar, 0, 32); return 0;
-    }
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T2, SECP256K1_EC_COMPRESSED)) goto cleanup;
+    ptr += 33;
 
-    /* 5. Format the proof = T1(33) || T2(33) || s(32) */
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, proof,      &len, &T1, SECP256K1_EC_COMPRESSED);
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, proof + 33, &len, &T2, SECP256K1_EC_COMPRESSED);
-    memcpy(proof + 66, s_scalar, 32);
+    memcpy(ptr, s, 32);
 
-    /* 6. Clear secret data */
-    memset(t_scalar, 0, 32);
-    memset(s_scalar, 0, 32);
-    memset(er_scalar, 0, 32);
+    ok = 1;
 
-    return 1;
+    cleanup:
+    OPENSSL_cleanse(t, 32);
+    OPENSSL_cleanse(term, 32);
+    // s is public output, but good practice to clean stack copy
+    OPENSSL_cleanse(s, 32);
+    return ok;
 }
-
 int secp256k1_equality_plaintext_verify(
         const secp256k1_context* ctx,
         const unsigned char* proof,
@@ -192,76 +147,69 @@ int secp256k1_equality_plaintext_verify(
         uint64_t amount,
         const unsigned char* tx_context_id)
 {
-    /* C90 Declarations */
     secp256k1_pubkey T1, T2;
-    unsigned char s_scalar[32];
-    unsigned char e_scalar[32];
-    secp256k1_pubkey lhs_eq1, rhs_eq1_term2, rhs_eq1;
-    secp256k1_pubkey lhs_eq2, rhs_eq2, rhs_eq2_term2_base;
-    const secp256k1_pubkey* points_to_add[2];
-    unsigned char lhs_bytes[33], rhs_bytes[33];
-    size_t len;
+    unsigned char s[32];
+    unsigned char e[32];
+    secp256k1_pubkey mG;
+    secp256k1_pubkey* mG_ptr = NULL;
+    const unsigned char* ptr = proof;
 
-    /* Executable Code */
+    secp256k1_pubkey LHS, RHS, term;
+    const secp256k1_pubkey* pts[2];
+    int ok = 0; // Default to failure
 
-    /* 1. Deserialize proof into T1 (33), T2 (33), s_scalar (32) */
-    if (secp256k1_ec_pubkey_parse(ctx, &T1, proof,      33) != 1) return 0;
-    if (secp256k1_ec_pubkey_parse(ctx, &T2, proof + 33, 33) != 1) return 0;
-    memcpy(s_scalar, proof + 66, 32);
-    if (!secp256k1_ec_seckey_verify(ctx, s_scalar)) return 0; /* s cannot be 0 */
+    /* 1. Deserialize */
+    if (!secp256k1_ec_pubkey_parse(ctx, &T1, ptr, 33)) goto cleanup; ptr += 33;
+    if (!secp256k1_ec_pubkey_parse(ctx, &T2, ptr, 33)) goto cleanup; ptr += 33;
+    memcpy(s, ptr, 32);
 
-    /* 2. Recompute challenge e' = H(...) */
-    if (amount == 0) {
-        unsigned char hash_input[220];
-        build_challenge_hash_input_zero(hash_input, c1, c2, pk_recipient, &T1, &T2, tx_context_id);
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
-    } else {
-        secp256k1_pubkey mG;
-        unsigned char hash_input[253];
-        if (!compute_amount_point(ctx, &mG, amount)) return 0;
-        build_challenge_hash_input_nonzero(hash_input, c1, c2, pk_recipient, &mG, &T1, &T2, tx_context_id);
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
+    // Check s != 0
+    if (!secp256k1_ec_seckey_verify(ctx, s)) goto cleanup;
+
+    /* 2. Recompute Challenge */
+    if (amount > 0) {
+        if (!compute_amount_point(ctx, &mG, amount)) goto cleanup;
+        mG_ptr = &mG;
     }
-    if (!secp256k1_ec_seckey_verify(ctx, e_scalar)) return 0; /* e cannot be 0 */
+    compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1, &T2, tx_context_id);
 
+    /* 3. Verify Equations */
 
-    /* 3. Check Equation 1: s*G == T1 + e'*C1 */
-    if (!secp256k1_ec_pubkey_create(ctx, &lhs_eq1, s_scalar)) return 0;
-    rhs_eq1_term2 = *c1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rhs_eq1_term2, e_scalar)) return 0;
-    points_to_add[0] = &T1; points_to_add[1] = &rhs_eq1_term2;
-    if (!secp256k1_ec_pubkey_combine(ctx, &rhs_eq1, points_to_add, 2)) return 0;
+    /* --- Eq 1: s * G == T1 + e * C1 --- */
+    if (!secp256k1_ec_pubkey_create(ctx, &LHS, s)) goto cleanup; // s*G
 
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs_eq1, SECP256K1_EC_COMPRESSED);
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs_eq1, SECP256K1_EC_COMPRESSED);
-    if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) return 0; // Eq 1 failed
+    term = *c1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup; // e*C1
+    pts[0] = &T1; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 2)) goto cleanup; // T1 + e*C1
 
-    /* 4. Check Equation 2: s*Pk == T2 + e'*Y */
-    /* 4a. LHS = s*Pk */
-    lhs_eq2 = *pk_recipient;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &lhs_eq2, s_scalar)) return 0;
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-    /* 4b. Define Y (the base for the second part of the proof) */
-    if (amount == 0) {
-        rhs_eq2_term2_base = *c2; // Y = C2
-    } else {
-        secp256k1_pubkey mG;
-        compute_amount_point(ctx, &mG, amount);
-        if (!secp256k1_ec_pubkey_negate(ctx, &mG)) return 0;
-        points_to_add[0] = c2; points_to_add[1] = &mG;
-        if (!secp256k1_ec_pubkey_combine(ctx, &rhs_eq2_term2_base, points_to_add, 2)) return 0; // Y = C2 - mG
+    /* --- Eq 2: s * Pk == T2 + e * (C2 - mG) --- */
+
+    /* LHS = s * Pk */
+    LHS = *pk_recipient;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &LHS, s)) goto cleanup;
+
+    /* RHS Construction: Y = C2 - mG */
+    secp256k1_pubkey Y = *c2;
+    if (mG_ptr) {
+        secp256k1_pubkey neg_mG = *mG_ptr;
+        if (!secp256k1_ec_pubkey_negate(ctx, &neg_mG)) goto cleanup;
+        pts[0] = c2; pts[1] = &neg_mG;
+        if (!secp256k1_ec_pubkey_combine(ctx, &Y, pts, 2)) goto cleanup;
     }
 
-    /* 4c. RHS term = e'*Y */
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rhs_eq2_term2_base, e_scalar)) return 0;
-    /* 4d. RHS = T2 + (e'*Y) */
-    points_to_add[0] = &T2; points_to_add[1] = &rhs_eq2_term2_base;
-    if (!secp256k1_ec_pubkey_combine(ctx, &rhs_eq2, points_to_add, 2)) return 0;
+    /* RHS = T2 + e * Y */
+    term = Y;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup; // e*Y
+    pts[0] = &T2; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 2)) goto cleanup;
 
-    /* 4e. Compare LHS == RHS */
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs_eq2, SECP256K1_EC_COMPRESSED);
-    len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs_eq2, SECP256K1_EC_COMPRESSED);
-    if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) return 0; // Eq 2 failed
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-    return 1; /* Both equations passed */
+    ok = 1;
+
+    cleanup:
+    return ok;
 }

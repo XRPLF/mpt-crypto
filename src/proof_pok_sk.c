@@ -2,18 +2,38 @@
 #include <string.h>
 #include <openssl/sha.h>
 #include <openssl/rand.h>
+#include <stdlib.h>
 
-static void build_pok_challenge(unsigned char* e, const secp256k1_context* ctx,
-                                const secp256k1_pubkey* pk, const secp256k1_pubkey* T,
-                                const unsigned char* context_id) {
+/* --- Internal Helpers --- */
+
+static int pubkey_equal(const secp256k1_context* ctx, const secp256k1_pubkey* pk1, const secp256k1_pubkey* pk2) {
+    return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
+}
+
+static int generate_random_scalar(const secp256k1_context* ctx, unsigned char* scalar) {
+    do {
+        if (RAND_bytes(scalar, 32) != 1) return 0;
+    } while (!secp256k1_ec_seckey_verify(ctx, scalar));
+    return 1;
+}
+
+static void build_pok_challenge(
+        const secp256k1_context* ctx,
+        unsigned char* e_out,
+        const secp256k1_pubkey* pk,
+        const secp256k1_pubkey* T,
+        const unsigned char* context_id)
+{
     SHA256_CTX sha;
     unsigned char buf[33];
-    size_t len = 33;
+    unsigned char h[32];
+    size_t len;
+    const char* domain = "MPT_POK_SK_REGISTER";
 
     SHA256_Init(&sha);
-    // Domain Separator from LaTeX spec
-    SHA256_Update(&sha, "MPT_POK_SK_REGISTER", 19);
+    SHA256_Update(&sha, domain, strlen(domain));
 
+    len = 33;
     secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED);
     SHA256_Update(&sha, buf, 33);
 
@@ -21,68 +41,94 @@ static void build_pok_challenge(unsigned char* e, const secp256k1_context* ctx,
     secp256k1_ec_pubkey_serialize(ctx, buf, &len, T, SECP256K1_EC_COMPRESSED);
     SHA256_Update(&sha, buf, 33);
 
-    SHA256_Update(&sha, context_id, 32);
-    SHA256_Final(e, &sha);
+    if (context_id) {
+        SHA256_Update(&sha, context_id, 32);
+    }
+
+    SHA256_Final(h, &sha);
+    secp256k1_mpt_scalar_reduce32(e_out, h);
 }
 
-int secp256k1_mpt_pok_sk_prove(const secp256k1_context* ctx, unsigned char* proof,
-                               const secp256k1_pubkey* pk, const unsigned char* sk,
-                               const unsigned char* context_id) {
-    unsigned char k[32], e[32], s[32];
+/* --- Public API --- */
+
+int secp256k1_mpt_pok_sk_prove(
+        const secp256k1_context* ctx,
+        unsigned char* proof_out,
+        const secp256k1_pubkey* pk,
+        const unsigned char* sk,
+        const unsigned char* context_id)
+{
+    unsigned char k[32];
+    unsigned char e[32];
+    unsigned char s[32];
+    unsigned char term[32];
     secp256k1_pubkey T;
+    size_t len;
+    int ok = 0;
 
-    // 1. Sample k and T = kG
-    do {
-        if (RAND_bytes(k, 32) != 1) return 0;
-    } while (!secp256k1_ec_seckey_verify(ctx, k));
+    if (!secp256k1_ec_seckey_verify(ctx, sk)) return 0;
+    if (!generate_random_scalar(ctx, k)) goto cleanup;
+    if (!secp256k1_ec_pubkey_create(ctx, &T, k)) goto cleanup;
 
-    if (!secp256k1_ec_pubkey_create(ctx, &T, k)) return 0;
+    build_pok_challenge(ctx, e, pk, &T, context_id);
 
-    // 2. Challenge e
-    build_pok_challenge(e, ctx, pk, &T, context_id);
+    // s = k + e*sk
+    memcpy(term, sk, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e)) goto cleanup;
+    memcpy(s, k, 32);
+    if (!secp256k1_ec_seckey_tweak_add(ctx, s, term)) goto cleanup;
 
-    // 3. Response s = k + e*sk (mod n)
-    memcpy(s, sk, 32);
-    if (!secp256k1_ec_seckey_tweak_mul(ctx, s, e)) return 0;
-    if (!secp256k1_ec_seckey_tweak_add(ctx, s, k)) return 0;
+    // Serialize: T (33) || s (32)
+    unsigned char* ptr = proof_out;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T, SECP256K1_EC_COMPRESSED)) goto cleanup;
+    ptr += 33;
+    memcpy(ptr, s, 32);
 
-    // 4. Serialize Proof: T (33 bytes) || s (32 bytes)
-    size_t clen = 33;
-    secp256k1_ec_pubkey_serialize(ctx, proof, &clen, &T, SECP256K1_EC_COMPRESSED);
-    memcpy(proof + 33, s, 32);
+    ok = 1;
 
-    return 1;
+    cleanup:
+    OPENSSL_cleanse(k, 32);
+    OPENSSL_cleanse(term, 32);
+    OPENSSL_cleanse(s, 32);
+    return ok;
 }
 
-int secp256k1_mpt_pok_sk_verify(const secp256k1_context* ctx, const unsigned char* proof,
-                                const secp256k1_pubkey* pk, const unsigned char* context_id) {
-    secp256k1_pubkey T, lhs, rhs, ePk;
+int secp256k1_mpt_pok_sk_verify(
+        const secp256k1_context* ctx,
+        const unsigned char* proof,  // Caller MUST ensure this is at least 65 bytes
+        const secp256k1_pubkey* pk,
+        const unsigned char* context_id)
+{
+    secp256k1_pubkey T, LHS, RHS, ePk;
     unsigned char e[32], s[32];
+    const unsigned char* ptr = proof;
+    int ok = 0;
 
-    // 1. Parse T and s
-    if (!secp256k1_ec_pubkey_parse(ctx, &T, proof, 33)) return 0;
-    memcpy(s, proof + 33, 32);
+    /* 1. Parse T (33 bytes) */
+    if (!secp256k1_ec_pubkey_parse(ctx, &T, ptr, 33)) goto cleanup;
+    ptr += 33;
 
-    // 2. Challenge e
-    build_pok_challenge(e, ctx, pk, &T, context_id);
+    /* 2. Parse s (32 bytes) */
+    memcpy(s, ptr, 32);
+    if (!secp256k1_ec_seckey_verify(ctx, s)) goto cleanup;
 
-    // 3. Verify sG = T + ePk
-    // LHS = s*G
-    if (!secp256k1_ec_pubkey_create(ctx, &lhs, s)) return 0;
+    /* 3. Recompute Challenge */
+    build_pok_challenge(ctx, e, pk, &T, context_id);
 
-    // RHS = T + e*Pk
+    /* 4. Verify Equation: s*G == T + e*Pk */
+    if (!secp256k1_ec_pubkey_create(ctx, &LHS, s)) goto cleanup;
+
     ePk = *pk;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePk, e)) return 0;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePk, e)) goto cleanup;
 
     const secp256k1_pubkey* addends[2] = {&T, &ePk};
-    if (!secp256k1_ec_pubkey_combine(ctx, &rhs, addends, 2)) return 0;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, addends, 2)) goto cleanup;
 
-    // 4. Compare serialized points
-    unsigned char ser_lhs[33], ser_rhs[33];
-    size_t clen = 33;
-    secp256k1_ec_pubkey_serialize(ctx, ser_lhs, &clen, &lhs, SECP256K1_EC_COMPRESSED);
-    clen = 33;
-    secp256k1_ec_pubkey_serialize(ctx, ser_rhs, &clen, &rhs, SECP256K1_EC_COMPRESSED);
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-    return memcmp(ser_lhs, ser_rhs, 33) == 0;
+    ok = 1;
+
+    cleanup:
+    return ok;
 }

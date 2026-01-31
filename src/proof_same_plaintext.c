@@ -2,91 +2,74 @@
 #include <openssl/sha.h>
 #include <openssl/rand.h>
 #include <string.h>
-#include <assert.h>
+#include <stdlib.h>
 
-/**
- * Generates a cryptographically secure 32-byte scalar (private key).
- * Returns 1 on success, 0 on failure.
- */
-static int generate_random_scalar(
-        const secp256k1_context* ctx,
-        unsigned char* scalar_bytes)
-{
+/* --- Internal Helpers --- */
+
+static int pubkey_equal(const secp256k1_context* ctx, const secp256k1_pubkey* pk1, const secp256k1_pubkey* pk2) {
+    return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
+}
+
+static int generate_random_scalar(const secp256k1_context* ctx, unsigned char* scalar) {
     do {
-        if (RAND_bytes(scalar_bytes, 32) != 1) {
-            return 0; // Randomness failure
-        }
-    } while (secp256k1_ec_seckey_verify(ctx, scalar_bytes) != 1);
+        if (RAND_bytes(scalar, 32) != 1) return 0;
+    } while (!secp256k1_ec_seckey_verify(ctx, scalar));
     return 1;
 }
 
 /**
- * Computes the point M = amount * G.
- * Returns 1 on success, 0 on failure. Assumes amount > 0.
- */
-static int compute_amount_point(
-        const secp256k1_context* ctx,
-        secp256k1_pubkey* mG,
-        uint64_t amount)
-{
-    unsigned char amount_scalar[32] = {0};
-    assert(amount != 0); // This proof is for non-zero amounts
-
-    /* Convert amount to 32-byte BIG-ENDIAN scalar */
-    for (int i = 0; i < 8; ++i) {
-        amount_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
-    }
-    return secp256k1_ec_pubkey_create(ctx, mG, amount_scalar);
-}
-
-/**
  * Builds the challenge hash input.
- * Format: DomainSep || 6 points (33*6) || 5 points (33*5) || TxID (32)
- * Total size = 30 + 198 + 165 + 32 = 425 bytes
  */
 static void build_same_plaintext_hash_input(
-        unsigned char hash_input[423],
+        const secp256k1_context* ctx,
+        unsigned char* e_out,
         const secp256k1_pubkey* R1, const secp256k1_pubkey* S1, const secp256k1_pubkey* P1,
         const secp256k1_pubkey* R2, const secp256k1_pubkey* S2, const secp256k1_pubkey* P2,
-        const secp256k1_pubkey* T_m, const secp256k1_pubkey* T_r1_G,
-        const secp256k1_pubkey* T_r1_P1, const secp256k1_pubkey* T_r2_G,
-        const secp256k1_pubkey* T_r2_P2,
+        const secp256k1_pubkey* T_m,
+        const secp256k1_pubkey* T_r1_G, const secp256k1_pubkey* T_r1_P1,
+        const secp256k1_pubkey* T_r2_G, const secp256k1_pubkey* T_r2_P2,
         const unsigned char* tx_context_id)
 {
-    const char* domain_sep = "MPT_POK_SAME_PLAINTEXT_PROOF"; // 30 bytes
-    size_t offset = 0;
-    size_t len = 33; // All points are 33 bytes compressed
-    secp256k1_context* ser_ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+    SHA256_CTX sha;
+    unsigned char buf[33];
+    unsigned char h[32];
+    size_t len;
+    const char* domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
 
-    memcpy(hash_input + offset, domain_sep, strlen(domain_sep));
-    offset += strlen(domain_sep);
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, domain, strlen(domain));
+
+    /* Helper macro to serialize and update */
+#define SER_AND_HASH(pk) do { \
+        len = 33; \
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED); \
+        SHA256_Update(&sha, buf, 33); \
+    } while(0)
 
     // 6 Public Inputs
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, R1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, S1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, P1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, R2, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, S2, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, P2, SECP256K1_EC_COMPRESSED); offset += len;
+    SER_AND_HASH(R1); SER_AND_HASH(S1); SER_AND_HASH(P1);
+    SER_AND_HASH(R2); SER_AND_HASH(S2); SER_AND_HASH(P2);
 
-    // 5 Commitment Points
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T_m, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T_r1_G, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T_r1_P1, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T_r2_G, SECP256K1_EC_COMPRESSED); offset += len;
-    len = 33; secp256k1_ec_pubkey_serialize(ser_ctx, hash_input + offset, &len, T_r2_P2, SECP256K1_EC_COMPRESSED); offset += len;
+    // 5 Commitments
+    SER_AND_HASH(T_m);
+    SER_AND_HASH(T_r1_G); SER_AND_HASH(T_r1_P1);
+    SER_AND_HASH(T_r2_G); SER_AND_HASH(T_r2_P2);
 
-    // Transaction Context
-    memcpy(hash_input + offset, tx_context_id, 32); offset += 32;
+#undef SER_AND_HASH
 
-    assert(offset == 423);
-    secp256k1_context_destroy(ser_ctx);
+    if (tx_context_id) {
+        SHA256_Update(&sha, tx_context_id, 32);
+    }
+
+    SHA256_Final(h, &sha);
+    secp256k1_mpt_scalar_reduce32(e_out, h);
 }
 
+/* --- Public API --- */
 
 int secp256k1_mpt_prove_same_plaintext(
         const secp256k1_context* ctx,
-        unsigned char* proof_out,          // Output: 261 bytes
+        unsigned char* proof_out,
         const secp256k1_pubkey* R1, const secp256k1_pubkey* S1, const secp256k1_pubkey* P1,
         const secp256k1_pubkey* R2, const secp256k1_pubkey* S2, const secp256k1_pubkey* P2,
         uint64_t amount_m,
@@ -94,210 +77,169 @@ int secp256k1_mpt_prove_same_plaintext(
         const unsigned char* randomness_r2,
         const unsigned char* tx_context_id
 ) {
-
     unsigned char k_m[32], k_r1[32], k_r2[32];
     unsigned char m_scalar[32] = {0};
-    unsigned char e_scalar[32];
+    unsigned char e[32];
     unsigned char s_m[32], s_r1[32], s_r2[32];
-    unsigned char em[32], er1[32], er2[32];
+    unsigned char term[32];
     secp256k1_pubkey T_m, T_r1_G, T_r1_P1, T_r2_G, T_r2_P2;
-    unsigned char hash_input[423];
     size_t len;
-    int all_ok = 1;
+    int ok = 0;
 
-    /* 1. Generate random blinding scalars */
-    if (!generate_random_scalar(ctx, k_m)) all_ok = 0;
-    if (all_ok && !generate_random_scalar(ctx, k_r1)) all_ok = 0;
-    if (all_ok && !generate_random_scalar(ctx, k_r2)) all_ok = 0;
+    /* 1. Generate Randomness */
+    if (!generate_random_scalar(ctx, k_m)) goto cleanup;
+    if (!generate_random_scalar(ctx, k_r1)) goto cleanup;
+    if (!generate_random_scalar(ctx, k_r2)) goto cleanup;
 
-    /* 2. Compute Commitments */
-    if (all_ok) {
-        if (!secp256k1_ec_pubkey_create(ctx, &T_m, k_m)) all_ok = 0;
-        if (!secp256k1_ec_pubkey_create(ctx, &T_r1_G, k_r1)) all_ok = 0;
-        if (!secp256k1_ec_pubkey_create(ctx, &T_r2_G, k_r2)) all_ok = 0;
+    /* 2. Commitments */
+    if (!secp256k1_ec_pubkey_create(ctx, &T_m, k_m)) goto cleanup;
 
-        T_r1_P1 = *P1;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T_r1_P1, k_r1)) all_ok = 0;
-        T_r2_P2 = *P2;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T_r2_P2, k_r2)) all_ok = 0;
-    }
+    if (!secp256k1_ec_pubkey_create(ctx, &T_r1_G, k_r1)) goto cleanup;
+    T_r1_P1 = *P1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T_r1_P1, k_r1)) goto cleanup;
 
-    /* 3. Compute Challenge */
-    if (all_ok) {
-        build_same_plaintext_hash_input(
-                hash_input, R1, S1, P1, R2, S2, P2,
-                &T_m, &T_r1_G, &T_r1_P1, &T_r2_G, &T_r2_P2,
-                tx_context_id
-        );
-        // Using SHA256 as placeholder for SHA-512Half
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
-        if (!secp256k1_ec_seckey_verify(ctx, e_scalar)) all_ok = 0;
-    }
+    if (!secp256k1_ec_pubkey_create(ctx, &T_r2_G, k_r2)) goto cleanup;
+    T_r2_P2 = *P2;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T_r2_P2, k_r2)) goto cleanup;
 
-    /* 4. Compute Responses s = (k + e*x) */
-    if (all_ok) {
-        /* Convert amount m to big-endian scalar */
-        for (int i = 0; i < 8; ++i) {
-            m_scalar[31 - i] = (amount_m >> (i * 8)) & 0xFF;
-        }
+    /* 3. Challenge */
+    build_same_plaintext_hash_input(ctx, e, R1, S1, P1, R2, S2, P2,
+                                    &T_m, &T_r1_G, &T_r1_P1, &T_r2_G, &T_r2_P2,
+                                    tx_context_id);
 
-        /* s_m = k_m + e*m */
-        memcpy(em, m_scalar, 32);
-        if (!secp256k1_ec_seckey_tweak_mul(ctx, em, e_scalar)) all_ok = 0;
-        memcpy(s_m, k_m, 32);
-        if (!secp256k1_ec_seckey_tweak_add(ctx, s_m, em)) all_ok = 0;
+    /* 4. Responses */
+    for (int i = 0; i < 8; ++i) m_scalar[31 - i] = (amount_m >> (i * 8)) & 0xFF;
 
-        /* s_r1 = k_r1 + e*r1 */
-        memcpy(er1, randomness_r1, 32);
-        if (!secp256k1_ec_seckey_tweak_mul(ctx, er1, e_scalar)) all_ok = 0;
-        memcpy(s_r1, k_r1, 32);
-        if (!secp256k1_ec_seckey_tweak_add(ctx, s_r1, er1)) all_ok = 0;
+    // s_m = k_m + e * m
+    memcpy(s_m, k_m, 32);
+    memcpy(term, m_scalar, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e)) goto cleanup;
+    if (!secp256k1_ec_seckey_tweak_add(ctx, s_m, term)) goto cleanup;
 
-        /* s_r2 = k_r2 + e*r2 */
-        memcpy(er2, randomness_r2, 32);
-        if (!secp256k1_ec_seckey_tweak_mul(ctx, er2, e_scalar)) all_ok = 0;
-        memcpy(s_r2, k_r2, 32);
-        if (!secp256k1_ec_seckey_tweak_add(ctx, s_r2, er2)) all_ok = 0;
-    }
+    // s_r1 = k_r1 + e * r1
+    memcpy(s_r1, k_r1, 32);
+    memcpy(term, randomness_r1, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e)) goto cleanup;
+    if (!secp256k1_ec_seckey_tweak_add(ctx, s_r1, term)) goto cleanup;
 
-    /* 5. Serialize proof */
-    if (all_ok) {
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, proof_out + 0,   &len, &T_m, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, proof_out + 33,  &len, &T_r1_G, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, proof_out + 66,  &len, &T_r1_P1, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, proof_out + 99,  &len, &T_r2_G, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, proof_out + 132, &len, &T_r2_P2, SECP256K1_EC_COMPRESSED);
-        memcpy(proof_out + 165, s_m, 32);
-        memcpy(proof_out + 197, s_r1, 32);
-        memcpy(proof_out + 229, s_r2, 32);
-        assert(165 + 32 + 32 + 32 == 261);
-    }
+    // s_r2 = k_r2 + e * r2
+    memcpy(s_r2, k_r2, 32);
+    memcpy(term, randomness_r2, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e)) goto cleanup;
+    if (!secp256k1_ec_seckey_tweak_add(ctx, s_r2, term)) goto cleanup;
 
-    /* 6. Clear secrets */
-    memset(k_m, 0, 32);
-    memset(k_r1, 0, 32);
-    memset(k_r2, 0, 32);
-    memset(m_scalar, 0, 32);
-    memset(s_m, 0, 32);
-    memset(s_r1, 0, 32);
-    memset(s_r2, 0, 32);
-    memset(em, 0, 32);
-    memset(er1, 0, 32);
-    memset(er2, 0, 32);
+    /* 5. Serialize */
+    unsigned char* ptr = proof_out;
 
-    return all_ok;
+    len = 33; if(!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T_m, SECP256K1_EC_COMPRESSED)) goto cleanup; ptr += 33;
+    len = 33; if(!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T_r1_G, SECP256K1_EC_COMPRESSED)) goto cleanup; ptr += 33;
+    len = 33; if(!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T_r1_P1, SECP256K1_EC_COMPRESSED)) goto cleanup; ptr += 33;
+    len = 33; if(!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T_r2_G, SECP256K1_EC_COMPRESSED)) goto cleanup; ptr += 33;
+    len = 33; if(!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T_r2_P2, SECP256K1_EC_COMPRESSED)) goto cleanup; ptr += 33;
+
+    memcpy(ptr, s_m, 32); ptr += 32;
+    memcpy(ptr, s_r1, 32); ptr += 32;
+    memcpy(ptr, s_r2, 32); ptr += 32;
+
+    ok = 1;
+
+    cleanup:
+    OPENSSL_cleanse(k_m, 32);
+    OPENSSL_cleanse(k_r1, 32);
+    OPENSSL_cleanse(k_r2, 32);
+    OPENSSL_cleanse(m_scalar, 32);
+    return ok;
 }
 
 int secp256k1_mpt_verify_same_plaintext(
         const secp256k1_context* ctx,
-        const unsigned char* proof,        // Input: 261 bytes
+        const unsigned char* proof,        // Caller MUST provide at least 261 bytes
         const secp256k1_pubkey* R1, const secp256k1_pubkey* S1, const secp256k1_pubkey* P1,
         const secp256k1_pubkey* R2, const secp256k1_pubkey* S2, const secp256k1_pubkey* P2,
         const unsigned char* tx_context_id
 ) {
-    /* C90 Declarations */
+    /* Fixed Size: 5 points (33) + 3 scalars (32) = 165 + 96 = 261 bytes */
+
     secp256k1_pubkey T_m, T_r1_G, T_r1_P1, T_r2_G, T_r2_P2;
     unsigned char s_m[32], s_r1[32], s_r2[32];
-    unsigned char e_scalar[32];
-    unsigned char hash_input[423];
-    int all_ok = 1;
+    unsigned char e[32];
+    const unsigned char* ptr = proof;
+    int ok = 0;
 
-    secp256k1_pubkey lhs, rhs, term1, term2, term3;
-    const secp256k1_pubkey* points_to_add[3];
-    unsigned char lhs_bytes[33], rhs_bytes[33];
-    size_t len;
+    secp256k1_pubkey LHS, RHS, term, SmG;
+    const secp256k1_pubkey* pts[3];
 
-    /* 1. Deserialize proof */
-    if (all_ok) {
-        if (secp256k1_ec_pubkey_parse(ctx, &T_m,    proof + 0,   33) != 1) all_ok = 0;
-        if (secp256k1_ec_pubkey_parse(ctx, &T_r1_G, proof + 33,  33) != 1) all_ok = 0;
-        if (secp256k1_ec_pubkey_parse(ctx, &T_r1_P1, proof + 66, 33) != 1) all_ok = 0;
-        if (secp256k1_ec_pubkey_parse(ctx, &T_r2_G, proof + 99,  33) != 1) all_ok = 0;
-        if (secp256k1_ec_pubkey_parse(ctx, &T_r2_P2, proof + 132, 33) != 1) all_ok = 0;
+    /* 1. Deserialize (Strict 261 bytes) */
 
-        memcpy(s_m, proof + 165, 32);
-        memcpy(s_r1, proof + 197, 32);
-        memcpy(s_r2, proof + 229, 32);
+    // Parse 5 Points (5 * 33 = 165 bytes)
+    if (!secp256k1_ec_pubkey_parse(ctx, &T_m,    ptr, 33)) goto cleanup; ptr += 33;
+    if (!secp256k1_ec_pubkey_parse(ctx, &T_r1_G, ptr, 33)) goto cleanup; ptr += 33;
+    if (!secp256k1_ec_pubkey_parse(ctx, &T_r1_P1,ptr, 33)) goto cleanup; ptr += 33;
+    if (!secp256k1_ec_pubkey_parse(ctx, &T_r2_G, ptr, 33)) goto cleanup; ptr += 33;
+    if (!secp256k1_ec_pubkey_parse(ctx, &T_r2_P2,ptr, 33)) goto cleanup; ptr += 33;
 
-        if (!secp256k1_ec_seckey_verify(ctx, s_m)) all_ok = 0;
-        if (!secp256k1_ec_seckey_verify(ctx, s_r1)) all_ok = 0;
-        if (!secp256k1_ec_seckey_verify(ctx, s_r2)) all_ok = 0;
-    }
+    // Parse 3 Scalars (3 * 32 = 96 bytes)
+    memcpy(s_m, ptr, 32); ptr += 32;
+    memcpy(s_r1, ptr, 32); ptr += 32;
+    memcpy(s_r2, ptr, 32); ptr += 32;
 
-    /* 2. Compute Challenge */
-    if (all_ok) {
-        build_same_plaintext_hash_input(
-                hash_input, R1, S1, P1, R2, S2, P2,
-                &T_m, &T_r1_G, &T_r1_P1, &T_r2_G, &T_r2_P2,
-                tx_context_id
-        );
-        SHA256(hash_input, sizeof(hash_input), e_scalar);
-        if (!secp256k1_ec_seckey_verify(ctx, e_scalar)) all_ok = 0;
-    }
+    // Sanity Check Scalars
+    if (!secp256k1_ec_seckey_verify(ctx, s_m)) goto cleanup;
+    if (!secp256k1_ec_seckey_verify(ctx, s_r1)) goto cleanup;
+    if (!secp256k1_ec_seckey_verify(ctx, s_r2)) goto cleanup;
 
-    /* 3. Check Eq 1: s_r1 * G == T_r1_G + e * R1 */
-    if (all_ok) {
-        if (!secp256k1_ec_pubkey_create(ctx, &lhs, s_r1)) all_ok = 0;
+    /* 2. Challenge */
+    build_same_plaintext_hash_input(ctx, e, R1, S1, P1, R2, S2, P2,
+                                    &T_m, &T_r1_G, &T_r1_P1, &T_r2_G, &T_r2_P2,
+                                    tx_context_id);
 
-        term1 = *R1;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term1, e_scalar)) all_ok = 0;
-        points_to_add[0] = &T_r1_G; points_to_add[1] = &term1;
-        if (!secp256k1_ec_pubkey_combine(ctx, &rhs, points_to_add, 2)) all_ok = 0;
+    /* 3. Verification Equations */
 
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs, SECP256K1_EC_COMPRESSED);
-        if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) all_ok = 0;
-    }
+    // Precompute SmG (used in Eq 2 & 4)
+    if (!secp256k1_ec_pubkey_create(ctx, &SmG, s_m)) goto cleanup;
 
-    /* 4. Check Eq 2: s_m * G + s_r1 * P1 == T_m + T_r1_P1 + e * S1 */
-    if (all_ok) {
-        if (!secp256k1_ec_pubkey_create(ctx, &term1, s_m)) all_ok = 0;
-        term2 = *P1;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term2, s_r1)) all_ok = 0;
-        points_to_add[0] = &term1; points_to_add[1] = &term2;
-        if (!secp256k1_ec_pubkey_combine(ctx, &lhs, points_to_add, 2)) all_ok = 0;
+    /* Eq 1: s_r1 * G == T_r1_G + e * R1 */
+    if (!secp256k1_ec_pubkey_create(ctx, &LHS, s_r1)) goto cleanup;
+    term = *R1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup;
+    pts[0] = &T_r1_G; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 2)) goto cleanup;
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-        term3 = *S1;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term3, e_scalar)) all_ok = 0;
-        points_to_add[0] = &T_m; points_to_add[1] = &T_r1_P1; points_to_add[2] = &term3;
-        if (!secp256k1_ec_pubkey_combine(ctx, &rhs, points_to_add, 3)) all_ok = 0;
+    /* Eq 2: s_m * G + s_r1 * P1 == T_m + T_r1_P1 + e * S1 */
+    term = *P1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_r1)) goto cleanup;
+    pts[0] = &SmG; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &LHS, pts, 2)) goto cleanup;
 
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs, SECP256K1_EC_COMPRESSED);
-        if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) all_ok = 0;
-    }
+    term = *S1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup;
+    pts[0] = &T_m; pts[1] = &T_r1_P1; pts[2] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 3)) goto cleanup;
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-    /* 5. Check Eq 3: s_r2 * G == T_r2_G + e * R2 */
-    if (all_ok) {
-        if (!secp256k1_ec_pubkey_create(ctx, &lhs, s_r2)) all_ok = 0;
+    /* Eq 3: s_r2 * G == T_r2_G + e * R2 */
+    if (!secp256k1_ec_pubkey_create(ctx, &LHS, s_r2)) goto cleanup;
+    term = *R2;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup;
+    pts[0] = &T_r2_G; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 2)) goto cleanup;
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-        term1 = *R2;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term1, e_scalar)) all_ok = 0;
-        points_to_add[0] = &T_r2_G; points_to_add[1] = &term1;
-        if (!secp256k1_ec_pubkey_combine(ctx, &rhs, points_to_add, 2)) all_ok = 0;
+    /* Eq 4: s_m * G + s_r2 * P2 == T_m + T_r2_P2 + e * S2 */
+    term = *P2;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_r2)) goto cleanup;
+    pts[0] = &SmG; pts[1] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &LHS, pts, 2)) goto cleanup;
 
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs, SECP256K1_EC_COMPRESSED);
-        if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) all_ok = 0;
-    }
+    term = *S2;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, e)) goto cleanup;
+    pts[0] = &T_m; pts[1] = &T_r2_P2; pts[2] = &term;
+    if (!secp256k1_ec_pubkey_combine(ctx, &RHS, pts, 3)) goto cleanup;
+    if (!pubkey_equal(ctx, &LHS, &RHS)) goto cleanup;
 
-    /* 6. Check Eq 4: s_m * G + s_r2 * P2 == T_m + T_r2_P2 + e * S2 */
-    if (all_ok) {
-        if (!secp256k1_ec_pubkey_create(ctx, &term1, s_m)) all_ok = 0;
-        term2 = *P2;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term2, s_r2)) all_ok = 0;
-        points_to_add[0] = &term1; points_to_add[1] = &term2;
-        if (!secp256k1_ec_pubkey_combine(ctx, &lhs, points_to_add, 2)) all_ok = 0;
+    ok = 1;
 
-        term3 = *S2;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term3, e_scalar)) all_ok = 0;
-        points_to_add[0] = &T_m; points_to_add[1] = &T_r2_P2; points_to_add[2] = &term3;
-        if (!secp256k1_ec_pubkey_combine(ctx, &rhs, points_to_add, 3)) all_ok = 0;
-
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, lhs_bytes, &len, &lhs, SECP256K1_EC_COMPRESSED);
-        len = 33; secp256k1_ec_pubkey_serialize(ctx, rhs_bytes, &len, &rhs, SECP256K1_EC_COMPRESSED);
-        if (memcmp(lhs_bytes, rhs_bytes, 33) != 0) all_ok = 0;
-    }
-
-    return all_ok;
+    cleanup:
+    return ok;
 }

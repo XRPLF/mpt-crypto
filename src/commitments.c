@@ -1,18 +1,20 @@
 #include "secp256k1_mpt.h"
 #include <string.h>
 #include <openssl/sha.h>
+#include <openssl/crypto.h> // For OPENSSL_cleanse
 
 /* --- Internal Helpers --- */
 
 /**
  * @brief Deterministically derives a NUMS (Nothing-Up-My-Sleeve) generator point.
- * * Uses SHA-256 try-and-increment to find an x-coordinate. This ensures the
- * discrete logarithm of the resulting point is unknown, which is a core
- * security requirement for Bulletproof binding and vector commitments.
+ * * Uses SHA-256 try-and-increment to find a valid x-coordinate. This ensures the
+ * discrete logarithm of the resulting point is unknown ("unspendable"), which is
+ * a core security requirement for Bulletproof binding and vector commitments.
  *
  * @param ctx       secp256k1 context (VERIFY flag required).
  * @param out       The derived public key generator.
  * @param label     Domain/vector label (e.g., "G" or "H").
+ * @param label_len Length of the label string.
  * @param index     Vector index (enforced Big-Endian).
  * @return 1 on success, 0 on failure.
  */
@@ -32,6 +34,7 @@ int secp256k1_mpt_hash_to_point_nums(
             (unsigned char)(index >> 8),  (unsigned char)(index & 0xFF)
     };
 
+    /* Try-and-increment loop */
     while (ctr < 0xFFFFFFFFu) {
         unsigned char ctr_be[4] = {
                 (unsigned char)(ctr >> 24), (unsigned char)(ctr >> 16),
@@ -40,8 +43,8 @@ int secp256k1_mpt_hash_to_point_nums(
 
         SHA256_CTX sha;
         SHA256_Init(&sha);
-        SHA256_Update(&sha, "MPT_BULLETPROOF_V1_NUMS", 23);
-        SHA256_Update(&sha, "secp256k1", 9);
+        SHA256_Update(&sha, "MPT_BULLETPROOF_V1_NUMS", 23); // Domain Sep
+        SHA256_Update(&sha, "secp256k1", 9);                // Curve Label
 
         if (label && label_len > 0) {
             SHA256_Update(&sha, label, label_len);
@@ -51,22 +54,24 @@ int secp256k1_mpt_hash_to_point_nums(
         SHA256_Update(&sha, ctr_be, 4);
         SHA256_Final(hash, &sha);
 
-        compressed[0] = 0x02; /* even Y */
+        /* Construct compressed point candidate */
+        compressed[0] = 0x02; /* Force even Y (standard convention for unique points) */
         memcpy(&compressed[1], hash, 32);
 
+        /* Check validity on curve */
         if (secp256k1_ec_pubkey_parse(ctx, out, compressed, 33) == 1) {
             return 1;
         }
         ctr++;
     }
-    return 0;
+    return 0; // Extremely unlikely to reach here
 }
 
 /**
  * @brief Derives the secondary base point (H) for Pedersen commitments.
  * * This derives a NUMS point using the label "H" at index 0. This H is
  * used alongside the standard generator G to form the commitment
- * C = vG + rH. Using a NUMS point ensures that the discrete logarithm
+ * C = v*G + r*H. Using a NUMS point ensures that the discrete logarithm
  * of H with respect to G is unknown.
  *
  * @param ctx  secp256k1 context.
@@ -84,7 +89,7 @@ int secp256k1_mpt_get_h_generator(const secp256k1_context* ctx, secp256k1_pubkey
  *
  * @param ctx       secp256k1 context.
  * @param vec       Array to store the resulting generators.
- * @param n         Number of generators to derive (usually 64).
+ * @param n         Number of generators to derive.
  * @param label     The label string ("G" or "H").
  * @param label_len Length of the label string.
  * @return 1 on success, 0 on failure.
@@ -97,7 +102,6 @@ int secp256k1_mpt_get_generator_vector(
         size_t label_len
 ) {
     for (uint32_t i = 0; i < (uint32_t)n; i++) {
-        /* Call our deterministic NUMS function for each index i */
         if (!secp256k1_mpt_hash_to_point_nums(ctx, &vec[i], label, label_len, i)) {
             return 0;
         }
@@ -105,9 +109,16 @@ int secp256k1_mpt_get_generator_vector(
     return 1;
 }
 
-
 /* --- Public API --- */
 
+/**
+ * @brief Creates a Pedersen Commitment C = amount*G + rho*H.
+ * * @param ctx         secp256k1 context.
+ * @param commitment  Output commitment public key.
+ * @param amount      The value to commit to.
+ * @param rho         The blinding factor (randomness).
+ * @return 1 on success, 0 on failure.
+ */
 int secp256k1_mpt_pedersen_commit(
         const secp256k1_context* ctx,
         secp256k1_pubkey* commitment,
@@ -116,17 +127,33 @@ int secp256k1_mpt_pedersen_commit(
 ) {
     secp256k1_pubkey mG, rH, H;
     unsigned char m_scalar[32] = {0};
+    int ok = 0;
 
-    // 1. m*G
-    for (int i = 0; i < 8; i++) m_scalar[31-i] = (amount >> (i*8)) & 0xFF;
-    if (!secp256k1_ec_pubkey_create(ctx, &mG, m_scalar)) return 0;
+    /* 0. Input Check */
+    if (!secp256k1_ec_seckey_verify(ctx, rho)) return 0;
 
-    // 2. rho*H (Using the new NUMS H)
-    if (!secp256k1_mpt_get_h_generator(ctx, &H)) return 0;
+    /* 1. Calculate m*G */
+    // Convert uint64 amount to big-endian scalar
+    for (int i = 0; i < 8; i++) {
+        m_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
+    }
+
+    if (!secp256k1_ec_pubkey_create(ctx, &mG, m_scalar)) goto cleanup;
+
+    /* 2. Calculate rho*H */
+    if (!secp256k1_mpt_get_h_generator(ctx, &H)) goto cleanup;
+
     rH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rH, rho)) return 0;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rH, rho)) goto cleanup;
 
-    // 3. mG + rH
+    /* 3. Combine: C = mG + rH */
     const secp256k1_pubkey* points[2] = {&mG, &rH};
-    return secp256k1_ec_pubkey_combine(ctx, commitment, points, 2);
+    if (!secp256k1_ec_pubkey_combine(ctx, commitment, points, 2)) goto cleanup;
+
+    ok = 1;
+
+    cleanup:
+    /* Securely clear the amount scalar from stack */
+    OPENSSL_cleanse(m_scalar, 32);
+    return ok;
 }
