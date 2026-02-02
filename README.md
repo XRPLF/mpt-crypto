@@ -23,29 +23,6 @@ The library is built on top of `libsecp256k1` for elliptic curve arithmetic and 
 * **Linkage Proof:** Proves consistency between an ElGamal ciphertext (used for transfer) and a Pedersen Commitment (used for the range proof).
 * **Proof of Knowledge (PoK):** Proves ownership of the secret key during account registration to prevent rogue key attacks.
 
-### 4. Commitments
-* **Pedersen Commitments:** Perfectly hiding and computationally binding commitments ($C = vG + rH$).
-* **NUMS Generators:** Secondary generators ($H$, $\mathbf{G}$, $\mathbf{H}$) are derived deterministically ("Nothing-Up-My-Sleeve") using SHA-256 to ensure transparency.
 
-## Directory Structure
-
-```text
-mpt-crypto/
-├── include/
-│   └── secp256k1_mpt.h                   # Public API header
-├── src/
-│   ├── bulletproof_aggregated.c          # Aggregated Range Proofs implementation
-│   ├── commitments.c                     # Pedersen commitments & generator derivation
-│   ├── elgamal.c                         # Encryption, Decryption, Homomorphic ops
-│   ├── equality_proof.c                  # 1-to-1 Plaintext Equality ZK Proofs
-│   ├── proof_link.c                      # ElGamal-Pedersen Linkage Proofs
-│   ├── proof_pok_sk.c                    # Secret Key Knowledge Proofs
-│   ├── proof_same_plaintext_multi.c      # 1-to-N Equality (General)
-│   ├── proof_same_plaintext_multi_shared_r.c # 1-to-N Equality (Shared Randomness)
-│   ├── mpt_scalar.c                      # Internal scalar arithmetic wrappers
-│   └── ...
-├── docs/                                 # Documentation output (Doxygen)
-└── README.md                             # This file
-```
-
-https://mrtcnk.github.io/mpt-crypto/index.html
+### 4. API Documentation (Doxygen):
+### https://mrtcnk.github.io/mpt-crypto/index.html
