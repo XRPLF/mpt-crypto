@@ -25,4 +25,4 @@ The library is built on top of `libsecp256k1` for elliptic curve arithmetic and 
 
 
 ### 4. API Documentation (Doxygen):
-### https://mrtcnk.github.io/mpt-crypto/index.html
+### https://mrtcnk.github.io/mpt-crypto/
