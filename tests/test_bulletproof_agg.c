@@ -245,3 +245,4 @@ int main(void) {
     printf("[TEST] Aggregated Bulletproof test completed successfully\n");
     return 0;
 }
+

@@ -253,3 +253,4 @@ int secp256k1_equality_plaintext_verify(
     cleanup:
     return ok;
 }
+
