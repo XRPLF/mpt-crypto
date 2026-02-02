@@ -35,7 +35,7 @@
 /**
  * @brief Deterministically derives a NUMS (Nothing-Up-My-Sleeve) generator point.
  * * Uses SHA-256 try-and-increment to find a valid x-coordinate. This ensures the
- * discrete logarithm of the resulting point is unknown ("unspendable"), which is
+ * discrete logarithm of the resulting point is unknown, which is
  * a core security requirement for Bulletproof binding and vector commitments.
  *
  * @param ctx       secp256k1 context (VERIFY flag required).
