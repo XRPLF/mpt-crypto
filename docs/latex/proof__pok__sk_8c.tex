@@ -1,0 +1,157 @@
+\doxysection{src/\+proof\+\_\+pok\+\_\+sk.c File Reference}
+\hypertarget{proof__pok__sk_8c}{}\label{proof__pok__sk_8c}\index{src/proof\_pok\_sk.c@{src/proof\_pok\_sk.c}}
+
+
+Schnorr Proof of Knowledge (PoK) for Discrete Logarithm.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+Include dependency graph for proof\+\_\+pok\+\_\+sk.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__pok__sk_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{proof__pok__sk_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{proof__pok__sk_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar)
+\item 
+static void \doxymbox{\hyperlink{proof__pok__sk_8c_a9f8bba911c73dcc01ec5eb2385dc8d8f}{build\+\_\+pok\+\_\+challenge}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}e\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{proof__pok__sk_8c_af628ab6192e8b1cab4d63ff17e5e5b4f}{secp256k1\+\_\+mpt\+\_\+pok\+\_\+sk\+\_\+prove}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const unsigned char \texorpdfstring{$\ast$}{*}sk, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{proof__pok__sk_8c_a900a067a62bcf194a5546f22ee1f86b5}{secp256k1\+\_\+mpt\+\_\+pok\+\_\+sk\+\_\+verify}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const unsigned char \texorpdfstring{$\ast$}{*}proof, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Schnorr Proof of Knowledge (PoK) for Discrete Logarithm. 
+
+This module implements a non-\/interactive zero-\/knowledge proof (NIZK) that allows a user to prove possession of the secret key {\ttfamily sk} corresponding to a public key {\ttfamily pk}, without revealing {\ttfamily sk}.
+
+{\bfseries{Protocol (Schnorr Identification Scheme):\+}}
+
+Given a public key $ P = sk \cdot G $, the protocol proves knowledge of $ sk $. It is made non-\/interactive using the Fiat-\/\+Shamir transform.
+
+
+\begin{DoxyEnumerate}
+\item {\bfseries{Commitment:\+}} Prover samples random nonce $ k \leftarrow \mathbb{Z}_q $ and computes:\+ \[ T = k \cdot G \]
+\item {\bfseries{Challenge (Fiat-\/\+Shamir):\+}} The challenge $ e $ is derived deterministically:\+ \[ e = H(\text{"MPT_POK_SK_REGISTER"} \parallel P \parallel T \parallel \text{ContextID}) \]
+\item {\bfseries{Response:\+}} Prover computes scalar:\+ \[ s = k + e \cdot sk \pmod{n} \]
+\item {\bfseries{Verification:\+}} Verifier reconstructs $ e $ and checks:\+ \[ s \cdot G \stackrel{?}{=} T + e \cdot P \]
+\end{DoxyEnumerate}
+
+{\bfseries{Security Context:\+}} This proof is used during account initialization/\+registration to prevent Rogue Key attacks (where an attacker registers a key constructed from another user\textquotesingle{}s key to cancel it out) and to ensure the user actually controls the El\+Gamal key being registered.
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+2]\+ Proof of Knowledge of Secret Key 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{proof__pok__sk_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{proof__pok__sk_8c_a9f8bba911c73dcc01ec5eb2385dc8d8f}\index{proof\_pok\_sk.c@{proof\_pok\_sk.c}!build\_pok\_challenge@{build\_pok\_challenge}}
+\index{build\_pok\_challenge@{build\_pok\_challenge}!proof\_pok\_sk.c@{proof\_pok\_sk.c}}
+\doxysubsubsection{\texorpdfstring{build\_pok\_challenge()}{build\_pok\_challenge()}}
+{\footnotesize\ttfamily \label{proof__pok__sk_8c_a9f8bba911c73dcc01ec5eb2385dc8d8f} 
+void build\+\_\+pok\+\_\+challenge (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{e\+\_\+out}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__pok__sk_8c_source_l00058}{58}} of file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=336pt]{proof__pok__sk_8c_a9f8bba911c73dcc01ec5eb2385dc8d8f_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=342pt]{proof__pok__sk_8c_a9f8bba911c73dcc01ec5eb2385dc8d8f_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__pok__sk_8c_aeaf385d364818242f9b4d3d3c14312b0}\index{proof\_pok\_sk.c@{proof\_pok\_sk.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!proof\_pok\_sk.c@{proof\_pok\_sk.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{proof__pok__sk_8c_aeaf385d364818242f9b4d3d3c14312b0} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__pok__sk_8c_source_l00051}{51}} of file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__pok__sk_8c_aeaf385d364818242f9b4d3d3c14312b0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__pok__sk_8c_ad323664144afbe26cc90816a513f79c0}\index{proof\_pok\_sk.c@{proof\_pok\_sk.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!proof\_pok\_sk.c@{proof\_pok\_sk.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{proof__pok__sk_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__pok__sk_8c_source_l00047}{47}} of file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=314pt]{proof__pok__sk_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__pok__sk_8c_af628ab6192e8b1cab4d63ff17e5e5b4f}\index{proof\_pok\_sk.c@{proof\_pok\_sk.c}!secp256k1\_mpt\_pok\_sk\_prove@{secp256k1\_mpt\_pok\_sk\_prove}}
+\index{secp256k1\_mpt\_pok\_sk\_prove@{secp256k1\_mpt\_pok\_sk\_prove}!proof\_pok\_sk.c@{proof\_pok\_sk.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_pok\_sk\_prove()}{secp256k1\_mpt\_pok\_sk\_prove()}}
+{\footnotesize\ttfamily \label{proof__pok__sk_8c_af628ab6192e8b1cab4d63ff17e5e5b4f} 
+int secp256k1\+\_\+mpt\+\_\+pok\+\_\+sk\+\_\+prove (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{sk}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+Proof of Knowledge of Secret Key for Registration 
+
+Definition at line \doxymbox{\hyperlink{proof__pok__sk_8c_source_l00092}{92}} of file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__pok__sk_8c_af628ab6192e8b1cab4d63ff17e5e5b4f_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__pok__sk_8c_a900a067a62bcf194a5546f22ee1f86b5}\index{proof\_pok\_sk.c@{proof\_pok\_sk.c}!secp256k1\_mpt\_pok\_sk\_verify@{secp256k1\_mpt\_pok\_sk\_verify}}
+\index{secp256k1\_mpt\_pok\_sk\_verify@{secp256k1\_mpt\_pok\_sk\_verify}!proof\_pok\_sk.c@{proof\_pok\_sk.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_pok\_sk\_verify()}{secp256k1\_mpt\_pok\_sk\_verify()}}
+{\footnotesize\ttfamily \label{proof__pok__sk_8c_a900a067a62bcf194a5546f22ee1f86b5} 
+int secp256k1\+\_\+mpt\+\_\+pok\+\_\+sk\+\_\+verify (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__pok__sk_8c_source_l00135}{135}} of file \doxymbox{\hyperlink{proof__pok__sk_8c_source}{proof\+\_\+pok\+\_\+sk.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__pok__sk_8c_a900a067a62bcf194a5546f22ee1f86b5_cgraph}
+\end{center}
+\end{figure}

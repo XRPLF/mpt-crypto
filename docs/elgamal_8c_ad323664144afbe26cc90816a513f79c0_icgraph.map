@@ -1,0 +1,7 @@
+<map id="pubkey_equal" name="pubkey_equal">
+<area shape="rect" id="Node000001" title=" " alt="" coords="240,35,341,60"/>
+<area shape="rect" id="Node000002" href="$elgamal_8c.html#a7418aadac7c36a695089fb36676e8d9d" title="Decrypts an ElGamal ciphertext to recover the amount." alt="" coords="5,5,192,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="222,38,187,34,187,29,227,37"/>
+<area shape="rect" id="Node000003" href="$elgamal_8c.html#a12dd9e76ae1ce525d6b80aa13012276e" title=" " alt="" coords="11,55,186,96"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="222,58,187,65,186,60,227,57"/>
+</map>

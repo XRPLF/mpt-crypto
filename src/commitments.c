@@ -1,3 +1,30 @@
+/**
+ * @file commitments.c
+ * @brief Pedersen Commitments and NUMS Generator Derivation.
+ *
+ * This module implements the core commitment scheme used in Confidential MPTs.
+ * It provides functions to generate Pedersen commitments of the form
+ * \f$ C = v \cdot G + r \cdot H \f$, where \f$ G \f$ and \f$ H \f$ are independent
+ * generators of the secp256k1 curve.
+ *
+ * @details
+ * **NUMS Generators:**
+ * To ensure the binding property of the commitments (i.e., that a user cannot
+ * open a commitment to two different values), the discrete logarithm of \f$ H \f$
+ * with respect to \f$ G \f$ must be unknown.
+ *
+ * This implementation uses a "Nothing-Up-My-Sleeve" (NUMS) construction:
+ * - Generators are derived deterministically using SHA-256 hash-to-curve.
+ * - The domain separation tag is `"MPT_BULLETPROOF_V1_NUMS"`.
+ * - This guarantees that no backdoors exist in the system parameters.
+ *
+ * **Commitment Logic:**
+ * The commitment function handles the edge case where the amount \f$ v = 0 \f$.
+ * Since the point at infinity (identity) cannot be serialized in standard compressed form,
+ * the term \f$ 0 \cdot G \f$ is handled logically, resulting in \f$ C = r \cdot H \f$.
+ *
+ * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.5] Linking ElGamal Ciphertexts and Pedersen Commitments
+ */
 #include "secp256k1_mpt.h"
 #include <string.h>
 #include <openssl/sha.h>
@@ -132,21 +159,30 @@ int secp256k1_mpt_pedersen_commit(
     /* 0. Input Check */
     if (!secp256k1_ec_seckey_verify(ctx, rho)) return 0;
 
-    /* 1. Calculate m*G */
-    // Convert uint64 amount to big-endian scalar
+    /* 1. Calculate rho*H (Blinding Term) */
+    /* We do this first so we can use it directly if amount is 0 */
+    if (!secp256k1_mpt_get_h_generator(ctx, &H)) return 0;
+
+    rH = H;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rH, rho)) return 0;
+
+    /* 2. Handle Zero Amount Case */
+    if (amount == 0) {
+        /* If m=0, C = 0*G + r*H = r*H */
+        *commitment = rH;
+        return 1;
+    }
+
+    /* 3. Calculate m*G (Value Term) */
+    /* Convert uint64 amount to big-endian scalar */
     for (int i = 0; i < 8; i++) {
         m_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
     }
 
+    /* This check passes now because we handled amount==0 above */
     if (!secp256k1_ec_pubkey_create(ctx, &mG, m_scalar)) goto cleanup;
 
-    /* 2. Calculate rho*H */
-    if (!secp256k1_mpt_get_h_generator(ctx, &H)) goto cleanup;
-
-    rH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rH, rho)) goto cleanup;
-
-    /* 3. Combine: C = mG + rH */
+    /* 4. Combine: C = mG + rH */
     const secp256k1_pubkey* points[2] = {&mG, &rH};
     if (!secp256k1_ec_pubkey_combine(ctx, commitment, points, 2)) goto cleanup;
 

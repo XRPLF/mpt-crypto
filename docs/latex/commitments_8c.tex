@@ -1,0 +1,231 @@
+\doxysection{src/\+commitments.c File Reference}
+\hypertarget{commitments_8c}{}\label{commitments_8c}\index{src/commitments.c@{src/commitments.c}}
+
+
+Pedersen Commitments and NUMS Generator Derivation.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+crypto.\+h$>$}\newline
+Include dependency graph for commitments.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+int \doxymbox{\hyperlink{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}{secp256k1\+\_\+mpt\+\_\+hash\+\_\+to\+\_\+point\+\_\+nums}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}out, const unsigned char \texorpdfstring{$\ast$}{*}label, size\+\_\+t label\+\_\+len, uint32\+\_\+t index)
+\begin{DoxyCompactList}\small\item\em Deterministically derives a NUMS (Nothing-\/\+Up-\/\+My-\/\+Sleeve) generator point. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{commitments_8c_a7aaffafbd7bf29380177a031c673872b}{secp256k1\+\_\+mpt\+\_\+get\+\_\+h\+\_\+generator}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}h)
+\begin{DoxyCompactList}\small\item\em Derives the secondary base point (H) for Pedersen commitments. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{commitments_8c_a6a45b5b11888db76787492c2eab2754a}{secp256k1\+\_\+mpt\+\_\+get\+\_\+generator\+\_\+vector}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}vec, size\+\_\+t n, const unsigned char \texorpdfstring{$\ast$}{*}label, size\+\_\+t label\+\_\+len)
+\begin{DoxyCompactList}\small\item\em Generates a vector of N independent NUMS generators. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{commitments_8c_a2b41edc19e3c26a6b927dbc3fc03c445}{secp256k1\+\_\+mpt\+\_\+pedersen\+\_\+commit}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}commitment, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}rho)
+\begin{DoxyCompactList}\small\item\em Creates a Pedersen Commitment C = amount\texorpdfstring{$\ast$}{*}G + rho\texorpdfstring{$\ast$}{*}H. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Pedersen Commitments and NUMS Generator Derivation. 
+
+This module implements the core commitment scheme used in Confidential MPTs. It provides functions to generate Pedersen commitments of the form $ C = v \cdot G + r \cdot H $, where $ G $ and $ H $ are independent generators of the secp256k1 curve.
+
+{\bfseries{NUMS Generators:\+}} To ensure the binding property of the commitments (i.\+e., that a user cannot open a commitment to two different values), the discrete logarithm of $ H $ with respect to $ G $ must be unknown.
+
+This implementation uses a "{}\+Nothing-\/\+Up-\/\+My-\/\+Sleeve"{} (NUMS) construction:\+
+\begin{DoxyItemize}
+\item Generators are derived deterministically using SHA-\/256 hash-\/to-\/curve.
+\item The domain separation tag is {\ttfamily "{}MPT\+\_\+\+BULLETPROOF\+\_\+\+V1\+\_\+\+NUMS"{}}.
+\item This guarantees that no backdoors exist in the system parameters.
+\end{DoxyItemize}
+
+{\bfseries{Commitment Logic:\+}} The commitment function handles the edge case where the amount $ v = 0 $. Since the point at infinity (identity) cannot be serialized in standard compressed form, the term $ 0 \cdot G $ is handled logically, resulting in $ C = r \cdot H $.
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+5]\+ Linking El\+Gamal Ciphertexts and Pedersen Commitments 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{commitments_8c_source}{commitments.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{commitments_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{commitments_8c_a6a45b5b11888db76787492c2eab2754a}\index{commitments.c@{commitments.c}!secp256k1\_mpt\_get\_generator\_vector@{secp256k1\_mpt\_get\_generator\_vector}}
+\index{secp256k1\_mpt\_get\_generator\_vector@{secp256k1\_mpt\_get\_generator\_vector}!commitments.c@{commitments.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_get\_generator\_vector()}{secp256k1\_mpt\_get\_generator\_vector()}}
+{\footnotesize\ttfamily \label{commitments_8c_a6a45b5b11888db76787492c2eab2754a} 
+int secp256k1\+\_\+mpt\+\_\+get\+\_\+generator\+\_\+vector (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{vec}{, }\item[{size\+\_\+t}]{n}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{label}{, }\item[{size\+\_\+t}]{label\+\_\+len}{}\end{DoxyParamCaption})}
+
+
+
+Generates a vector of N independent NUMS generators. 
+
+
+\begin{DoxyItemize}
+\item Used to populate the G\+\_\+i and H\+\_\+i vectors for Bulletproofs. Each point is derived deterministically from the provided label and its index.
+\end{DoxyItemize}
+
+
+\begin{DoxyParams}{Parameters}
+{\em ctx} & secp256k1 context. \\
+\hline
+{\em vec} & Array to store the resulting generators. \\
+\hline
+{\em n} & Number of generators to derive. \\
+\hline
+{\em label} & The label string ("{}\+G"{} or "{}\+H"{}). \\
+\hline
+{\em label\+\_\+len} & Length of the label string. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{commitments_8c_source_l00124}{124}} of file \doxymbox{\hyperlink{commitments_8c_source}{commitments.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c_a6a45b5b11888db76787492c2eab2754a_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c_a6a45b5b11888db76787492c2eab2754a_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{commitments_8c_a7aaffafbd7bf29380177a031c673872b}\index{commitments.c@{commitments.c}!secp256k1\_mpt\_get\_h\_generator@{secp256k1\_mpt\_get\_h\_generator}}
+\index{secp256k1\_mpt\_get\_h\_generator@{secp256k1\_mpt\_get\_h\_generator}!commitments.c@{commitments.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_get\_h\_generator()}{secp256k1\_mpt\_get\_h\_generator()}}
+{\footnotesize\ttfamily \label{commitments_8c_a7aaffafbd7bf29380177a031c673872b} 
+int secp256k1\+\_\+mpt\+\_\+get\+\_\+h\+\_\+generator (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{h}{}\end{DoxyParamCaption})}
+
+
+
+Derives the secondary base point (H) for Pedersen commitments. 
+
+
+\begin{DoxyItemize}
+\item This derives a NUMS point using the label "{}\+H"{} at index 0. This H is used alongside the standard generator G to form the commitment C = v\texorpdfstring{$\ast$}{*}G + r\texorpdfstring{$\ast$}{*}H. Using a NUMS point ensures that the discrete logarithm of H with respect to G is unknown.
+\end{DoxyItemize}
+
+
+\begin{DoxyParams}{Parameters}
+{\em ctx} & secp256k1 context. \\
+\hline
+{\em h} & The resulting H generator public key. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{commitments_8c_source_l00108}{108}} of file \doxymbox{\hyperlink{commitments_8c_source}{commitments.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=342pt]{commitments_8c_a7aaffafbd7bf29380177a031c673872b_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c_a7aaffafbd7bf29380177a031c673872b_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}\index{commitments.c@{commitments.c}!secp256k1\_mpt\_hash\_to\_point\_nums@{secp256k1\_mpt\_hash\_to\_point\_nums}}
+\index{secp256k1\_mpt\_hash\_to\_point\_nums@{secp256k1\_mpt\_hash\_to\_point\_nums}!commitments.c@{commitments.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_hash\_to\_point\_nums()}{secp256k1\_mpt\_hash\_to\_point\_nums()}}
+{\footnotesize\ttfamily \label{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd} 
+int secp256k1\+\_\+mpt\+\_\+hash\+\_\+to\+\_\+point\+\_\+nums (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{out}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{label}{, }\item[{size\+\_\+t}]{label\+\_\+len}{, }\item[{uint32\+\_\+t}]{index}{}\end{DoxyParamCaption})}
+
+
+
+Deterministically derives a NUMS (Nothing-\/\+Up-\/\+My-\/\+Sleeve) generator point. 
+
+
+\begin{DoxyItemize}
+\item Uses SHA-\/256 try-\/and-\/increment to find a valid x-\/coordinate. This ensures the discrete logarithm of the resulting point is unknown ("{}unspendable"{}), which is a core security requirement for Bulletproof binding and vector commitments.
+\end{DoxyItemize}
+
+
+\begin{DoxyParams}{Parameters}
+{\em ctx} & secp256k1 context (VERIFY flag required). \\
+\hline
+{\em out} & The derived public key generator. \\
+\hline
+{\em label} & Domain/\+vector label (e.\+g., "{}\+G"{} or "{}\+H"{}). \\
+\hline
+{\em label\+\_\+len} & Length of the label string. \\
+\hline
+{\em index} & Vector index (enforced Big-\/\+Endian). \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{commitments_8c_source_l00048}{48}} of file \doxymbox{\hyperlink{commitments_8c_source}{commitments.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{commitments_8c_a2b41edc19e3c26a6b927dbc3fc03c445}\index{commitments.c@{commitments.c}!secp256k1\_mpt\_pedersen\_commit@{secp256k1\_mpt\_pedersen\_commit}}
+\index{secp256k1\_mpt\_pedersen\_commit@{secp256k1\_mpt\_pedersen\_commit}!commitments.c@{commitments.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_pedersen\_commit()}{secp256k1\_mpt\_pedersen\_commit()}}
+{\footnotesize\ttfamily \label{commitments_8c_a2b41edc19e3c26a6b927dbc3fc03c445} 
+int secp256k1\+\_\+mpt\+\_\+pedersen\+\_\+commit (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{commitment}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{rho}{}\end{DoxyParamCaption})}
+
+
+
+Creates a Pedersen Commitment C = amount\texorpdfstring{$\ast$}{*}G + rho\texorpdfstring{$\ast$}{*}H. 
+
+
+\begin{DoxyItemize}
+\item 
+\begin{DoxyParams}{Parameters}
+{\em ctx} & secp256k1 context. \\
+\hline
+{\em commitment} & Output commitment public key. \\
+\hline
+{\em amount} & The value to commit to. \\
+\hline
+{\em rho} & The blinding factor (randomness). \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+\end{DoxyItemize}
+
+Definition at line \doxymbox{\hyperlink{commitments_8c_source_l00149}{149}} of file \doxymbox{\hyperlink{commitments_8c_source}{commitments.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{commitments_8c_a2b41edc19e3c26a6b927dbc3fc03c445_cgraph}
+\end{center}
+\end{figure}

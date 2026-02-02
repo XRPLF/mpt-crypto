@@ -1,0 +1,7 @@
+<map id="build_same_plaintext_hash_input" name="build_same_plaintext_hash_input">
+<area shape="rect" id="Node000001" title=" " alt="" coords="206,39,349,79"/>
+<area shape="rect" id="Node000002" href="$proof__same__plaintext_8c.html#a7b5e8127e713b22a6226224f135d80c3" title="Generates a proof that two ciphertexts (under different keys) encrypt the same secret amount &#39;m&#39;." alt="" coords="5,5,158,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="188,45,158,41,158,36,193,44"/>
+<area shape="rect" id="Node000003" href="$proof__same__plaintext_8c.html#ab6dc267e2d35e156732dabce4b5f38ff" title="Verifies a proof that two ciphertexts encrypt the same secret amount." alt="" coords="5,71,158,111"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="188,74,159,81,158,76,193,73"/>
+</map>

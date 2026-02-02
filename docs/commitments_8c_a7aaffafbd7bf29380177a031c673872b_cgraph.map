@@ -1,0 +1,5 @@
+<map id="secp256k1_mpt_get_h_generator" name="secp256k1_mpt_get_h_generator">
+<area shape="rect" id="Node000001" title="Derives the secondary base point (H) for Pedersen commitments." alt="" coords="5,5,158,46"/>
+<area shape="rect" id="Node000002" href="$commitments_8c.html#a9cc043f2f420bd7eab3f0f13e48e9afd" title="Deterministically derives a NUMS (Nothing&#45;Up&#45;My&#45;Sleeve) generator point." alt="" coords="206,5,354,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="158,23,193,25,188,26,158,28"/>
+</map>

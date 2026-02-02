@@ -1,0 +1,258 @@
+\doxysection{src/\+elgamal.c File Reference}
+\hypertarget{elgamal_8c}{}\label{elgamal_8c}\index{src/elgamal.c@{src/elgamal.c}}
+
+
+EC-\/\+El\+Gamal Encryption for Confidential Balances.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+Include dependency graph for elgamal.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\+\_\+amount\+\_\+point}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}mG, uint64\+\_\+t amount)
+\item 
+int \doxymbox{\hyperlink{elgamal_8c_a8fb9f3ea5d127cd9dd0e1b57bbc68a35}{secp256k1\+\_\+elgamal\+\_\+generate\+\_\+keypair}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}privkey, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pubkey)
+\begin{DoxyCompactList}\small\item\em Generates a new secp256k1 key pair. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a7a7207617adc020d9dcfc7174b792012}{secp256k1\+\_\+elgamal\+\_\+encrypt}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pubkey\+\_\+Q, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}blinding\+\_\+factor)
+\begin{DoxyCompactList}\small\item\em Encrypts a 64-\/bit amount using El\+Gamal. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a7418aadac7c36a695089fb36676e8d9d}{secp256k1\+\_\+elgamal\+\_\+decrypt}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, uint64\+\_\+t \texorpdfstring{$\ast$}{*}amount, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const unsigned char \texorpdfstring{$\ast$}{*}privkey)
+\begin{DoxyCompactList}\small\item\em Decrypts an El\+Gamal ciphertext to recover the amount. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a695ecef57e2f1d9cca1a5ee6422c62dc}{secp256k1\+\_\+elgamal\+\_\+add}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}sum\+\_\+c1, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}sum\+\_\+c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}a\+\_\+c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}a\+\_\+c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}b\+\_\+c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}b\+\_\+c2)
+\begin{DoxyCompactList}\small\item\em Homomorphically adds two El\+Gamal ciphertexts. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a59bb2d2e4982cdfa0289abccc2601def}{secp256k1\+\_\+elgamal\+\_\+subtract}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}diff\+\_\+c1, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}diff\+\_\+c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}a\+\_\+c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}a\+\_\+c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}b\+\_\+c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}b\+\_\+c2)
+\begin{DoxyCompactList}\small\item\em Homomorphically subtracts two El\+Gamal ciphertexts. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a58ec970fa1fc5b8fa5e4946dacc59a87}{generate\+\_\+canonical\+\_\+encrypted\+\_\+zero}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}enc\+\_\+zero\+\_\+c1, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}enc\+\_\+zero\+\_\+c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pubkey, const unsigned char \texorpdfstring{$\ast$}{*}account\+\_\+id, const unsigned char \texorpdfstring{$\ast$}{*}mpt\+\_\+issuance\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Generates the canonical encrypted zero for a given MPT token instance. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{elgamal_8c_a12dd9e76ae1ce525d6b80aa13012276e}{secp256k1\+\_\+elgamal\+\_\+verify\+\_\+encryption}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pubkey\+\_\+Q, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}blinding\+\_\+factor)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+EC-\/\+El\+Gamal Encryption for Confidential Balances. 
+
+This module implements additive homomorphic encryption using the El\+Gamal scheme over the secp256k1 elliptic curve. It provides the core mechanism for representing confidential balances and transferring value on the ledger.
+
+{\bfseries{Encryption Scheme:\+}} Given a public key $ Q = sk \cdot G $ and a plaintext amount $ m $, encryption with randomness $ r $ produces a ciphertext pair $ (C_1, C_2) $:\+
+\begin{DoxyItemize}
+\item $ C_1 = r \cdot G $ (Ephemeral public key)
+\item $ C_2 = m \cdot G + r \cdot Q $ (Masked amount)
+\end{DoxyItemize}
+
+{\bfseries{Homomorphism:\+}} The scheme is additively homomorphic:\+ \[ Enc(m_1) + Enc(m_2) = (C_{1,1}+C_{1,2}, C_{2,1}+C_{2,2}) = Enc(m_1 + m_2) \] This allows validators to update balances (e.\+g., add incoming transfers) without decrypting them.
+
+{\bfseries{Decryption (Discrete Logarithm):\+}} Decryption involves two steps:\+
+\begin{DoxyEnumerate}
+\item Remove the mask:\+ $ M = C_2 - sk \cdot C_1 = m \cdot G $.
+\item Recover $ m $ from $ M $:\+ This requires solving the Discrete Logarithm Problem (DLP) for $ m $. Since balances are 64-\/bit integers but typically small in "{}human"{} terms, this implementation uses an optimized search for ranges relevant to transaction processing (e.\+g., 0 to 1,000,000).
+\end{DoxyEnumerate}
+
+{\bfseries{Canonical Zero:\+}} To ensure deterministic ledger state for empty accounts, a "{}\+Canonical Encrypted Zero"{} is defined using randomness derived deterministically from the account ID and token ID.
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+2.\+2]\+ El\+Gamal Encryption 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{elgamal_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}\index{elgamal.c@{elgamal.c}!compute\_amount\_point@{compute\_amount\_point}}
+\index{compute\_amount\_point@{compute\_amount\_point}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{compute\_amount\_point()}{compute\_amount\_point()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009} 
+int compute\+\_\+amount\+\_\+point (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{mG}{, }\item[{uint64\+\_\+t}]{amount}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00048}{48}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{elgamal_8c_a58ec970fa1fc5b8fa5e4946dacc59a87}\index{elgamal.c@{elgamal.c}!generate\_canonical\_encrypted\_zero@{generate\_canonical\_encrypted\_zero}}
+\index{generate\_canonical\_encrypted\_zero@{generate\_canonical\_encrypted\_zero}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{generate\_canonical\_encrypted\_zero()}{generate\_canonical\_encrypted\_zero()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a58ec970fa1fc5b8fa5e4946dacc59a87} 
+int generate\+\_\+canonical\+\_\+encrypted\+\_\+zero (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{enc\+\_\+zero\+\_\+c1}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{enc\+\_\+zero\+\_\+c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pubkey}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{account\+\_\+id}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{mpt\+\_\+issuance\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Generates the canonical encrypted zero for a given MPT token instance. 
+
+This ciphertext represents a zero balance for a specific account\textquotesingle{}s holding of a token defined by its MPToken\+Issuance\+ID.
+
+
+\begin{DoxyParams}[1]{Parameters}
+\doxymbox{\texttt{in}}  & {\em ctx} & A pointer to a valid secp256k1 context. \\
+\hline
+\doxymbox{\texttt{out}}  & {\em enc\+\_\+zero\+\_\+c1} & The C1 component of the canonical ciphertext. \\
+\hline
+\doxymbox{\texttt{out}}  & {\em enc\+\_\+zero\+\_\+c2} & The C2 component of the canonical ciphertext. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em pubkey} & The El\+Gamal public key of the account holder. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em account\+\_\+id} & A pointer to the 20-\/byte Account\+ID. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em mpt\+\_\+issuance\+\_\+id} & A pointer to the 24-\/byte MPToken\+Issuance\+ID.\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00211}{211}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c_a58ec970fa1fc5b8fa5e4946dacc59a87_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{elgamal_8c_ad323664144afbe26cc90816a513f79c0}\index{elgamal.c@{elgamal.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{elgamal_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00044}{44}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=332pt]{elgamal_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{elgamal_8c_a695ecef57e2f1d9cca1a5ee6422c62dc}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_add@{secp256k1\_elgamal\_add}}
+\index{secp256k1\_elgamal\_add@{secp256k1\_elgamal\_add}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_add()}{secp256k1\_elgamal\_add()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a695ecef57e2f1d9cca1a5ee6422c62dc} 
+int secp256k1\+\_\+elgamal\+\_\+add (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{sum\+\_\+c1}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{sum\+\_\+c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{a\+\_\+c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{a\+\_\+c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{b\+\_\+c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{b\+\_\+c2}{}\end{DoxyParamCaption})}
+
+
+
+Homomorphically adds two El\+Gamal ciphertexts. 
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00164}{164}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+\Hypertarget{elgamal_8c_a7418aadac7c36a695089fb36676e8d9d}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_decrypt@{secp256k1\_elgamal\_decrypt}}
+\index{secp256k1\_elgamal\_decrypt@{secp256k1\_elgamal\_decrypt}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_decrypt()}{secp256k1\_elgamal\_decrypt()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a7418aadac7c36a695089fb36676e8d9d} 
+int secp256k1\+\_\+elgamal\+\_\+decrypt (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{uint64\+\_\+t \texorpdfstring{$\ast$}{*}}]{amount}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{privkey}{}\end{DoxyParamCaption})}
+
+
+
+Decrypts an El\+Gamal ciphertext to recover the amount. 
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00111}{111}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=332pt]{elgamal_8c_a7418aadac7c36a695089fb36676e8d9d_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{elgamal_8c_a7a7207617adc020d9dcfc7174b792012}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_encrypt@{secp256k1\_elgamal\_encrypt}}
+\index{secp256k1\_elgamal\_encrypt@{secp256k1\_elgamal\_encrypt}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_encrypt()}{secp256k1\_elgamal\_encrypt()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a7a7207617adc020d9dcfc7174b792012} 
+int secp256k1\+\_\+elgamal\+\_\+encrypt (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pubkey\+\_\+Q}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{blinding\+\_\+factor}{}\end{DoxyParamCaption})}
+
+
+
+Encrypts a 64-\/bit amount using El\+Gamal. 
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00079}{79}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c_a7a7207617adc020d9dcfc7174b792012_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c_a7a7207617adc020d9dcfc7174b792012_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{elgamal_8c_a8fb9f3ea5d127cd9dd0e1b57bbc68a35}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_generate\_keypair@{secp256k1\_elgamal\_generate\_keypair}}
+\index{secp256k1\_elgamal\_generate\_keypair@{secp256k1\_elgamal\_generate\_keypair}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_generate\_keypair()}{secp256k1\_elgamal\_generate\_keypair()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a8fb9f3ea5d127cd9dd0e1b57bbc68a35} 
+int secp256k1\+\_\+elgamal\+\_\+generate\+\_\+keypair (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{privkey}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pubkey}{}\end{DoxyParamCaption})}
+
+
+
+Generates a new secp256k1 key pair. 
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00061}{61}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+\Hypertarget{elgamal_8c_a59bb2d2e4982cdfa0289abccc2601def}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_subtract@{secp256k1\_elgamal\_subtract}}
+\index{secp256k1\_elgamal\_subtract@{secp256k1\_elgamal\_subtract}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_subtract()}{secp256k1\_elgamal\_subtract()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a59bb2d2e4982cdfa0289abccc2601def} 
+int secp256k1\+\_\+elgamal\+\_\+subtract (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{diff\+\_\+c1}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{diff\+\_\+c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{a\+\_\+c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{a\+\_\+c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{b\+\_\+c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{b\+\_\+c2}{}\end{DoxyParamCaption})}
+
+
+
+Homomorphically subtracts two El\+Gamal ciphertexts. 
+
+
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00184}{184}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+\Hypertarget{elgamal_8c_a12dd9e76ae1ce525d6b80aa13012276e}\index{elgamal.c@{elgamal.c}!secp256k1\_elgamal\_verify\_encryption@{secp256k1\_elgamal\_verify\_encryption}}
+\index{secp256k1\_elgamal\_verify\_encryption@{secp256k1\_elgamal\_verify\_encryption}!elgamal.c@{elgamal.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_verify\_encryption()}{secp256k1\_elgamal\_verify\_encryption()}}
+{\footnotesize\ttfamily \label{elgamal_8c_a12dd9e76ae1ce525d6b80aa13012276e} 
+int secp256k1\+\_\+elgamal\+\_\+verify\+\_\+encryption (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pubkey\+\_\+Q}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{blinding\+\_\+factor}{}\end{DoxyParamCaption})}
+
+Verifies that (c1, c2) is a valid El\+Gamal encryption of \textquotesingle{}amount\textquotesingle{} for \textquotesingle{}pubkey\+\_\+Q\textquotesingle{} using the revealed \textquotesingle{}blinding\+\_\+factor\textquotesingle{}. 
+
+Definition at line \doxymbox{\hyperlink{elgamal_8c_source_l00262}{262}} of file \doxymbox{\hyperlink{elgamal_8c_source}{elgamal.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{elgamal_8c_a12dd9e76ae1ce525d6b80aa13012276e_cgraph}
+\end{center}
+\end{figure}

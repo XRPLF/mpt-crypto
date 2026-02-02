@@ -1,0 +1,5 @@
+<map id="secp256k1_mpt_get_generator_vector" name="secp256k1_mpt_get_generator_vector">
+<area shape="rect" id="Node000001" title="Generates a vector of N independent NUMS generators." alt="" coords="5,5,205,46"/>
+<area shape="rect" id="Node000002" href="$commitments_8c.html#a9cc043f2f420bd7eab3f0f13e48e9afd" title="Deterministically derives a NUMS (Nothing&#45;Up&#45;My&#45;Sleeve) generator point." alt="" coords="253,5,401,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="205,23,240,26,234,26,205,28"/>
+</map>

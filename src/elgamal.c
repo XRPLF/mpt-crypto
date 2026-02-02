@@ -1,3 +1,38 @@
+/**
+ * @file elgamal.c
+ * @brief EC-ElGamal Encryption for Confidential Balances.
+ *
+ * This module implements additive homomorphic encryption using the ElGamal
+ * scheme over the secp256k1 elliptic curve. It provides the core mechanism
+ * for representing confidential balances and transferring value on the ledger.
+ *
+ * @details
+ * **Encryption Scheme:**
+ * Given a public key \f$ Q = sk \cdot G \f$ and a plaintext amount \f$ m \f$,
+ * encryption with randomness \f$ r \f$ produces a ciphertext pair \f$ (C_1, C_2) \f$:
+ * - \f$ C_1 = r \cdot G \f$ (Ephemeral public key)
+ * - \f$ C_2 = m \cdot G + r \cdot Q \f$ (Masked amount)
+ *
+ * **Homomorphism:**
+ * The scheme is additively homomorphic:
+ * \f[ Enc(m_1) + Enc(m_2) = (C_{1,1}+C_{1,2}, C_{2,1}+C_{2,2}) = Enc(m_1 + m_2) \f]
+ * This allows validators to update balances (e.g., add incoming transfers)
+ * without decrypting them.
+ *
+ * **Decryption (Discrete Logarithm):**
+ * Decryption involves two steps:
+ * 1. Remove the mask: \f$ M = C_2 - sk \cdot C_1 = m \cdot G \f$.
+ * 2. Recover \f$ m \f$ from \f$ M \f$: This requires solving the Discrete Logarithm
+ * Problem (DLP) for \f$ m \f$. Since balances are 64-bit integers but typically
+ * small in "human" terms, this implementation uses an optimized search
+ * for ranges relevant to transaction processing (e.g., 0 to 1,000,000).
+ *
+ * **Canonical Zero:**
+ * To ensure deterministic ledger state for empty accounts, a "Canonical Encrypted Zero"
+ * is defined using randomness derived deterministically from the account ID and token ID.
+ *
+ * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.2.2] ElGamal Encryption
+ */
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>

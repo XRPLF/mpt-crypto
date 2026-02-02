@@ -1,0 +1,5 @@
+<map id="secp256k1_elgamal_encrypt" name="secp256k1_elgamal_encrypt">
+<area shape="rect" id="Node000001" title="Encrypts a 64&#45;bit amount using ElGamal." alt="" coords="187,13,373,38"/>
+<area shape="rect" id="Node000002" href="$elgamal_8c.html#a58ec970fa1fc5b8fa5e4946dacc59a87" title="Generates the canonical encrypted zero for a given MPT token instance." alt="" coords="5,5,139,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="168,26,139,28,139,23,174,25"/>
+</map>

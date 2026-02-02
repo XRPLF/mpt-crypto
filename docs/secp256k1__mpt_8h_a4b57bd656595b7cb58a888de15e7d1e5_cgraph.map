@@ -1,0 +1,9 @@
+<map id="secp256k1_mpt_pok_sk_prove" name="secp256k1_mpt_pok_sk_prove">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,31,168,71"/>
+<area shape="rect" id="Node000002" href="$proof__pok__sk_8c.html#a9f8bba911c73dcc01ec5eb2385dc8d8f" title=" " alt="" coords="228,13,366,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="168,39,215,35,210,36,169,44"/>
+<area shape="rect" id="Node000004" href="$proof__pok__sk_8c.html#aeaf385d364818242f9b4d3d3c14312b0" title=" " alt="" coords="216,62,379,88"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="168,58,203,64,197,64,168,63"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#aac5cece668acbd6bb052aafe9e3eaa75" title=" " alt="" coords="427,5,582,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="367,23,414,25,409,26,367,28"/>
+</map>

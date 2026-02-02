@@ -1,0 +1,7 @@
+<map id="secp256k1_mpt_prove_same_plaintext_multi_size" name="secp256k1_mpt_prove_same_plaintext_multi_size">
+<area shape="rect" id="Node000001" title="Calculates the expected proof size for a given number of ciphertexts." alt="" coords="206,39,388,79"/>
+<area shape="rect" id="Node000002" href="$proof__same__plaintext__multi_8c.html#af2ac55beba54985b65a88e8c0cac58f7" title="Generates a proof that N ciphertexts encrypt the same secret amount &#39;m&#39;." alt="" coords="5,5,158,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="188,43,158,40,158,35,193,42"/>
+<area shape="rect" id="Node000003" href="$proof__same__plaintext__multi_8c.html#a763afcb3dc83d78ba058438a9370e0ac" title="Verifies a proof that N ciphertexts encrypt the same secret amount." alt="" coords="5,71,158,111"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="188,75,158,82,157,77,193,74"/>
+</map>

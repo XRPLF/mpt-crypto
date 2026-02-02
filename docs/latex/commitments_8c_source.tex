@@ -1,0 +1,131 @@
+\doxysection{commitments.\+c}
+\hypertarget{commitments_8c_source}{}\label{commitments_8c_source}\index{src/commitments.c@{src/commitments.c}}
+\doxymbox{\hyperlink{commitments_8c}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00001}00001\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00028}00028\ \textcolor{preprocessor}{\#include\ "{}\doxymbox{\hyperlink{secp256k1__mpt_8h}{secp256k1\_mpt.h}}"{}}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00029}00029\ \textcolor{preprocessor}{\#include\ <string.h>}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00030}00030\ \textcolor{preprocessor}{\#include\ <openssl/sha.h>}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00031}00031\ \textcolor{preprocessor}{\#include\ <openssl/crypto.h>}\ \textcolor{comment}{//\ For\ OPENSSL\_cleanse}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00032}00032\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00033}00033\ \textcolor{comment}{/*\ -\/-\/-\/\ Internal\ Helpers\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00034}00034\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00048}\doxymbox{\hyperlink{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}{00048}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}{secp256k1\_mpt\_hash\_to\_point\_nums}}(}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00049}00049\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00050}00050\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ out,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00051}00051\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ label,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00052}00052\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ label\_len,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00053}00053\ \ \ \ \ \ \ \ \ uint32\_t\ index}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00054}00054\ )\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00055}00055\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ hash[32];}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00056}00056\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ compressed[33];}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00057}00057\ \ \ \ \ uint32\_t\ ctr\ =\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00058}00058\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00059}00059\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ idx\_be[4]\ =\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00060}00060\ \ \ \ \ \ \ \ \ \ \ \ \ (\textcolor{keywordtype}{unsigned}\ char)(index\ >>\ 24),\ (\textcolor{keywordtype}{unsigned}\ char)(index\ >>\ 16),}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00061}00061\ \ \ \ \ \ \ \ \ \ \ \ \ (\textcolor{keywordtype}{unsigned}\ char)(index\ >>\ 8),\ \ (\textcolor{keywordtype}{unsigned}\ char)(index\ \&\ 0xFF)}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00062}00062\ \ \ \ \ \};}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00063}00063\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00064}00064\ \ \ \ \ \textcolor{comment}{/*\ Try-\/and-\/increment\ loop\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00065}00065\ \ \ \ \ \textcolor{keywordflow}{while}\ (ctr\ <\ 0xFFFFFFFFu)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00066}00066\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ ctr\_be[4]\ =\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00067}00067\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (\textcolor{keywordtype}{unsigned}\ char)(ctr\ >>\ 24),\ (\textcolor{keywordtype}{unsigned}\ char)(ctr\ >>\ 16),}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00068}00068\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (\textcolor{keywordtype}{unsigned}\ char)(ctr\ >>\ 8),\ \ (\textcolor{keywordtype}{unsigned}\ char)(ctr\ \&\ 0xFF)}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00069}00069\ \ \ \ \ \ \ \ \ \};}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00070}00070\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00071}00071\ \ \ \ \ \ \ \ \ SHA256\_CTX\ sha;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00072}00072\ \ \ \ \ \ \ \ \ SHA256\_Init(\&sha);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00073}00073\ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ \textcolor{stringliteral}{"{}MPT\_BULLETPROOF\_V1\_NUMS"{}},\ 23);\ \textcolor{comment}{//\ Domain\ Sep}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00074}00074\ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ \textcolor{stringliteral}{"{}secp256k1"{}},\ 9);\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Curve\ Label}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00075}00075\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00076}00076\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (label\ \&\&\ label\_len\ >\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00077}00077\ \ \ \ \ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ label,\ label\_len);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00078}00078\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00079}00079\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00080}00080\ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ idx\_be,\ 4);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00081}00081\ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ ctr\_be,\ 4);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00082}00082\ \ \ \ \ \ \ \ \ SHA256\_Final(hash,\ \&sha);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00083}00083\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00084}00084\ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ Construct\ compressed\ point\ candidate\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00085}00085\ \ \ \ \ \ \ \ \ compressed[0]\ =\ 0x02;\ \textcolor{comment}{/*\ Force\ even\ Y\ (standard\ convention\ for\ unique\ points)\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00086}00086\ \ \ \ \ \ \ \ \ memcpy(\&compressed[1],\ hash,\ 32);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00087}00087\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00088}00088\ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ Check\ validity\ on\ curve\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00089}00089\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (secp256k1\_ec\_pubkey\_parse(ctx,\ out,\ compressed,\ 33)\ ==\ 1)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00090}00090\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00091}00091\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00092}00092\ \ \ \ \ \ \ \ \ ctr++;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00093}00093\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00094}00094\ \ \ \ \ \textcolor{keywordflow}{return}\ 0;\ \textcolor{comment}{//\ Extremely\ unlikely\ to\ reach\ here}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00095}00095\ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00096}00096\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00108}\doxymbox{\hyperlink{secp256k1__mpt_8h_a7aaffafbd7bf29380177a031c673872b}{00108}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{commitments_8c_a7aaffafbd7bf29380177a031c673872b}{secp256k1\_mpt\_get\_h\_generator}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ secp256k1\_pubkey*\ h)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00109}00109\ \ \ \ \ \textcolor{keywordflow}{return}\ \doxymbox{\hyperlink{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}{secp256k1\_mpt\_hash\_to\_point\_nums}}(ctx,\ h,\ (\textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*)\textcolor{stringliteral}{"{}H"{}},\ 1,\ 0);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00110}00110\ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00111}00111\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00124}\doxymbox{\hyperlink{secp256k1__mpt_8h_a6a45b5b11888db76787492c2eab2754a}{00124}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{commitments_8c_a6a45b5b11888db76787492c2eab2754a}{secp256k1\_mpt\_get\_generator\_vector}}(}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00125}00125\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00126}00126\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ vec,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00127}00127\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00128}00128\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ label,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00129}00129\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ label\_len}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00130}00130\ )\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00131}00131\ \ \ \ \ \textcolor{keywordflow}{for}\ (uint32\_t\ i\ =\ 0;\ i\ <\ (uint32\_t)n;\ i++)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00132}00132\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{commitments_8c_a9cc043f2f420bd7eab3f0f13e48e9afd}{secp256k1\_mpt\_hash\_to\_point\_nums}}(ctx,\ \&vec[i],\ label,\ label\_len,\ i))\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00133}00133\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00134}00134\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00135}00135\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00136}00136\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00137}00137\ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00138}00138\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00139}00139\ \textcolor{comment}{/*\ -\/-\/-\/\ Public\ API\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00140}00140\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00149}\doxymbox{\hyperlink{secp256k1__mpt_8h_a854f62b9b9e53f643ba87cea615aad1f}{00149}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{commitments_8c_a2b41edc19e3c26a6b927dbc3fc03c445}{secp256k1\_mpt\_pedersen\_commit}}(}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00150}00150\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00151}00151\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ commitment,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00152}00152\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00153}00153\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ rho}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00154}00154\ )\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00155}00155\ \ \ \ \ secp256k1\_pubkey\ mG,\ rH,\ H;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00156}00156\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ m\_scalar[32]\ =\ \{0\};}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00157}00157\ \ \ \ \ \textcolor{keywordtype}{int}\ ok\ =\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00158}00158\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00159}00159\ \ \ \ \ \textcolor{comment}{/*\ 0.\ Input\ Check\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00160}00160\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_seckey\_verify(ctx,\ rho))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00161}00161\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00162}00162\ \ \ \ \ \textcolor{comment}{/*\ 1.\ Calculate\ rho*H\ (Blinding\ Term)\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00163}00163\ \ \ \ \ \textcolor{comment}{/*\ We\ do\ this\ first\ so\ we\ can\ use\ it\ directly\ if\ amount\ is\ 0\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00164}00164\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{commitments_8c_a7aaffafbd7bf29380177a031c673872b}{secp256k1\_mpt\_get\_h\_generator}}(ctx,\ \&H))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00165}00165\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00166}00166\ \ \ \ \ rH\ =\ H;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00167}00167\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&rH,\ rho))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00168}00168\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00169}00169\ \ \ \ \ \textcolor{comment}{/*\ 2.\ Handle\ Zero\ Amount\ Case\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00170}00170\ \ \ \ \ \textcolor{keywordflow}{if}\ (amount\ ==\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00171}00171\ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ If\ m=0,\ C\ =\ 0*G\ +\ r*H\ =\ r*H\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00172}00172\ \ \ \ \ \ \ \ \ *commitment\ =\ rH;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00173}00173\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00174}00174\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00175}00175\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00176}00176\ \ \ \ \ \textcolor{comment}{/*\ 3.\ Calculate\ m*G\ (Value\ Term)\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00177}00177\ \ \ \ \ \textcolor{comment}{/*\ Convert\ uint64\ amount\ to\ big-\/endian\ scalar\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00178}00178\ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{int}\ i\ =\ 0;\ i\ <\ 8;\ i++)\ \{}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00179}00179\ \ \ \ \ \ \ \ \ m\_scalar[31\ -\/\ i]\ =\ (amount\ >>\ (i\ *\ 8))\ \&\ 0xFF;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00180}00180\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00181}00181\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00182}00182\ \ \ \ \ \textcolor{comment}{/*\ This\ check\ passes\ now\ because\ we\ handled\ amount==0\ above\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00183}00183\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ \&mG,\ m\_scalar))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00184}00184\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00185}00185\ \ \ \ \ \textcolor{comment}{/*\ 4.\ Combine:\ C\ =\ mG\ +\ rH\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00186}00186\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ points[2]\ =\ \{\&mG,\ \&rH\};}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00187}00187\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ commitment,\ points,\ 2))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00188}00188\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00189}00189\ \ \ \ \ ok\ =\ 1;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00190}00190\ }
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00191}00191\ \ \ \ \ cleanup:}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00192}00192\ \ \ \ \ \textcolor{comment}{/*\ Securely\ clear\ the\ amount\ scalar\ from\ stack\ */}}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00193}00193\ \ \ \ \ OPENSSL\_cleanse(m\_scalar,\ 32);}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00194}00194\ \ \ \ \ \textcolor{keywordflow}{return}\ ok;}
+\DoxyCodeLine{\Hypertarget{commitments_8c_source_l00195}00195\ \}}
+
+\end{DoxyCode}

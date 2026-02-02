@@ -1,0 +1,11 @@
+<map id="secp256k1_mpt_prove_same_plaintext_multi" name="secp256k1_mpt_prove_same_plaintext_multi">
+<area shape="rect" id="Node000001" title="Generates a proof that N ciphertexts encrypt the same secret amount &#39;m&#39;." alt="" coords="5,55,158,95"/>
+<area shape="rect" id="Node000002" href="$proof__same__plaintext__multi_8c.html#ab19601480ad097fbeefe911f64001251" title=" " alt="" coords="213,13,381,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="157,55,225,41,220,44,159,60"/>
+<area shape="rect" id="Node000004" href="$proof__same__plaintext__multi_8c.html#aeaf385d364818242f9b4d3d3c14312b0" title=" " alt="" coords="215,62,378,88"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="157,72,202,74,197,76,158,78"/>
+<area shape="rect" id="Node000005" href="$proof__same__plaintext__multi_8c.html#a34c4be5f89f535eb8782596ddd366766" title="Calculates the expected proof size for a given number of ciphertexts." alt="" coords="206,112,388,153"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="158,93,206,107,201,108,158,98"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#aac5cece668acbd6bb052aafe9e3eaa75" title=" " alt="" coords="436,5,591,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="381,23,423,25,418,26,382,28"/>
+</map>

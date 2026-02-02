@@ -1,0 +1,857 @@
+\doxysection{src/\+bulletproof\+\_\+aggregated.c File Reference}
+\hypertarget{bulletproof__aggregated_8c}{}\label{bulletproof__aggregated_8c}\index{src/bulletproof\_aggregated.c@{src/bulletproof\_aggregated.c}}
+
+
+Aggregated Bulletproof Range Proofs (Logarithmic Size).  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$assert.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+{\ttfamily \+\#include $<$secp256k1.\+h$>$}\newline
+Include dependency graph for bulletproof\+\_\+aggregated.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Macros}
+\begin{DoxyCompactItemize}
+\item 
+\+\#define \doxymbox{\hyperlink{bulletproof__aggregated_8c_ac2d44bab58613a0a3ae5668cc1062048}{BP\+\_\+\+VALUE\+\_\+\+BITS}}~64
+\item 
+\+\#define \doxymbox{\hyperlink{bulletproof__aggregated_8c_ad8142428994f720f07c730031ef6955d}{BP\+\_\+\+TOTAL\+\_\+\+BITS}}(m)
+\item 
+\+\#define \doxymbox{\hyperlink{bulletproof__aggregated_8c_a2b823bb7aad765e963e9dc64ecb6d940}{SER\+\_\+\+PT}}(P)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static size\+\_\+t \doxymbox{\hyperlink{bulletproof__aggregated_8c_a6de512f1065308f0741177d9acfd5c5d}{bp\+\_\+ipa\+\_\+rounds}} (size\+\_\+t total\+\_\+bits)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_ab09b940b0052db9ea6b727f2efb0f60d}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar\+\_\+bytes)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\+\_\+amount\+\_\+point}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}mG, uint64\+\_\+t amount)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a173d41dc2f4af08b8b702b5d8d059999}{add\+\_\+term}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}acc, int \texorpdfstring{$\ast$}{*}acc\+\_\+inited, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}term)
+\item 
+static void \doxymbox{\hyperlink{bulletproof__aggregated_8c_a3c58156abd244b80b571b1c8b37d81bf}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+sub}} (unsigned char \texorpdfstring{$\ast$}{*}res, const unsigned char \texorpdfstring{$\ast$}{*}a, const unsigned char \texorpdfstring{$\ast$}{*}b)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a17d83719133a91351953bbbe475b0e6a}{secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+dot}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}out, const unsigned char \texorpdfstring{$\ast$}{*}a, const unsigned char \texorpdfstring{$\ast$}{*}b, size\+\_\+t n)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a3196d6d97a2f9317bd1222b28aa1496f}{secp256k1\+\_\+bulletproof\+\_\+add\+\_\+point\+\_\+to\+\_\+accumulator}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}acc, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}term)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a9823cb016b3d7693c6057b717943f76c}{secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+msm}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}r\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}points, const unsigned char \texorpdfstring{$\ast$}{*}scalars, size\+\_\+t n)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a4eea4e3f6c279f55e4015108a2a97628}{msm\+\_\+try\+\_\+add}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}acc, int \texorpdfstring{$\ast$}{*}acc\+\_\+inited, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}points, const unsigned char \texorpdfstring{$\ast$}{*}scalars, size\+\_\+t n)
+\item 
+void \doxymbox{\hyperlink{bulletproof__aggregated_8c_aead247d3b35135660014dfc8ba0e6c2b}{scalar\+\_\+vector\+\_\+mul}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char res\+[$\,$]\+\+[32]\+, unsigned char a\+[$\,$]\+\+[32]\+, unsigned char b\+[$\,$]\+\+[32]\+, size\+\_\+t n)
+\item 
+void \doxymbox{\hyperlink{bulletproof__aggregated_8c_a2acb7832619065ec4d3f86d602972788}{scalar\+\_\+vector\+\_\+add}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char res\+[$\,$]\+\+[32]\+, unsigned char a\+[$\,$]\+\+[32]\+, unsigned char b\+[$\,$]\+\+[32]\+, size\+\_\+t n)
+\item 
+void \doxymbox{\hyperlink{bulletproof__aggregated_8c_af36b8d61b67a1a38edf987e51ffd9990}{scalar\+\_\+vector\+\_\+powers}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char res\+[$\,$]\+\+[32]\+, const unsigned char \texorpdfstring{$\ast$}{*}y, size\+\_\+t n)
+\item 
+static void \doxymbox{\hyperlink{bulletproof__aggregated_8c_ad8a923bfe55372b5fdb64a7d4e30e734}{scalar\+\_\+pow\+\_\+u32}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char y\+\_\+pow\+\_\+out\+[32]\+, const unsigned char y\+[32]\+, unsigned int i)
+\item 
+static void \doxymbox{\hyperlink{bulletproof__aggregated_8c_ad3c74712c49330538b82ecb47834dbf8}{compute\+\_\+z\+\_\+pows\+\_\+j2}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char(\texorpdfstring{$\ast$}{*}z\+\_\+j2)\+[32]\+, const unsigned char z\+[32]\+, size\+\_\+t m)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a3d4591d6342be18e96677d1203e6b9db}{secp256k1\+\_\+bulletproof\+\_\+point\+\_\+scalar\+\_\+mul}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}r\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}p\+\_\+in, const unsigned char \texorpdfstring{$\ast$}{*}s\+\_\+scalar)
+\item 
+static void \doxymbox{\hyperlink{bulletproof__aggregated_8c_ac82fb1f3c962037697155aa0d7673b11}{compute\+\_\+delta\+\_\+scalars}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char(\texorpdfstring{$\ast$}{*}y\+\_\+block\+\_\+sum)\+[32]\+, unsigned char two\+\_\+sum\+[32]\+, const unsigned char y\+[32]\+, size\+\_\+t m)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a1feeec02790831bd5aa358b6fd4ec202}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}a, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}b)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a8e7b1a6b41478b8ecc1431c9d19374e2}{fold\+\_\+generators}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}final\+\_\+point, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}generators, const unsigned char \texorpdfstring{$\ast$}{*}u\+\_\+flat, const unsigned char \texorpdfstring{$\ast$}{*}uinv\+\_\+flat, size\+\_\+t n, size\+\_\+t rounds, int is\+\_\+H)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_aca071baa8d6247c12438bbb2bfe82e27}{apply\+\_\+ipa\+\_\+folding\+\_\+to\+\_\+P}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}P, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}L\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R\+\_\+vec, const unsigned char \texorpdfstring{$\ast$}{*}u\+\_\+flat, const unsigned char \texorpdfstring{$\ast$}{*}uinv\+\_\+flat, size\+\_\+t rounds)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_abcdd4e7ea20a5482b45fcb2ccff7a7b2}{secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+compute\+\_\+\+LR}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}L, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R, const unsigned char \texorpdfstring{$\ast$}{*}a\+\_\+L, const unsigned char \texorpdfstring{$\ast$}{*}a\+\_\+R, const unsigned char \texorpdfstring{$\ast$}{*}b\+\_\+L, const unsigned char \texorpdfstring{$\ast$}{*}b\+\_\+R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G\+\_\+L, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G\+\_\+R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H\+\_\+L, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H\+\_\+R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}U, const unsigned char \texorpdfstring{$\ast$}{*}ux, size\+\_\+t half\+\_\+n)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a8902f4a02e208cf9ca727c26f3739d0e}{secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+compress\+\_\+step}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}a, unsigned char \texorpdfstring{$\ast$}{*}b, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H, size\+\_\+t half\+\_\+n, const unsigned char \texorpdfstring{$\ast$}{*}x, const unsigned char \texorpdfstring{$\ast$}{*}x\+\_\+inv)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_ac4638807556435b0d205f39154983fa5}{scalar\+\_\+is\+\_\+zero}} (const unsigned char s\+[32]\+)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a11ef6ada10a3709c94de8753017d59f0}{derive\+\_\+ipa\+\_\+binding\+\_\+challenge}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}ux\+\_\+out, const unsigned char \texorpdfstring{$\ast$}{*}commit\+\_\+inp\+\_\+32, const unsigned char \texorpdfstring{$\ast$}{*}dot\+\_\+32)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a908ed3c3cddc486034e426c6c64d6270}{derive\+\_\+ipa\+\_\+round\+\_\+challenge}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char u\+\_\+out\+[32]\+, const unsigned char last\+\_\+challenge\+[32]\+, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}L, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a0f2171e520416eff8a0019eba26fb52c}{secp256k1\+\_\+bulletproof\+\_\+run\+\_\+ipa\+\_\+prover}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}g, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G\+\_\+vec, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H\+\_\+vec, unsigned char \texorpdfstring{$\ast$}{*}a\+\_\+vec, unsigned char \texorpdfstring{$\ast$}{*}b\+\_\+vec, size\+\_\+t n, const unsigned char ipa\+\_\+transcript\+\_\+id\+[32]\+, const unsigned char ux\+\_\+scalar\+[32]\+, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}L\+\_\+out, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R\+\_\+out, size\+\_\+t max\+\_\+rounds, size\+\_\+t \texorpdfstring{$\ast$}{*}rounds\+\_\+out, unsigned char a\+\_\+final\+[32]\+, unsigned char b\+\_\+final\+[32]\+)
+\item 
+static int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a973f4819c6216ff34f80888dca08e8c4}{ipa\+\_\+verify\+\_\+explicit}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}U, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}P\+\_\+in, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}L\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R\+\_\+vec, size\+\_\+t n, const unsigned char a\+\_\+final\+[32]\+, const unsigned char b\+\_\+final\+[32]\+, const unsigned char ux\+[32]\+, const unsigned char ipa\+\_\+transcript\+\_\+id\+[32]\+)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a3430df03ec255c55b326b40d39e42f09}{secp256k1\+\_\+bulletproof\+\_\+compute\+\_\+vectors\+\_\+block}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, uint64\+\_\+t value, size\+\_\+t block\+\_\+index, unsigned char \texorpdfstring{$\ast$}{*}al, unsigned char \texorpdfstring{$\ast$}{*}ar, unsigned char \texorpdfstring{$\ast$}{*}sl, unsigned char \texorpdfstring{$\ast$}{*}sr)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a207404f1b66320fd57fec3f6062ce083}{secp256k1\+\_\+bulletproof\+\_\+create\+\_\+commitment}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}commitment\+\_\+C, uint64\+\_\+t value, const unsigned char \texorpdfstring{$\ast$}{*}blinding\+\_\+factor, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk\+\_\+base)
+\begin{DoxyCompactList}\small\item\em Computes a Pedersen Commitment:\+ C = value\texorpdfstring{$\ast$}{*}G + blinding\+\_\+factor\texorpdfstring{$\ast$}{*}\+Pk\+\_\+base. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a961fdecda5bee93aa0667bd722478255}{secp256k1\+\_\+bulletproof\+\_\+prove\+\_\+agg}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof\+\_\+out, size\+\_\+t \texorpdfstring{$\ast$}{*}proof\+\_\+len, const uint64\+\_\+t \texorpdfstring{$\ast$}{*}values, const unsigned char \texorpdfstring{$\ast$}{*}blindings\+\_\+flat, size\+\_\+t m, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk\+\_\+base, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{bulletproof__aggregated_8c_a0f8215fab678563b03757e56cb7e5308}{secp256k1\+\_\+bulletproof\+\_\+verify\+\_\+agg}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}G\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}H\+\_\+vec, const unsigned char \texorpdfstring{$\ast$}{*}proof, size\+\_\+t proof\+\_\+len, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}commitment\+\_\+\+C\+\_\+vec, size\+\_\+t m, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk\+\_\+base, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Aggregated Bulletproof Range Proofs (Logarithmic Size). 
+
+This module implements non-\/interactive zero-\/knowledge range proofs based on the Bulletproofs protocol (Bünz et al., 2018). It allows a prover to demonstrate that a committed value lies within the range $ [0, 2^{64}) $ without revealing the value itself.
+
+{\bfseries{Protocol Overview:\+}} The implementation follows the standard single-\/value and aggregated Bulletproof logic:\+
+\begin{DoxyEnumerate}
+\item {\bfseries{Pedersen Commitment:\+}} The value $ v $ is committed as $ V = v \cdot G + r \cdot H $.
+\item {\bfseries{Bit Decomposition:\+}} The value is decomposed into 64 bits $ \mathbf{a}_L $.
+\item {\bfseries{Polynomial Commitment:\+}} The prover commits to polynomials defining the range constraints.
+\item {\bfseries{Inner Product Argument (IPA):\+}} A recursive argument reduces the proof size to logarithmic complexity $ \mathcal{O}(\log n) $.
+\end{DoxyEnumerate}
+
+{\bfseries{Aggregation:\+}} This implementation supports aggregating $ m $ proofs into a single verification process. The total vector length is $ n = 64 \cdot m $. Aggregation significantly reduces the on-\/chain footprint compared to $ m $ individual proofs.
+
+{\bfseries{Fiat-\/\+Shamir Transcript:\+}} The non-\/interactive challenge generation follows a strict dependency chain to ensure binding and special soundness:\+
+\begin{DoxyItemize}
+\item $ \mathcal{T}_0 $:\+ Domain Tag \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} Context\+ID \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} Value Commitments ( $ V $)
+\item $ y, z $:\+ Derived from $ \mathcal{T}_0 \parallel A \parallel S $
+\item $ x $:\+ Derived from $ z \parallel T_1 \parallel T_2 $
+\item $ \mu $:\+ Derived from $ x $ (for the IPA)
+\end{DoxyItemize}
+
+{\bfseries{Dependencies:\+}}
+\begin{DoxyItemize}
+\item Relies on {\ttfamily secp256k1} for elliptic curve arithmetic.
+\item Uses {\ttfamily SHA256} for the Fiat-\/\+Shamir transformation.
+\end{DoxyItemize}
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+6 Range Proof (using Bulletproofs)]\+ 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+
+
+\label{doc-define-members}
+\Hypertarget{bulletproof__aggregated_8c_doc-define-members}
+\doxysubsection{Macro Definition Documentation}
+\Hypertarget{bulletproof__aggregated_8c_ad8142428994f720f07c730031ef6955d}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!BP\_TOTAL\_BITS@{BP\_TOTAL\_BITS}}
+\index{BP\_TOTAL\_BITS@{BP\_TOTAL\_BITS}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{BP\_TOTAL\_BITS}{BP\_TOTAL\_BITS}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ad8142428994f720f07c730031ef6955d} 
+\+\#define BP\+\_\+\+TOTAL\+\_\+\+BITS(\begin{DoxyParamCaption}\item[{}]{m}{}\end{DoxyParamCaption})}
+
+{\bfseries Value:\+}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{((size\_t)(\doxymbox{\hyperlink{bulletproof__aggregated_8c_ac2d44bab58613a0a3ae5668cc1062048}{BP\_VALUE\_BITS}}\ *\ (m)))}
+
+\end{DoxyCode}
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00050}{50}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+\Hypertarget{bulletproof__aggregated_8c_ac2d44bab58613a0a3ae5668cc1062048}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!BP\_VALUE\_BITS@{BP\_VALUE\_BITS}}
+\index{BP\_VALUE\_BITS@{BP\_VALUE\_BITS}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{BP\_VALUE\_BITS}{BP\_VALUE\_BITS}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ac2d44bab58613a0a3ae5668cc1062048} 
+\+\#define BP\+\_\+\+VALUE\+\_\+\+BITS~64}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00047}{47}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+\Hypertarget{bulletproof__aggregated_8c_a2b823bb7aad765e963e9dc64ecb6d940}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!SER\_PT@{SER\_PT}}
+\index{SER\_PT@{SER\_PT}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{SER\_PT}{SER\_PT}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a2b823bb7aad765e963e9dc64ecb6d940} 
+\+\#define SER\+\_\+\+PT(\begin{DoxyParamCaption}\item[{}]{P}{}\end{DoxyParamCaption})}
+
+{\bfseries Value:\+}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{do}\ \{\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ ser\_len\ =\ 33;\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ if\ (!secp256k1\_ec\_pubkey\_serialize(ctx,\ ptr,\ \&ser\_len,\ \&(P),\ SECP256K1\_EC\_COMPRESSED))\ \textcolor{keywordflow}{goto}\ cleanup;\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ if\ (ser\_len\ !=\ 33)\ goto\ cleanup;\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ ptr\ +=\ 33;\ \(\backslash\)}
+\DoxyCodeLine{\}\ while\ (0)}
+
+\end{DoxyCode}
+
+
+\label{doc-func-members}
+\Hypertarget{bulletproof__aggregated_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{bulletproof__aggregated_8c_a173d41dc2f4af08b8b702b5d8d059999}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!add\_term@{add\_term}}
+\index{add\_term@{add\_term}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{add\_term()}{add\_term()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a173d41dc2f4af08b8b702b5d8d059999} 
+int add\+\_\+term (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{acc}{, }\item[{int \texorpdfstring{$\ast$}{*}}]{acc\+\_\+inited}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{term}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Safely adds a point to an accumulator (acc += term). Handles uninitialized accumulators by assignment instead of addition. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00103}{103}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a173d41dc2f4af08b8b702b5d8d059999_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_aca071baa8d6247c12438bbb2bfe82e27}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!apply\_ipa\_folding\_to\_P@{apply\_ipa\_folding\_to\_P}}
+\index{apply\_ipa\_folding\_to\_P@{apply\_ipa\_folding\_to\_P}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{apply\_ipa\_folding\_to\_P()}{apply\_ipa\_folding\_to\_P()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_aca071baa8d6247c12438bbb2bfe82e27} 
+int apply\+\_\+ipa\+\_\+folding\+\_\+to\+\_\+P (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{P}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{L\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R\+\_\+vec}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{u\+\_\+flat}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{uinv\+\_\+flat}{, }\item[{size\+\_\+t}]{rounds}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00443}{443}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_aca071baa8d6247c12438bbb2bfe82e27_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_aca071baa8d6247c12438bbb2bfe82e27_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a6de512f1065308f0741177d9acfd5c5d}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!bp\_ipa\_rounds@{bp\_ipa\_rounds}}
+\index{bp\_ipa\_rounds@{bp\_ipa\_rounds}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{bp\_ipa\_rounds()}{bp\_ipa\_rounds()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a6de512f1065308f0741177d9acfd5c5d} 
+size\+\_\+t bp\+\_\+ipa\+\_\+rounds (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{total\+\_\+bits}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [inline]}, {\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00053}{53}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a6de512f1065308f0741177d9acfd5c5d_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a9a0a1101e6a9c85297ee14e90686e009}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!compute\_amount\_point@{compute\_amount\_point}}
+\index{compute\_amount\_point@{compute\_amount\_point}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{compute\_amount\_point()}{compute\_amount\_point()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a9a0a1101e6a9c85297ee14e90686e009} 
+int compute\+\_\+amount\+\_\+point (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{mG}{, }\item[{uint64\+\_\+t}]{amount}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Computes the point M = amount \texorpdfstring{$\ast$}{*} G. Internal helper used by commitment construction. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00082}{82}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a9a0a1101e6a9c85297ee14e90686e009_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_ac82fb1f3c962037697155aa0d7673b11}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!compute\_delta\_scalars@{compute\_delta\_scalars}}
+\index{compute\_delta\_scalars@{compute\_delta\_scalars}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{compute\_delta\_scalars()}{compute\_delta\_scalars()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ac82fb1f3c962037697155aa0d7673b11} 
+void compute\+\_\+delta\+\_\+scalars (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char(\texorpdfstring{$\ast$}{*})}]{y\+\_\+block\+\_\+sum}{\+[32]\+, }\item[{unsigned char}]{two\+\_\+sum}{\+[32]\+, }\item[{const unsigned char}]{y}{\+[32]\+, }\item[{size\+\_\+t}]{m}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Computes per-\/block y-\/power sums for aggregated Bulletproofs. For block j (0-\/based):\+ y\+\_\+block\+\_\+sum\+[j]\+ = sum\+\_\+\{i=0\}\texorpdfstring{$^\wedge$}{\string^}\{63\} y\texorpdfstring{$^\wedge$}{\string^}\{64\texorpdfstring{$\ast$}{*}j + i\} Also computes:\+ two\+\_\+sum = sum\+\_\+\{i=0\}\texorpdfstring{$^\wedge$}{\string^}\{63\} 2\texorpdfstring{$^\wedge$}{\string^}i These are used by the caller to construct delta(y, z). 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00336}{336}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_ac82fb1f3c962037697155aa0d7673b11_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=346pt]{bulletproof__aggregated_8c_ac82fb1f3c962037697155aa0d7673b11_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_ad3c74712c49330538b82ecb47834dbf8}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!compute\_z\_pows\_j2@{compute\_z\_pows\_j2}}
+\index{compute\_z\_pows\_j2@{compute\_z\_pows\_j2}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{compute\_z\_pows\_j2()}{compute\_z\_pows\_j2()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ad3c74712c49330538b82ecb47834dbf8} 
+void compute\+\_\+z\+\_\+pows\+\_\+j2 (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char(\texorpdfstring{$\ast$}{*})}]{z\+\_\+j2}{\+[32]\+, }\item[{const unsigned char}]{z}{\+[32]\+, }\item[{size\+\_\+t}]{m}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+z\+\_\+j2 = z\texorpdfstring{$^\wedge$}{\string^}(j+2) for j = 0..m-\/1 (small exponent) 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00304}{304}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_ad3c74712c49330538b82ecb47834dbf8_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=335pt]{bulletproof__aggregated_8c_ad3c74712c49330538b82ecb47834dbf8_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a11ef6ada10a3709c94de8753017d59f0}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!derive\_ipa\_binding\_challenge@{derive\_ipa\_binding\_challenge}}
+\index{derive\_ipa\_binding\_challenge@{derive\_ipa\_binding\_challenge}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{derive\_ipa\_binding\_challenge()}{derive\_ipa\_binding\_challenge()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a11ef6ada10a3709c94de8753017d59f0} 
+int derive\+\_\+ipa\+\_\+binding\+\_\+challenge (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{ux\+\_\+out}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{commit\+\_\+inp\+\_\+32}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{dot\+\_\+32}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00691}{691}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=329pt]{bulletproof__aggregated_8c_a11ef6ada10a3709c94de8753017d59f0_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=326pt]{bulletproof__aggregated_8c_a11ef6ada10a3709c94de8753017d59f0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a908ed3c3cddc486034e426c6c64d6270}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!derive\_ipa\_round\_challenge@{derive\_ipa\_round\_challenge}}
+\index{derive\_ipa\_round\_challenge@{derive\_ipa\_round\_challenge}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{derive\_ipa\_round\_challenge()}{derive\_ipa\_round\_challenge()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a908ed3c3cddc486034e426c6c64d6270} 
+int derive\+\_\+ipa\+\_\+round\+\_\+challenge (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char}]{u\+\_\+out}{\+[32]\+, }\item[{const unsigned char}]{last\+\_\+challenge}{\+[32]\+, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{L}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R}{}\end{DoxyParamCaption})}
+
+Derive u = H(last\+\_\+challenge \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} L \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} R) reduced to a valid scalar. IMPORTANT:\+ use the SAME exact logic in verifier. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00725}{725}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a908ed3c3cddc486034e426c6c64d6270_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a908ed3c3cddc486034e426c6c64d6270_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a8e7b1a6b41478b8ecc1431c9d19374e2}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!fold\_generators@{fold\_generators}}
+\index{fold\_generators@{fold\_generators}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{fold\_generators()}{fold\_generators()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a8e7b1a6b41478b8ecc1431c9d19374e2} 
+int fold\+\_\+generators (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{final\+\_\+point}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{generators}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{u\+\_\+flat}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{uinv\+\_\+flat}{, }\item[{size\+\_\+t}]{n}{, }\item[{size\+\_\+t}]{rounds}{, }\item[{int}]{is\+\_\+H}{}\end{DoxyParamCaption})}
+
+u\+\_\+flat and uinv\+\_\+flat are arrays of length (rounds \texorpdfstring{$\ast$}{*} 32):\+ u\+\_\+j = u\+\_\+flat + 32\texorpdfstring{$\ast$}{*}j u\+\_\+j\+\_\+inv = uinv\+\_\+flat + 32\texorpdfstring{$\ast$}{*}j 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00382}{382}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a8e7b1a6b41478b8ecc1431c9d19374e2_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a8e7b1a6b41478b8ecc1431c9d19374e2_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_ab09b940b0052db9ea6b727f2efb0f60d}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ab09b940b0052db9ea6b727f2efb0f60d} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar\+\_\+bytes}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Generates a secure 32-\/byte scalar (private key). NOTE:\+ This is a TEMPORARY duplication of a helper that will be moved to proof\+\_\+util.\+c. Returns 1 on success, 0 on failure. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00066}{66}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_ab09b940b0052db9ea6b727f2efb0f60d_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a973f4819c6216ff34f80888dca08e8c4}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!ipa\_verify\_explicit@{ipa\_verify\_explicit}}
+\index{ipa\_verify\_explicit@{ipa\_verify\_explicit}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{ipa\_verify\_explicit()}{ipa\_verify\_explicit()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a973f4819c6216ff34f80888dca08e8c4} 
+int ipa\+\_\+verify\+\_\+explicit (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{U}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{P\+\_\+in}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{L\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R\+\_\+vec}{, }\item[{size\+\_\+t}]{n}{, }\item[{const unsigned char}]{a\+\_\+final}{\+[32]\+, }\item[{const unsigned char}]{b\+\_\+final}{\+[32]\+, }\item[{const unsigned char}]{ux}{\+[32]\+, }\item[{const unsigned char}]{ipa\+\_\+transcript\+\_\+id}{\+[32]\+}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00875}{875}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a973f4819c6216ff34f80888dca08e8c4_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=324pt]{bulletproof__aggregated_8c_a973f4819c6216ff34f80888dca08e8c4_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a4eea4e3f6c279f55e4015108a2a97628}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!msm\_try\_add@{msm\_try\_add}}
+\index{msm\_try\_add@{msm\_try\_add}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{msm\_try\_add()}{msm\_try\_add()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a4eea4e3f6c279f55e4015108a2a97628} 
+int msm\+\_\+try\+\_\+add (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{acc}{, }\item[{int \texorpdfstring{$\ast$}{*}}]{acc\+\_\+inited}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{points}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{scalars}{, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00225}{225}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a4eea4e3f6c279f55e4015108a2a97628_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a4eea4e3f6c279f55e4015108a2a97628_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a1feeec02790831bd5aa358b6fd4ec202}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a1feeec02790831bd5aa358b6fd4ec202} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{b}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Compare two secp256k1 public keys for equality. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00374}{374}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+
+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a1feeec02790831bd5aa358b6fd4ec202_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_ac4638807556435b0d205f39154983fa5}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!scalar\_is\_zero@{scalar\_is\_zero}}
+\index{scalar\_is\_zero@{scalar\_is\_zero}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{scalar\_is\_zero()}{scalar\_is\_zero()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ac4638807556435b0d205f39154983fa5} 
+int scalar\+\_\+is\+\_\+zero (\begin{DoxyParamCaption}\item[{const unsigned char}]{s}{\+[32]\+}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00673}{673}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_ac4638807556435b0d205f39154983fa5_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_ad8a923bfe55372b5fdb64a7d4e30e734}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!scalar\_pow\_u32@{scalar\_pow\_u32}}
+\index{scalar\_pow\_u32@{scalar\_pow\_u32}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{scalar\_pow\_u32()}{scalar\_pow\_u32()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_ad8a923bfe55372b5fdb64a7d4e30e734} 
+void scalar\+\_\+pow\+\_\+u32 (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char}]{y\+\_\+pow\+\_\+out}{\+[32]\+, }\item[{const unsigned char}]{y}{\+[32]\+, }\item[{unsigned int}]{i}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Compute y\texorpdfstring{$^\wedge$}{\string^}i for small i. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00286}{286}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=340pt]{bulletproof__aggregated_8c_ad8a923bfe55372b5fdb64a7d4e30e734_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_ad8a923bfe55372b5fdb64a7d4e30e734_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a2acb7832619065ec4d3f86d602972788}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!scalar\_vector\_add@{scalar\_vector\_add}}
+\index{scalar\_vector\_add@{scalar\_vector\_add}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{scalar\_vector\_add()}{scalar\_vector\_add()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a2acb7832619065ec4d3f86d602972788} 
+void scalar\+\_\+vector\+\_\+add (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char}]{res}{\+[$\,$]\+\+[32]\+, }\item[{unsigned char}]{a}{\+[$\,$]\+\+[32]\+, }\item[{unsigned char}]{b}{\+[$\,$]\+\+[32]\+, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Computes component-\/wise:\+ result\+[i]\+ = a\+[i]\+ + b\+[i]\+ 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00256}{256}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=349pt]{bulletproof__aggregated_8c_a2acb7832619065ec4d3f86d602972788_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_aead247d3b35135660014dfc8ba0e6c2b}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!scalar\_vector\_mul@{scalar\_vector\_mul}}
+\index{scalar\_vector\_mul@{scalar\_vector\_mul}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{scalar\_vector\_mul()}{scalar\_vector\_mul()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_aead247d3b35135660014dfc8ba0e6c2b} 
+void scalar\+\_\+vector\+\_\+mul (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char}]{res}{\+[$\,$]\+\+[32]\+, }\item[{unsigned char}]{a}{\+[$\,$]\+\+[32]\+, }\item[{unsigned char}]{b}{\+[$\,$]\+\+[32]\+, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Computes component-\/wise:\+ result\+[i]\+ = a\+[i]\+ \texorpdfstring{$\ast$}{*} b\+[i]\+ (Hadamard product) 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00246}{246}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=349pt]{bulletproof__aggregated_8c_aead247d3b35135660014dfc8ba0e6c2b_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_af36b8d61b67a1a38edf987e51ffd9990}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!scalar\_vector\_powers@{scalar\_vector\_powers}}
+\index{scalar\_vector\_powers@{scalar\_vector\_powers}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{scalar\_vector\_powers()}{scalar\_vector\_powers()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_af36b8d61b67a1a38edf987e51ffd9990} 
+void scalar\+\_\+vector\+\_\+powers (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char}]{res}{\+[$\,$]\+\+[32]\+, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{y}{, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Fills a vector with powers of a scalar:\+ \+[1, y, y\texorpdfstring{$^\wedge$}{\string^}2, ..., y\texorpdfstring{$^\wedge$}{\string^}\{n-\/1\}]\+ 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00267}{267}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_af36b8d61b67a1a38edf987e51ffd9990_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=341pt]{bulletproof__aggregated_8c_af36b8d61b67a1a38edf987e51ffd9990_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a3196d6d97a2f9317bd1222b28aa1496f}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_add\_point\_to\_accumulator@{secp256k1\_bulletproof\_add\_point\_to\_accumulator}}
+\index{secp256k1\_bulletproof\_add\_point\_to\_accumulator@{secp256k1\_bulletproof\_add\_point\_to\_accumulator}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_add\_point\_to\_accumulator()}{secp256k1\_bulletproof\_add\_point\_to\_accumulator()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a3196d6d97a2f9317bd1222b28aa1496f} 
+int secp256k1\+\_\+bulletproof\+\_\+add\+\_\+point\+\_\+to\+\_\+accumulator (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{acc}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{term}{}\end{DoxyParamCaption})}
+
+Internal helper for multi-\/scalar multiplication. Adds a point to the accumulator. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00167}{167}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+\Hypertarget{bulletproof__aggregated_8c_a3430df03ec255c55b326b40d39e42f09}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_compute\_vectors\_block@{secp256k1\_bulletproof\_compute\_vectors\_block}}
+\index{secp256k1\_bulletproof\_compute\_vectors\_block@{secp256k1\_bulletproof\_compute\_vectors\_block}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_compute\_vectors\_block()}{secp256k1\_bulletproof\_compute\_vectors\_block()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a3430df03ec255c55b326b40d39e42f09} 
+int secp256k1\+\_\+bulletproof\+\_\+compute\+\_\+vectors\+\_\+block (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{uint64\+\_\+t}]{value}{, }\item[{size\+\_\+t}]{block\+\_\+index}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{al}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{ar}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{sl}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{sr}{}\end{DoxyParamCaption})}
+
+Phase 1, Step 3 (Aggregated):\+ Compute al, ar, sl, sr vectors for ONE value block inside an aggregated proof.
+
+The caller is responsible for:\+
+\begin{DoxyItemize}
+\item allocating al/\+ar/\+sl/\+sr of length (BP\+\_\+\+VALUE\+\_\+\+BITS \texorpdfstring{$\ast$}{*} m)
+\item calling this once per value with block\+\_\+index = j
+\end{DoxyItemize}
+
+Block layout:\+ bits for value j occupy indices:\+ \+[BP\+\_\+\+VALUE\+\_\+\+BITS \texorpdfstring{$\ast$}{*} j .. BP\+\_\+\+VALUE\+\_\+\+BITS \texorpdfstring{$\ast$}{*} j + BP\+\_\+\+VALUE\+\_\+\+BITS -\/ 1]\+ 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00999}{999}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a3430df03ec255c55b326b40d39e42f09_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a207404f1b66320fd57fec3f6062ce083}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_create\_commitment@{secp256k1\_bulletproof\_create\_commitment}}
+\index{secp256k1\_bulletproof\_create\_commitment@{secp256k1\_bulletproof\_create\_commitment}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_create\_commitment()}{secp256k1\_bulletproof\_create\_commitment()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a207404f1b66320fd57fec3f6062ce083} 
+int secp256k1\+\_\+bulletproof\+\_\+create\+\_\+commitment (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{commitment\+\_\+C}{, }\item[{uint64\+\_\+t}]{value}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{blinding\+\_\+factor}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk\+\_\+base}{}\end{DoxyParamCaption})}
+
+
+
+Computes a Pedersen Commitment:\+ C = value\texorpdfstring{$\ast$}{*}G + blinding\+\_\+factor\texorpdfstring{$\ast$}{*}\+Pk\+\_\+base. 
+
+Computes the Pedersen Commitment:\+ C = value\texorpdfstring{$\ast$}{*}G + blinding\+\_\+factor\texorpdfstring{$\ast$}{*}\+Pk\+\_\+base. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l01062}{1062}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=347pt]{bulletproof__aggregated_8c_a207404f1b66320fd57fec3f6062ce083_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=343pt]{bulletproof__aggregated_8c_a207404f1b66320fd57fec3f6062ce083_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a8902f4a02e208cf9ca727c26f3739d0e}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_ipa\_compress\_step@{secp256k1\_bulletproof\_ipa\_compress\_step}}
+\index{secp256k1\_bulletproof\_ipa\_compress\_step@{secp256k1\_bulletproof\_ipa\_compress\_step}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_ipa\_compress\_step()}{secp256k1\_bulletproof\_ipa\_compress\_step()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a8902f4a02e208cf9ca727c26f3739d0e} 
+int secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+compress\+\_\+step (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{b}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H}{, }\item[{size\+\_\+t}]{half\+\_\+n}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{x}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{x\+\_\+inv}{}\end{DoxyParamCaption})}
+
+One IPA compression step (in-\/place).
+
+Input vectors are length (2\texorpdfstring{$\ast$}{*}half\+\_\+n):\+ a\+[0..2\texorpdfstring{$\ast$}{*}half\+\_\+n-\/1]\+, b\+[0..2\texorpdfstring{$\ast$}{*}half\+\_\+n-\/1]\+, G\+[0..2\texorpdfstring{$\ast$}{*}half\+\_\+n-\/1]\+, H\+[0..2\texorpdfstring{$\ast$}{*}half\+\_\+n-\/1]\+
+
+After return, the first half contains folded vectors:\+ a\textquotesingle{}\+[0..half\+\_\+n-\/1]\+, b\textquotesingle{}\+[0..half\+\_\+n-\/1]\+, G\textquotesingle{}\+[0..half\+\_\+n-\/1]\+, H\textquotesingle{}\+[0..half\+\_\+n-\/1]\+
+
+Formulas (matching prover/\+verifier conventions):\+ a\textquotesingle{}\+[i]\+ = aL\+[i]\+\texorpdfstring{$\ast$}{*}x + aR\+[i]\+\texorpdfstring{$\ast$}{*}x\+\_\+inv b\textquotesingle{}\+[i]\+ = bL\+[i]\+\texorpdfstring{$\ast$}{*}x\+\_\+inv + bR\+[i]\+\texorpdfstring{$\ast$}{*}x G\textquotesingle{}\+[i]\+ = GL\+[i]\+\texorpdfstring{$\ast$}{*}x\+\_\+inv + GR\+[i]\+\texorpdfstring{$\ast$}{*}x H\textquotesingle{}\+[i]\+ = HL\+[i]\+\texorpdfstring{$\ast$}{*}x + HR\+[i]\+\texorpdfstring{$\ast$}{*}x\+\_\+inv 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00608}{608}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a8902f4a02e208cf9ca727c26f3739d0e_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a8902f4a02e208cf9ca727c26f3739d0e_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_abcdd4e7ea20a5482b45fcb2ccff7a7b2}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_ipa\_compute\_LR@{secp256k1\_bulletproof\_ipa\_compute\_LR}}
+\index{secp256k1\_bulletproof\_ipa\_compute\_LR@{secp256k1\_bulletproof\_ipa\_compute\_LR}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_ipa\_compute\_LR()}{secp256k1\_bulletproof\_ipa\_compute\_LR()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_abcdd4e7ea20a5482b45fcb2ccff7a7b2} 
+int secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+compute\+\_\+\+LR (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{L}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a\+\_\+L}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a\+\_\+R}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b\+\_\+L}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b\+\_\+R}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G\+\_\+L}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G\+\_\+R}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H\+\_\+L}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H\+\_\+R}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{U}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{ux}{, }\item[{size\+\_\+t}]{half\+\_\+n}{}\end{DoxyParamCaption})}
+
+Computes the cross-\/term commitments L and R. L = \texorpdfstring{$<$}{<}a\+\_\+L, G\+\_\+R\texorpdfstring{$>$}{>} + \texorpdfstring{$<$}{<}b\+\_\+R, H\+\_\+L\texorpdfstring{$>$}{>} + c\+\_\+L \texorpdfstring{$\ast$}{*} ux \texorpdfstring{$\ast$}{*} g R = \texorpdfstring{$<$}{<}a\+\_\+R, G\+\_\+L\texorpdfstring{$>$}{>} + \texorpdfstring{$<$}{<}b\+\_\+L, H\+\_\+R\texorpdfstring{$>$}{>} + c\+\_\+R \texorpdfstring{$\ast$}{*} ux \texorpdfstring{$\ast$}{*} g ctx The context. L Output:\+ Commitment point L\+\_\+j. R Output:\+ Commitment point R\+\_\+j. half\+\_\+n Length of the input vector halves. g The blinding generator point (Pk\+\_\+base in our case). return 1 on success, 0 on failure. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00512}{512}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_abcdd4e7ea20a5482b45fcb2ccff7a7b2_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_abcdd4e7ea20a5482b45fcb2ccff7a7b2_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a17d83719133a91351953bbbe475b0e6a}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_ipa\_dot@{secp256k1\_bulletproof\_ipa\_dot}}
+\index{secp256k1\_bulletproof\_ipa\_dot@{secp256k1\_bulletproof\_ipa\_dot}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_ipa\_dot()}{secp256k1\_bulletproof\_ipa\_dot()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a17d83719133a91351953bbbe475b0e6a} 
+int secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+dot (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{out}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b}{, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Computes the modular dot product c = \texorpdfstring{$<$}{<}a, b\texorpdfstring{$>$}{>} = sum(a\+[i]\+ \texorpdfstring{$\ast$}{*} b\+[i]\+) mod q. This function calculates the inner product of two scalar vectors. ctx The context. out Output 32-\/byte scalar (the inner product result). a Input scalar vector A (n \texorpdfstring{$\ast$}{*} 32 bytes). b Input scalar vector B (n \texorpdfstring{$\ast$}{*} 32 bytes). n The length of the vectors. 1 on success, 0 on failure. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00145}{145}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a17d83719133a91351953bbbe475b0e6a_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a17d83719133a91351953bbbe475b0e6a_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a9823cb016b3d7693c6057b717943f76c}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_ipa\_msm@{secp256k1\_bulletproof\_ipa\_msm}}
+\index{secp256k1\_bulletproof\_ipa\_msm@{secp256k1\_bulletproof\_ipa\_msm}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_ipa\_msm()}{secp256k1\_bulletproof\_ipa\_msm()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a9823cb016b3d7693c6057b717943f76c} 
+int secp256k1\+\_\+bulletproof\+\_\+ipa\+\_\+msm (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{r\+\_\+out}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{points}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{scalars}{, }\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Computes Multiscalar Multiplication (MSM):\+ R = sum(s\+[i]\+ \texorpdfstring{$\ast$}{*} P\+[i]\+). ctx The context. r\+\_\+out Output point (the sum R). points Array of N input points (secp256k1\+\_\+pubkey). scalars Flat array of N 32-\/byte scalars. n The number of terms (N). return 1 on success, 0 on failure. NOTE:\+ This MSM is used only for Bulletproofs where all scalars are public. It is NOT constant-\/time with respect to scalars and MUST NOT be used for secret-\/key operations. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00191}{191}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=286pt]{bulletproof__aggregated_8c_a9823cb016b3d7693c6057b717943f76c_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a9823cb016b3d7693c6057b717943f76c_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a3d4591d6342be18e96677d1203e6b9db}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_point\_scalar\_mul@{secp256k1\_bulletproof\_point\_scalar\_mul}}
+\index{secp256k1\_bulletproof\_point\_scalar\_mul@{secp256k1\_bulletproof\_point\_scalar\_mul}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_point\_scalar\_mul()}{secp256k1\_bulletproof\_point\_scalar\_mul()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a3d4591d6342be18e96677d1203e6b9db} 
+int secp256k1\+\_\+bulletproof\+\_\+point\+\_\+scalar\+\_\+mul (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{r\+\_\+out}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{p\+\_\+in}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{s\+\_\+scalar}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Point = Scalar \texorpdfstring{$\ast$}{*} Point (using public API) 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00318}{318}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+\Hypertarget{bulletproof__aggregated_8c_a961fdecda5bee93aa0667bd722478255}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_prove\_agg@{secp256k1\_bulletproof\_prove\_agg}}
+\index{secp256k1\_bulletproof\_prove\_agg@{secp256k1\_bulletproof\_prove\_agg}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_prove\_agg()}{secp256k1\_bulletproof\_prove\_agg()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a961fdecda5bee93aa0667bd722478255} 
+int secp256k1\+\_\+bulletproof\+\_\+prove\+\_\+agg (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof\+\_\+out}{, }\item[{size\+\_\+t \texorpdfstring{$\ast$}{*}}]{proof\+\_\+len}{, }\item[{const uint64\+\_\+t \texorpdfstring{$\ast$}{*}}]{values}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{blindings\+\_\+flat}{, }\item[{size\+\_\+t}]{m}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk\+\_\+base}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+Generates an aggregated Bulletproof for m values.
+
+This function constructs a range proof asserting that all m values are within the \+[0, 2\texorpdfstring{$^\wedge$}{\string^}64) range. The proof is serialized into proof\+\_\+out.
+
+Inputs:\+
+\begin{DoxyItemize}
+\item values:\+ Array of m 64-\/bit integers to prove.
+\item blindings\+\_\+flat:\+ Array of m 32-\/byte blinding factors (one per value).
+\item m:\+ Number of values to aggregate (must be a power of 2).
+\item pk\+\_\+base:\+ Generator H used for the commitments (C = vG + rH).
+\item context\+\_\+id:\+ Optional 32-\/byte unique ID to bind the proof to a context.
+\end{DoxyItemize}
+
+Outputs:\+
+\begin{DoxyItemize}
+\item proof\+\_\+out:\+ Buffer to receive the serialized proof.
+\item proof\+\_\+len:\+ On input, size of proof\+\_\+out. On output, actual proof size.
+\end{DoxyItemize}
+
+Returns 1 on success, 0 on failure. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l01115}{1115}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a961fdecda5bee93aa0667bd722478255_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a0f2171e520416eff8a0019eba26fb52c}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_run\_ipa\_prover@{secp256k1\_bulletproof\_run\_ipa\_prover}}
+\index{secp256k1\_bulletproof\_run\_ipa\_prover@{secp256k1\_bulletproof\_run\_ipa\_prover}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_run\_ipa\_prover()}{secp256k1\_bulletproof\_run\_ipa\_prover()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a0f2171e520416eff8a0019eba26fb52c} 
+int secp256k1\+\_\+bulletproof\+\_\+run\+\_\+ipa\+\_\+prover (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{g}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G\+\_\+vec}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H\+\_\+vec}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{a\+\_\+vec}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{b\+\_\+vec}{, }\item[{size\+\_\+t}]{n}{, }\item[{const unsigned char}]{ipa\+\_\+transcript\+\_\+id}{\+[32]\+, }\item[{const unsigned char}]{ux\+\_\+scalar}{\+[32]\+, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{L\+\_\+out}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R\+\_\+out}{, }\item[{size\+\_\+t}]{max\+\_\+rounds}{, }\item[{size\+\_\+t \texorpdfstring{$\ast$}{*}}]{rounds\+\_\+out}{, }\item[{unsigned char}]{a\+\_\+final}{\+[32]\+, }\item[{unsigned char}]{b\+\_\+final}{\+[32]\+}\end{DoxyParamCaption})}
+
+Runs the Inner Product Argument (IPA) prover. Recursively folds vectors G, H, a, and b into a single final term, producing log2(n) pairs of cross-\/term commitments (stored in L\+\_\+out/\+\+R\+\_\+out). Returns 1 on success, 0 on failure. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00760}{760}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a0f2171e520416eff8a0019eba26fb52c_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=343pt]{bulletproof__aggregated_8c_a0f2171e520416eff8a0019eba26fb52c_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a0f8215fab678563b03757e56cb7e5308}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_bulletproof\_verify\_agg@{secp256k1\_bulletproof\_verify\_agg}}
+\index{secp256k1\_bulletproof\_verify\_agg@{secp256k1\_bulletproof\_verify\_agg}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_bulletproof\_verify\_agg()}{secp256k1\_bulletproof\_verify\_agg()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a0f8215fab678563b03757e56cb7e5308} 
+int secp256k1\+\_\+bulletproof\+\_\+verify\+\_\+agg (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{G\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{H\+\_\+vec}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{size\+\_\+t}]{proof\+\_\+len}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{commitment\+\_\+\+C\+\_\+vec}{, }\item[{size\+\_\+t}]{m}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk\+\_\+base}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+Verifies an aggregated Bulletproof range proof for m commitments.
+
+Checks that the values committed in {\ttfamily commitment\+\_\+\+C\+\_\+vec} are all within the \+[0, 2\texorpdfstring{$^\wedge$}{\string^}64) range.
+
+Usage Notes:\+
+\begin{DoxyItemize}
+\item The generator vectors G\+\_\+vec and H\+\_\+vec must have length n = 64 \texorpdfstring{$\ast$}{*} m.
+\item The commitment array {\ttfamily commitment\+\_\+\+C\+\_\+vec} must contain m elements. (For a single proof where m=1, pass a pointer to the single commitment).
+\item To bind commitments to the proof transcript, include them in the {\ttfamily context\+\_\+id} hash before calling this function.
+\end{DoxyItemize}
+
+Serialized Proof Format:\+
+\begin{DoxyItemize}
+\item A, S, T1, T2 (4 \texorpdfstring{$\ast$}{*} 33 bytes)
+\item L\+\_\+vec (rounds \texorpdfstring{$\ast$}{*} 33 bytes)
+\item R\+\_\+vec (rounds \texorpdfstring{$\ast$}{*} 33 bytes)
+\item a, b (2 \texorpdfstring{$\ast$}{*} 32 bytes)
+\item t\+\_\+hat, tau\+\_\+x, mu (3 \texorpdfstring{$\ast$}{*} 32 bytes)
+\end{DoxyItemize}
+
+Total Size:\+ 292 + (66 \texorpdfstring{$\ast$}{*} rounds) bytes, where rounds = log2(64 \texorpdfstring{$\ast$}{*} m).
+
+Returns 1 if valid, 0 otherwise. 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l01716}{1716}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a0f8215fab678563b03757e56cb7e5308_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{bulletproof__aggregated_8c_a3c58156abd244b80b571b1c8b37d81bf}\index{bulletproof\_aggregated.c@{bulletproof\_aggregated.c}!secp256k1\_mpt\_scalar\_sub@{secp256k1\_mpt\_scalar\_sub}}
+\index{secp256k1\_mpt\_scalar\_sub@{secp256k1\_mpt\_scalar\_sub}!bulletproof\_aggregated.c@{bulletproof\_aggregated.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_sub()}{secp256k1\_mpt\_scalar\_sub()}}
+{\footnotesize\ttfamily \label{bulletproof__aggregated_8c_a3c58156abd244b80b571b1c8b37d81bf} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+sub (\begin{DoxyParamCaption}\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{res}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Computes modular subtraction of two scalars:\+ res = a -\/ b (mod q). 
+
+Definition at line \doxymbox{\hyperlink{bulletproof__aggregated_8c_source_l00125}{125}} of file \doxymbox{\hyperlink{bulletproof__aggregated_8c_source}{bulletproof\+\_\+aggregated.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a3c58156abd244b80b571b1c8b37d81bf_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{bulletproof__aggregated_8c_a3c58156abd244b80b571b1c8b37d81bf_icgraph}
+\end{center}
+\end{figure}

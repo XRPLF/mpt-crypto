@@ -1,3 +1,41 @@
+/**
+ * @file proof_pok_sk.c
+ * @brief Schnorr Proof of Knowledge (PoK) for Discrete Logarithm.
+ *
+ * This module implements a non-interactive zero-knowledge proof (NIZK) that
+ * allows a user to prove possession of the secret key `sk` corresponding to
+ * a public key `pk`, without revealing `sk`.
+ *
+ * @details
+ * **Protocol (Schnorr Identification Scheme):**
+ *
+ * Given a public key \f$ P = sk \cdot G \f$, the protocol proves knowledge of \f$ sk \f$.
+ * It is made non-interactive using the Fiat-Shamir transform.
+ *
+ * 1. **Commitment:**
+ * Prover samples random nonce \f$ k \leftarrow \mathbb{Z}_q \f$ and computes:
+ * \f[ T = k \cdot G \f]
+ *
+ * 2. **Challenge (Fiat-Shamir):**
+ * The challenge \f$ e \f$ is derived deterministically:
+ * \f[ e = H(\text{"MPT_POK_SK_REGISTER"} \parallel P \parallel T \parallel \text{ContextID}) \f]
+ *
+ * 3. **Response:**
+ * Prover computes scalar:
+ * \f[ s = k + e \cdot sk \pmod{n} \f]
+ *
+ * 4. **Verification:**
+ * Verifier reconstructs \f$ e \f$ and checks:
+ * \f[ s \cdot G \stackrel{?}{=} T + e \cdot P \f]
+ *
+ * **Security Context:**
+ * This proof is used during account initialization/registration to prevent
+ * Rogue Key attacks (where an attacker registers a key constructed from another
+ * user's key to cancel it out) and to ensure the user actually controls the
+ * ElGamal key being registered.
+ *
+ * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.2] Proof of Knowledge of Secret Key
+ */
 #include "secp256k1_mpt.h"
 #include <string.h>
 #include <openssl/sha.h>

@@ -1,0 +1,220 @@
+\doxysection{equality\+\_\+proof.\+c}
+\hypertarget{equality__proof_8c_source}{}\label{equality__proof_8c_source}\index{src/equality\_proof.c@{src/equality\_proof.c}}
+\doxymbox{\hyperlink{equality__proof_8c}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00001}00001\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00040}00040\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00041}00041\ \textcolor{preprocessor}{\#include\ "{}\doxymbox{\hyperlink{secp256k1__mpt_8h}{secp256k1\_mpt.h}}"{}}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00042}00042\ \textcolor{preprocessor}{\#include\ <openssl/sha.h>}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00043}00043\ \textcolor{preprocessor}{\#include\ <openssl/rand.h>}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00044}00044\ \textcolor{preprocessor}{\#include\ <string.h>}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00045}00045\ \textcolor{preprocessor}{\#include\ <stdlib.h>}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00046}00046\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00047}00047\ \textcolor{comment}{/*\ -\/-\/-\/\ Internal\ Helpers\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00048}00048\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00049}\doxymbox{\hyperlink{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}{00049}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk2)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00050}00050\ \ \ \ \ \textcolor{keywordflow}{return}\ secp256k1\_ec\_pubkey\_cmp(ctx,\ pk1,\ pk2)\ ==\ 0;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00051}00051\ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00052}00052\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00053}\doxymbox{\hyperlink{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0}{00053}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\_random\_scalar}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ scalar)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00054}00054\ \ \ \ \ \textcolor{keywordflow}{do}\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00055}00055\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (RAND\_bytes(scalar,\ 32)\ !=\ 1)\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00056}00056\ \ \ \ \ \}\ \textcolor{keywordflow}{while}\ (!secp256k1\_ec\_seckey\_verify(ctx,\ scalar));}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00057}00057\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00058}00058\ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00059}00059\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00060}\doxymbox{\hyperlink{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}{00060}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ secp256k1\_pubkey*\ mG,\ uint64\_t\ amount)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00061}00061\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ amount\_scalar[32]\ =\ \{0\};}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00062}00062\ \ \ \ \ \textcolor{comment}{/*\ Convert\ amount\ to\ 32-\/byte\ BIG-\/ENDIAN\ scalar\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00063}00063\ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{int}\ i\ =\ 0;\ i\ <\ 8;\ ++i)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00064}00064\ \ \ \ \ \ \ \ \ amount\_scalar[31\ -\/\ i]\ =\ (amount\ >>\ (i\ *\ 8))\ \&\ 0xFF;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00065}00065\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00066}00066\ \ \ \ \ \textcolor{keywordflow}{return}\ secp256k1\_ec\_pubkey\_create(ctx,\ mG,\ amount\_scalar);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00067}00067\ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00068}00068\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00072}\doxymbox{\hyperlink{equality__proof_8c_a406d56417e45d82af45619dec5678048}{00072}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{equality__proof_8c_a406d56417e45d82af45619dec5678048}{compute\_challenge\_equality}}(}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00073}00073\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00074}00074\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ e\_out,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00075}00075\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00076}00076\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00077}00077\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ mG,\ \textcolor{comment}{/*\ NULL\ if\ amount\ ==\ 0\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00078}00078\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ T1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ T2,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00079}00079\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id)}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00080}00080\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00081}00081\ \ \ \ \ SHA256\_CTX\ sha;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00082}00082\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ buf[33];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00083}00083\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ h[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00084}00084\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ len;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00085}00085\ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ domain\ =\ \textcolor{stringliteral}{"{}MPT\_POK\_PLAINTEXT\_PROOF"{}};}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00086}00086\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00087}00087\ \ \ \ \ SHA256\_Init(\&sha);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00088}00088\ \ \ \ \ SHA256\_Update(\&sha,\ domain,\ strlen(domain));}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00089}00089\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00090}00090\ \ \ \ \ \textcolor{comment}{//\ C1,\ C2,\ Pk}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00091}00091\ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ c1,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00092}00092\ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ c2,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00093}00093\ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ pk,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00094}00094\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00095}00095\ \ \ \ \ \textcolor{comment}{//\ mG\ (Only\ if\ nonzero,\ logic\ from\ original\ code\ implied\ this\ structure)}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00096}00096\ \ \ \ \ \textcolor{comment}{//\ Note:\ The\ original\ code\ had\ two\ separate\ functions.\ We\ unify\ them\ here.}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00097}00097\ \ \ \ \ \textcolor{keywordflow}{if}\ (mG)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00098}00098\ \ \ \ \ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ mG,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00099}00099\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00100}00100\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00101}00101\ \ \ \ \ \textcolor{comment}{//\ T1,\ T2}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00102}00102\ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ T1,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00103}00103\ \ \ \ \ len\ =\ 33;\ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ T2,\ SECP256K1\_EC\_COMPRESSED);\ SHA256\_Update(\&sha,\ buf,\ 33);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00104}00104\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00105}00105\ \ \ \ \ \textcolor{keywordflow}{if}\ (tx\_context\_id)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00106}00106\ \ \ \ \ \ \ \ \ SHA256\_Update(\&sha,\ tx\_context\_id,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00107}00107\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00108}00108\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00109}00109\ \ \ \ \ SHA256\_Final(h,\ \&sha);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00110}00110\ \ \ \ \ \doxymbox{\hyperlink{secp256k1__mpt_8h_aac5cece668acbd6bb052aafe9e3eaa75}{secp256k1\_mpt\_scalar\_reduce32}}(e\_out,\ h);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00111}00111\ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00112}00112\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00113}00113\ \textcolor{comment}{/*\ -\/-\/-\/\ Public\ API\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00114}00114\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00115}\doxymbox{\hyperlink{secp256k1__mpt_8h_a21e6d1646119c376f7e66aa49d295d0e}{00115}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{equality__proof_8c_a1c067b6c0d1b841f48fad4df70e1a84a}{secp256k1\_equality\_plaintext\_prove}}(}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00116}00116\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00117}00117\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00118}00118\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00119}00119\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00120}00120\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_recipient,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00121}00121\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00122}00122\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ randomness\_r,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00123}00123\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id)}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00124}00124\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00125}00125\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ t[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00126}00126\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ e[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00127}00127\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ s[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00128}00128\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ term[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00129}00129\ \ \ \ \ secp256k1\_pubkey\ T1,\ T2;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00130}00130\ \ \ \ \ secp256k1\_pubkey\ mG;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00131}00131\ \ \ \ \ secp256k1\_pubkey*\ mG\_ptr\ =\ NULL;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00132}00132\ \ \ \ \ \textcolor{keywordtype}{size\_t}\ len;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00133}00133\ \ \ \ \ \textcolor{keywordtype}{int}\ ok\ =\ 0;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00134}00134\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00135}00135\ \ \ \ \ \textcolor{comment}{/*\ 0.\ Validate\ witness\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00136}00136\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_seckey\_verify(ctx,\ randomness\_r))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00137}00137\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00138}00138\ \ \ \ \ \textcolor{comment}{/*\ 1.\ Generate\ random\ t\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00139}00139\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\_random\_scalar}}(ctx,\ t))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00140}00140\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00141}00141\ \ \ \ \ \textcolor{comment}{/*\ 2.\ Compute\ commitments\ T1\ =\ t*G,\ T2\ =\ t*Pk\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00142}00142\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ \&T1,\ t))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00143}00143\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00144}00144\ \ \ \ \ T2\ =\ *pk\_recipient;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00145}00145\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&T2,\ t))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00146}00146\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00147}00147\ \ \ \ \ \textcolor{comment}{/*\ 3.\ Compute\ Challenge\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00148}00148\ \ \ \ \ \textcolor{keywordflow}{if}\ (amount\ >\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00149}00149\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(ctx,\ \&mG,\ amount))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00150}00150\ \ \ \ \ \ \ \ \ mG\_ptr\ =\ \&mG;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00151}00151\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00152}00152\ \ \ \ \ \doxymbox{\hyperlink{equality__proof_8c_a406d56417e45d82af45619dec5678048}{compute\_challenge\_equality}}(ctx,\ e,\ c1,\ c2,\ pk\_recipient,\ mG\_ptr,\ \&T1,\ \&T2,\ tx\_context\_id);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00153}00153\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00154}00154\ \ \ \ \ \textcolor{comment}{/*\ 4.\ Compute\ s\ =\ t\ +\ e\ *\ r\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00155}00155\ \ \ \ \ memcpy(s,\ t,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00156}00156\ \ \ \ \ memcpy(term,\ randomness\_r,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00157}00157\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_seckey\_tweak\_mul(ctx,\ term,\ e))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ term\ =\ e*r}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00158}00158\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_seckey\_tweak\_add(ctx,\ s,\ term))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ s\ =\ t\ +\ e*r}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00159}00159\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00160}00160\ \ \ \ \ \textcolor{comment}{/*\ 5.\ Serialize\ Proof\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00161}00161\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ ptr\ =\ proof;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00162}00162\ \ \ \ \ len\ =\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00163}00163\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_serialize(ctx,\ ptr,\ \&len,\ \&T1,\ SECP256K1\_EC\_COMPRESSED))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00164}00164\ \ \ \ \ ptr\ +=\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00165}00165\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00166}00166\ \ \ \ \ len\ =\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00167}00167\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_serialize(ctx,\ ptr,\ \&len,\ \&T2,\ SECP256K1\_EC\_COMPRESSED))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00168}00168\ \ \ \ \ ptr\ +=\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00169}00169\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00170}00170\ \ \ \ \ memcpy(ptr,\ s,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00171}00171\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00172}00172\ \ \ \ \ ok\ =\ 1;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00173}00173\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00174}00174\ \ \ \ \ cleanup:}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00175}00175\ \ \ \ \ OPENSSL\_cleanse(t,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00176}00176\ \ \ \ \ OPENSSL\_cleanse(term,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00177}00177\ \ \ \ \ \textcolor{comment}{//\ s\ is\ public\ output,\ but\ good\ practice\ to\ clean\ stack\ copy}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00178}00178\ \ \ \ \ OPENSSL\_cleanse(s,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00179}00179\ \ \ \ \ \textcolor{keywordflow}{return}\ ok;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00180}00180\ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00181}\doxymbox{\hyperlink{secp256k1__mpt_8h_ac1a3657fbdbad4815b05199ae6ca9176}{00181}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{equality__proof_8c_a083c0396f1877995d608e8f3caafd7ba}{secp256k1\_equality\_plaintext\_verify}}(}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00182}00182\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00183}00183\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00184}00184\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00185}00185\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00186}00186\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_recipient,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00187}00187\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00188}00188\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id)}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00189}00189\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00190}00190\ \ \ \ \ secp256k1\_pubkey\ T1,\ T2;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00191}00191\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ s[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00192}00192\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ e[32];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00193}00193\ \ \ \ \ secp256k1\_pubkey\ mG;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00194}00194\ \ \ \ \ secp256k1\_pubkey*\ mG\_ptr\ =\ NULL;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00195}00195\ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ ptr\ =\ proof;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00196}00196\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00197}00197\ \ \ \ \ secp256k1\_pubkey\ LHS,\ RHS,\ term;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00198}00198\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00199}00199\ \ \ \ \ \textcolor{keywordtype}{int}\ ok\ =\ 0;\ \textcolor{comment}{//\ Default\ to\ failure}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00200}00200\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00201}00201\ \ \ \ \ \textcolor{comment}{/*\ 1.\ Deserialize\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00202}00202\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_parse(ctx,\ \&T1,\ ptr,\ 33))\ \textcolor{keywordflow}{goto}\ cleanup;\ ptr\ +=\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00203}00203\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_parse(ctx,\ \&T2,\ ptr,\ 33))\ \textcolor{keywordflow}{goto}\ cleanup;\ ptr\ +=\ 33;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00204}00204\ \ \ \ \ memcpy(s,\ ptr,\ 32);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00205}00205\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00206}00206\ \ \ \ \ \textcolor{comment}{//\ Check\ s\ !=\ 0}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00207}00207\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_seckey\_verify(ctx,\ s))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00208}00208\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00209}00209\ \ \ \ \ \textcolor{comment}{/*\ 2.\ Recompute\ Challenge\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00210}00210\ \ \ \ \ \textcolor{keywordflow}{if}\ (amount\ >\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00211}00211\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(ctx,\ \&mG,\ amount))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00212}00212\ \ \ \ \ \ \ \ \ mG\_ptr\ =\ \&mG;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00213}00213\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00214}00214\ \ \ \ \ \doxymbox{\hyperlink{equality__proof_8c_a406d56417e45d82af45619dec5678048}{compute\_challenge\_equality}}(ctx,\ e,\ c1,\ c2,\ pk\_recipient,\ mG\_ptr,\ \&T1,\ \&T2,\ tx\_context\_id);}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00215}00215\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00216}00216\ \ \ \ \ \textcolor{comment}{/*\ 3.\ Verify\ Equations\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00217}00217\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00218}00218\ \ \ \ \ \textcolor{comment}{/*\ -\/-\/-\/\ Eq\ 1:\ s\ *\ G\ ==\ T1\ +\ e\ *\ C1\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00219}00219\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ \&LHS,\ s))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ s*G}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00220}00220\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00221}00221\ \ \ \ \ term\ =\ *c1;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00222}00222\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&term,\ e))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ e*C1}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00223}00223\ \ \ \ \ pts[0]\ =\ \&T1;\ pts[1]\ =\ \&term;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00224}00224\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&RHS,\ pts,\ 2))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ T1\ +\ e*C1}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00225}00225\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00226}00226\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ \&LHS,\ \&RHS))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00227}00227\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00228}00228\ \ \ \ \ \textcolor{comment}{/*\ -\/-\/-\/\ Eq\ 2:\ s\ *\ Pk\ ==\ T2\ +\ e\ *\ (C2\ -\/\ mG)\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00229}00229\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00230}00230\ \ \ \ \ \textcolor{comment}{/*\ LHS\ =\ s\ *\ Pk\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00231}00231\ \ \ \ \ LHS\ =\ *pk\_recipient;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00232}00232\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&LHS,\ s))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00233}00233\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00234}00234\ \ \ \ \ \textcolor{comment}{/*\ RHS\ Construction:\ Y\ =\ C2\ -\/\ mG\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00235}00235\ \ \ \ \ secp256k1\_pubkey\ Y\ =\ *c2;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00236}00236\ \ \ \ \ \textcolor{keywordflow}{if}\ (mG\_ptr)\ \{}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00237}00237\ \ \ \ \ \ \ \ \ secp256k1\_pubkey\ neg\_mG\ =\ *mG\_ptr;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00238}00238\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_negate(ctx,\ \&neg\_mG))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00239}00239\ \ \ \ \ \ \ \ \ pts[0]\ =\ c2;\ pts[1]\ =\ \&neg\_mG;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00240}00240\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&Y,\ pts,\ 2))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00241}00241\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00242}00242\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00243}00243\ \ \ \ \ \textcolor{comment}{/*\ RHS\ =\ T2\ +\ e\ *\ Y\ */}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00244}00244\ \ \ \ \ term\ =\ Y;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00245}00245\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&term,\ e))\ \textcolor{keywordflow}{goto}\ cleanup;\ \textcolor{comment}{//\ e*Y}}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00246}00246\ \ \ \ \ pts[0]\ =\ \&T2;\ pts[1]\ =\ \&term;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00247}00247\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&RHS,\ pts,\ 2))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00248}00248\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00249}00249\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ \&LHS,\ \&RHS))\ \textcolor{keywordflow}{goto}\ cleanup;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00250}00250\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00251}00251\ \ \ \ \ ok\ =\ 1;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00252}00252\ }
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00253}00253\ \ \ \ \ cleanup:}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00254}00254\ \ \ \ \ \textcolor{keywordflow}{return}\ ok;}
+\DoxyCodeLine{\Hypertarget{equality__proof_8c_source_l00255}00255\ \}}
+
+\end{DoxyCode}

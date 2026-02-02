@@ -1,0 +1,7 @@
+<map id="compute_amount_point" name="compute_amount_point">
+<area shape="rect" id="Node000001" title=" " alt="" coords="190,46,346,72"/>
+<area shape="rect" id="Node000002" href="$equality__proof_8c.html#a1c067b6c0d1b841f48fad4df70e1a84a" title="Generates a proof that an ElGamal ciphertext correctly encrypts a known plaintext m and that the prov..." alt="" coords="5,5,142,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="172,44,142,40,142,35,177,42"/>
+<area shape="rect" id="Node000003" href="$equality__proof_8c.html#a083c0396f1877995d608e8f3caafd7ba" title="Verifies a proof of knowledge of plaintext and randomness." alt="" coords="5,71,142,111"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="171,75,143,82,142,77,177,74"/>
+</map>

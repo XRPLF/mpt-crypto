@@ -1,0 +1,9 @@
+<map id="secp256k1_mpt_prove_same_plaintext" name="secp256k1_mpt_prove_same_plaintext">
+<area shape="rect" id="Node000001" title="Generates a proof that two ciphertexts (under different keys) encrypt the same secret amount &#39;m&#39;." alt="" coords="5,35,158,75"/>
+<area shape="rect" id="Node000002" href="$proof__same__plaintext_8c.html#a5075fc89f4a81ba103f51c12909ec8ad" title=" " alt="" coords="216,5,359,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="157,42,203,37,198,39,158,47"/>
+<area shape="rect" id="Node000004" href="$proof__same__plaintext_8c.html#aeaf385d364818242f9b4d3d3c14312b0" title=" " alt="" coords="206,70,369,96"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="158,63,193,70,187,70,158,68"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#aac5cece668acbd6bb052aafe9e3eaa75" title=" " alt="" coords="417,5,572,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="359,23,404,25,399,26,359,28"/>
+</map>

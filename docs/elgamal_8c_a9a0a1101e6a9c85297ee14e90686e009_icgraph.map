@@ -1,0 +1,9 @@
+<map id="compute_amount_point" name="compute_amount_point">
+<area shape="rect" id="Node000001" title=" " alt="" coords="421,42,577,68"/>
+<area shape="rect" id="Node000002" href="$elgamal_8c.html#a7a7207617adc020d9dcfc7174b792012" title="Encrypts a 64&#45;bit amount using ElGamal." alt="" coords="187,13,373,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="403,43,373,41,373,35,409,42"/>
+<area shape="rect" id="Node000004" href="$elgamal_8c.html#a12dd9e76ae1ce525d6b80aa13012276e" title=" " alt="" coords="192,63,368,103"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="408,67,368,74,368,69,403,67"/>
+<area shape="rect" id="Node000003" href="$elgamal_8c.html#a58ec970fa1fc5b8fa5e4946dacc59a87" title="Generates the canonical encrypted zero for a given MPT token instance." alt="" coords="5,5,139,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="169,27,139,28,138,23,174,25"/>
+</map>

@@ -1,0 +1,184 @@
+\doxysection{src/\+mpt\+\_\+scalar.c File Reference}
+\hypertarget{mpt__scalar_8c}{}\label{mpt__scalar_8c}\index{src/mpt\_scalar.c@{src/mpt\_scalar.c}}
+
+
+Scalar Field Arithmetic Abstraction Layer.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include "{}util.\+h"{}}\newline
+{\ttfamily \+\#include "{}int128.\+h"{}}\newline
+{\ttfamily \+\#include "{}int128\+\_\+impl.\+h"{}}\newline
+{\ttfamily \+\#include "{}scalar.\+h"{}}\newline
+{\ttfamily \+\#include "{}scalar\+\_\+impl.\+h"{}}\newline
+Include dependency graph for mpt\+\_\+scalar.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Macros}
+\begin{DoxyCompactItemize}
+\item 
+\+\#define \doxymbox{\hyperlink{mpt__scalar_8c_a59f1d691dca2b2deddaba44d76296613}{USE\+\_\+\+SCALAR\+\_\+8\+X32}}
+\item 
+\+\#define \doxymbox{\hyperlink{mpt__scalar_8c_a9ffdc2aedc35dd6be75764e098c8035e}{USE\+\_\+\+FIELD\+\_\+10\+X26}}
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+void \doxymbox{\hyperlink{mpt__scalar_8c_abc19bd5be104bcd602d306f3fa543c08}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+add}} (unsigned char \texorpdfstring{$\ast$}{*}res, const unsigned char \texorpdfstring{$\ast$}{*}a, const unsigned char \texorpdfstring{$\ast$}{*}b)
+\item 
+void \doxymbox{\hyperlink{mpt__scalar_8c_a8e15477ac841922f6d5b03b1b21de1a9}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+mul}} (unsigned char \texorpdfstring{$\ast$}{*}res, const unsigned char \texorpdfstring{$\ast$}{*}a, const unsigned char \texorpdfstring{$\ast$}{*}b)
+\item 
+void \doxymbox{\hyperlink{mpt__scalar_8c_af936e8fd06e9d14cfa37d3e530dbcc52}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+inverse}} (unsigned char \texorpdfstring{$\ast$}{*}res, const unsigned char \texorpdfstring{$\ast$}{*}in)
+\item 
+void \doxymbox{\hyperlink{mpt__scalar_8c_a16f2cb394d4a0860c696b4709aa7e71e}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+negate}} (unsigned char \texorpdfstring{$\ast$}{*}res, const unsigned char \texorpdfstring{$\ast$}{*}in)
+\item 
+void \doxymbox{\hyperlink{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+reduce32}} (unsigned char out32\+[32]\+, const unsigned char in32\+[32]\+)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Scalar Field Arithmetic Abstraction Layer. 
+
+This module provides a safe, portable interface for performing arithmetic in the scalar field of the secp256k1 curve (integers modulo $ n $, the group order).
+
+{\bfseries{Purpose:\+}} While {\ttfamily libsecp256k1} exposes point operations via its public API, it does not typically expose low-\/level scalar arithmetic. However, protocols like Bulletproofs and El\+Gamal require extensive scalar math (e.\+g., polynomial evaluation, inner products) to be performed by the client.
+
+{\bfseries{Implementation:\+}} This file includes internal {\ttfamily libsecp256k1} headers ({\ttfamily scalar.\+h}, {\ttfamily scalar\+\_\+impl.\+h}) to access the optimized, constant-\/time scalar implementations.
+
+{\bfseries{Operations:\+}} All operations are performed modulo the curve order $ n $:\+
+\begin{DoxyItemize}
+\item Addition:\+ $ a + b \pmod{n} $
+\item Multiplication:\+ $ a \cdot b \pmod{n} $
+\item Inversion:\+ $ a^{-1} \pmod{n} $
+\item Negation:\+ $ -a \pmod{n} $
+\end{DoxyItemize}
+
+{\bfseries{Platform Specifics:\+}} Includes logic for 128-\/bit integer support ({\ttfamily int128.\+h}) required for efficient computation on modern architectures (e.\+g., ARM64/\+\+Apple Silicon).
+
+\begin{DoxyWarning}{Warning}
+These functions operate on 32-\/byte big-\/endian scalars. Inputs must be properly reduced or handled by {\ttfamily \doxylink{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75}{secp256k1\+\_\+mpt\+\_\+scalar\+\_\+reduce32}} before use if they might exceed $ n $. 
+\end{DoxyWarning}
+
+
+Definition in file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+
+
+\label{doc-define-members}
+\Hypertarget{mpt__scalar_8c_doc-define-members}
+\doxysubsection{Macro Definition Documentation}
+\Hypertarget{mpt__scalar_8c_a9ffdc2aedc35dd6be75764e098c8035e}\index{mpt\_scalar.c@{mpt\_scalar.c}!USE\_FIELD\_10X26@{USE\_FIELD\_10X26}}
+\index{USE\_FIELD\_10X26@{USE\_FIELD\_10X26}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{USE\_FIELD\_10X26}{USE\_FIELD\_10X26}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_a9ffdc2aedc35dd6be75764e098c8035e} 
+\+\#define USE\+\_\+\+FIELD\+\_\+10\+X26}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00043}{43}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+\Hypertarget{mpt__scalar_8c_a59f1d691dca2b2deddaba44d76296613}\index{mpt\_scalar.c@{mpt\_scalar.c}!USE\_SCALAR\_8X32@{USE\_SCALAR\_8X32}}
+\index{USE\_SCALAR\_8X32@{USE\_SCALAR\_8X32}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{USE\_SCALAR\_8X32}{USE\_SCALAR\_8X32}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_a59f1d691dca2b2deddaba44d76296613} 
+\+\#define USE\+\_\+\+SCALAR\+\_\+8\+X32}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00040}{40}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{mpt__scalar_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{mpt__scalar_8c_abc19bd5be104bcd602d306f3fa543c08}\index{mpt\_scalar.c@{mpt\_scalar.c}!secp256k1\_mpt\_scalar\_add@{secp256k1\_mpt\_scalar\_add}}
+\index{secp256k1\_mpt\_scalar\_add@{secp256k1\_mpt\_scalar\_add}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_add()}{secp256k1\_mpt\_scalar\_add()}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_abc19bd5be104bcd602d306f3fa543c08} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+add (\begin{DoxyParamCaption}\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{res}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00059}{59}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c_abc19bd5be104bcd602d306f3fa543c08_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{mpt__scalar_8c_af936e8fd06e9d14cfa37d3e530dbcc52}\index{mpt\_scalar.c@{mpt\_scalar.c}!secp256k1\_mpt\_scalar\_inverse@{secp256k1\_mpt\_scalar\_inverse}}
+\index{secp256k1\_mpt\_scalar\_inverse@{secp256k1\_mpt\_scalar\_inverse}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_inverse()}{secp256k1\_mpt\_scalar\_inverse()}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_af936e8fd06e9d14cfa37d3e530dbcc52} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+inverse (\begin{DoxyParamCaption}\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{res}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{in}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00075}{75}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c_af936e8fd06e9d14cfa37d3e530dbcc52_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{mpt__scalar_8c_a8e15477ac841922f6d5b03b1b21de1a9}\index{mpt\_scalar.c@{mpt\_scalar.c}!secp256k1\_mpt\_scalar\_mul@{secp256k1\_mpt\_scalar\_mul}}
+\index{secp256k1\_mpt\_scalar\_mul@{secp256k1\_mpt\_scalar\_mul}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_mul()}{secp256k1\_mpt\_scalar\_mul()}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_a8e15477ac841922f6d5b03b1b21de1a9} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+mul (\begin{DoxyParamCaption}\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{res}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{a}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{b}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00067}{67}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c_a8e15477ac841922f6d5b03b1b21de1a9_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{mpt__scalar_8c_a16f2cb394d4a0860c696b4709aa7e71e}\index{mpt\_scalar.c@{mpt\_scalar.c}!secp256k1\_mpt\_scalar\_negate@{secp256k1\_mpt\_scalar\_negate}}
+\index{secp256k1\_mpt\_scalar\_negate@{secp256k1\_mpt\_scalar\_negate}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_negate()}{secp256k1\_mpt\_scalar\_negate()}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_a16f2cb394d4a0860c696b4709aa7e71e} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+negate (\begin{DoxyParamCaption}\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{res}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{in}{}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00082}{82}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c_a16f2cb394d4a0860c696b4709aa7e71e_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75}\index{mpt\_scalar.c@{mpt\_scalar.c}!secp256k1\_mpt\_scalar\_reduce32@{secp256k1\_mpt\_scalar\_reduce32}}
+\index{secp256k1\_mpt\_scalar\_reduce32@{secp256k1\_mpt\_scalar\_reduce32}!mpt\_scalar.c@{mpt\_scalar.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_scalar\_reduce32()}{secp256k1\_mpt\_scalar\_reduce32()}}
+{\footnotesize\ttfamily \label{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75} 
+void secp256k1\+\_\+mpt\+\_\+scalar\+\_\+reduce32 (\begin{DoxyParamCaption}\item[{unsigned char}]{out32}{\+[32]\+, }\item[{const unsigned char}]{in32}{\+[32]\+}\end{DoxyParamCaption})}
+
+
+
+Definition at line \doxymbox{\hyperlink{mpt__scalar_8c_source_l00089}{89}} of file \doxymbox{\hyperlink{mpt__scalar_8c_source}{mpt\+\_\+scalar.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75_icgraph}
+\end{center}
+\end{figure}

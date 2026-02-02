@@ -1,0 +1,266 @@
+\doxysection{elgamal.\+c}
+\hypertarget{elgamal_8c_source}{}\label{elgamal_8c_source}\index{src/elgamal.c@{src/elgamal.c}}
+\doxymbox{\hyperlink{elgamal_8c}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00001}00001\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00036}00036\ \textcolor{preprocessor}{\#include\ "{}\doxymbox{\hyperlink{secp256k1__mpt_8h}{secp256k1\_mpt.h}}"{}}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00037}00037\ \textcolor{preprocessor}{\#include\ <openssl/rand.h>}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00038}00038\ \textcolor{preprocessor}{\#include\ <openssl/sha.h>}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00039}00039\ \textcolor{preprocessor}{\#include\ <string.h>}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00040}00040\ \textcolor{preprocessor}{\#include\ <stdlib.h>}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00041}00041\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00042}00042\ \textcolor{comment}{/*\ -\/-\/-\/\ Internal\ Helpers\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00043}00043\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00044}\doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{00044}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk2)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00045}00045\ \ \ \ \ \textcolor{keywordflow}{return}\ secp256k1\_ec\_pubkey\_cmp(ctx,\ pk1,\ pk2)\ ==\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00046}00046\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00047}00047\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00048}\doxymbox{\hyperlink{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}{00048}}\ \textcolor{keyword}{static}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ secp256k1\_pubkey*\ mG,\ uint64\_t\ amount)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00049}00049\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ amount\_scalar[32]\ =\ \{0\};}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00050}00050\ \ \ \ \ \textcolor{keywordtype}{int}\ ret;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00051}00051\ \ \ \ \ \textcolor{keywordflow}{for}\ (\textcolor{keywordtype}{int}\ i\ =\ 0;\ i\ <\ 8;\ ++i)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00052}00052\ \ \ \ \ \ \ \ \ amount\_scalar[31\ -\/\ i]\ =\ (amount\ >>\ (i\ *\ 8))\ \&\ 0xFF;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00053}00053\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00054}00054\ \ \ \ \ ret\ =\ secp256k1\_ec\_pubkey\_create(ctx,\ mG,\ amount\_scalar);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00055}00055\ \ \ \ \ OPENSSL\_cleanse(amount\_scalar,\ 32);\ \textcolor{comment}{//\ Wipe\ scalar\ after\ use}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00056}00056\ \ \ \ \ \textcolor{keywordflow}{return}\ ret;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00057}00057\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00058}00058\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00059}00059\ \textcolor{comment}{/*\ -\/-\/-\/\ Key\ Generation\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00060}00060\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00061}\doxymbox{\hyperlink{secp256k1__mpt_8h_a0b80556f2f4995ce7f0c4da2219e6508}{00061}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a8fb9f3ea5d127cd9dd0e1b57bbc68a35}{secp256k1\_elgamal\_generate\_keypair}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00062}00062\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00063}00063\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ privkey,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00064}00064\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ pubkey)}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00065}00065\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00066}00066\ \ \ \ \ \textcolor{keywordflow}{do}\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00067}00067\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (RAND\_bytes(privkey,\ 32)\ !=\ 1)\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00068}00068\ \ \ \ \ \}\ \textcolor{keywordflow}{while}\ (!secp256k1\_ec\_seckey\_verify(ctx,\ privkey));}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00069}00069\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00070}00070\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ pubkey,\ privkey))\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00071}00071\ \ \ \ \ \ \ \ \ OPENSSL\_cleanse(privkey,\ 32);\ \textcolor{comment}{//\ Cleanup\ on\ failure}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00072}00072\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00073}00073\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00074}00074\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00075}00075\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00076}00076\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00077}00077\ \textcolor{comment}{/*\ -\/-\/-\/\ Encryption\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00078}00078\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00079}\doxymbox{\hyperlink{secp256k1__mpt_8h_aacd35659d8d879c927b52e7cbaa249bb}{00079}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a7a7207617adc020d9dcfc7174b792012}{secp256k1\_elgamal\_encrypt}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00080}00080\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00081}00081\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00082}00082\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00083}00083\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey\_Q,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00084}00084\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00085}00085\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00086}00086\ )\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00087}00087\ \ \ \ \ secp256k1\_pubkey\ S,\ mG;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00088}00088\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00089}00089\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00090}00090\ \ \ \ \ \textcolor{comment}{/*\ 1.\ C1\ =\ r\ *\ G\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00091}00091\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ c1,\ blinding\_factor))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00092}00092\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00093}00093\ \ \ \ \ \textcolor{comment}{/*\ 2.\ S\ =\ r\ *\ Q\ (Shared\ Secret)\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00094}00094\ \ \ \ \ S\ =\ *pubkey\_Q;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00095}00095\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&S,\ blinding\_factor))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00096}00096\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00097}00097\ \ \ \ \ \textcolor{comment}{/*\ 3.\ C2\ =\ S\ +\ m*G\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00098}00098\ \ \ \ \ \textcolor{keywordflow}{if}\ (amount\ ==\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00099}00099\ \ \ \ \ \ \ \ \ *c2\ =\ S;\ \textcolor{comment}{//\ m*G\ is\ infinity,\ so\ C2\ =\ S}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00100}00100\ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00101}00101\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(ctx,\ \&mG,\ amount))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00102}00102\ \ \ \ \ \ \ \ \ pts[0]\ =\ \&mG;\ pts[1]\ =\ \&S;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00103}00103\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ c2,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00104}00104\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00105}00105\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00106}00106\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00107}00107\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00108}00108\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00109}00109\ \textcolor{comment}{/*\ -\/-\/-\/\ Decryption\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00110}00110\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00111}\doxymbox{\hyperlink{secp256k1__mpt_8h_a7a2155472193bf56bb79c5eeaf8de359}{00111}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a7418aadac7c36a695089fb36676e8d9d}{secp256k1\_elgamal\_decrypt}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00112}00112\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00113}00113\ \ \ \ \ \ \ \ \ uint64\_t*\ amount,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00114}00114\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00115}00115\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00116}00116\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ privkey}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00117}00117\ )\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00118}00118\ \ \ \ \ secp256k1\_pubkey\ S,\ M\_target,\ current\_M,\ G\_point,\ next\_M;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00119}00119\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00120}00120\ \ \ \ \ uint64\_t\ i;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00121}00121\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ one[32]\ =\ \{0\};\ one[31]\ =\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00122}00122\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00123}00123\ \ \ \ \ \textcolor{comment}{/*\ 1.\ Recover\ Shared\ Secret:\ S\ =\ privkey\ *\ C1\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00124}00124\ \ \ \ \ S\ =\ *c1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00125}00125\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&S,\ privkey))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00126}00126\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00127}00127\ \ \ \ \ \textcolor{comment}{/*\ 2.\ Check\ for\ Amount\ =\ 0\ (C2\ ==\ S)\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00128}00128\ \ \ \ \ \textcolor{comment}{/*\ This\ is\ much\ faster\ than\ doing\ point\ subtraction\ first\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00129}00129\ \ \ \ \ \textcolor{keywordflow}{if}\ (\doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ c2,\ \&S))\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00130}00130\ \ \ \ \ \ \ \ \ *amount\ =\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00131}00131\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00132}00132\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00133}00133\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00134}00134\ \ \ \ \ \textcolor{comment}{/*\ 3.\ Prepare\ Target:\ M\_target\ =\ C2\ -\/\ S\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00135}00135\ \ \ \ \ \textcolor{comment}{/*\ M\_target\ =\ C2\ +\ (-\/S)\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00136}00136\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_negate(ctx,\ \&S))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00137}00137\ \ \ \ \ pts[0]\ =\ c2;\ pts[1]\ =\ \&S;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00138}00138\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&M\_target,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00139}00139\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00140}00140\ \ \ \ \ \textcolor{comment}{/*\ 4.\ Brute\ Force\ Search\ (1\ to\ 1,000,000)\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00141}00141\ \ \ \ \ \textcolor{comment}{/*\ Optimization:\ Use\ point\ comparison,\ no\ serialization\ inside\ loop\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00142}00142\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00143}00143\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ \&G\_point,\ one))\ \textcolor{keywordflow}{return}\ 0;\ \textcolor{comment}{//\ G}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00144}00144\ \ \ \ \ current\_M\ =\ G\_point;\ \textcolor{comment}{//\ Start\ at\ 1*G}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00145}00145\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00146}00146\ \ \ \ \ \textcolor{keywordflow}{for}\ (i\ =\ 1;\ i\ <=\ 1000000;\ ++i)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00147}00147\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Fast\ comparison}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00148}00148\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (\doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ \&current\_M,\ \&M\_target))\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00149}00149\ \ \ \ \ \ \ \ \ \ \ \ \ *amount\ =\ i;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00150}00150\ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00151}00151\ \ \ \ \ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00152}00152\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00153}00153\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Increment:\ current\_M\ =\ current\_M\ +\ G}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00154}00154\ \ \ \ \ \ \ \ \ pts[0]\ =\ \&current\_M;\ pts[1]\ =\ \&G\_point;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00155}00155\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&next\_M,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00156}00156\ \ \ \ \ \ \ \ \ current\_M\ =\ next\_M;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00157}00157\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00158}00158\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00159}00159\ \ \ \ \ \textcolor{keywordflow}{return}\ 0;\ \textcolor{comment}{//\ Amount\ not\ found\ in\ range}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00160}00160\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00161}00161\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00162}00162\ \textcolor{comment}{/*\ -\/-\/-\/\ Homomorphic\ Operations\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00163}00163\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00164}\doxymbox{\hyperlink{secp256k1__mpt_8h_a9930964f5e29a81d9538c8a7ef017986}{00164}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a695ecef57e2f1d9cca1a5ee6422c62dc}{secp256k1\_elgamal\_add}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00165}00165\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00166}00166\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ sum\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00167}00167\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ sum\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00168}00168\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00169}00169\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00170}00170\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00171}00171\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c2}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00172}00172\ )\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00173}00173\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00174}00174\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00175}00175\ \ \ \ \ pts[0]\ =\ a\_c1;\ pts[1]\ =\ b\_c1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00176}00176\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ sum\_c1,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00177}00177\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00178}00178\ \ \ \ \ pts[0]\ =\ a\_c2;\ pts[1]\ =\ b\_c2;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00179}00179\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ sum\_c2,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00180}00180\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00181}00181\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00182}00182\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00183}00183\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00184}\doxymbox{\hyperlink{secp256k1__mpt_8h_aa8c154347d78220cbf99e4eb84ee3ace}{00184}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a59bb2d2e4982cdfa0289abccc2601def}{secp256k1\_elgamal\_subtract}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00185}00185\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00186}00186\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ diff\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00187}00187\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ diff\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00188}00188\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00189}00189\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00190}00190\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00191}00191\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c2}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00192}00192\ )\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00193}00193\ \ \ \ \ secp256k1\_pubkey\ neg\_b\_c1\ =\ *b\_c1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00194}00194\ \ \ \ \ secp256k1\_pubkey\ neg\_b\_c2\ =\ *b\_c2;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00195}00195\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00196}00196\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00197}00197\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_negate(ctx,\ \&neg\_b\_c1))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00198}00198\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_negate(ctx,\ \&neg\_b\_c2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00199}00199\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00200}00200\ \ \ \ \ pts[0]\ =\ a\_c1;\ pts[1]\ =\ \&neg\_b\_c1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00201}00201\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ diff\_c1,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00202}00202\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00203}00203\ \ \ \ \ pts[0]\ =\ a\_c2;\ pts[1]\ =\ \&neg\_b\_c2;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00204}00204\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ diff\_c2,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00205}00205\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00206}00206\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00207}00207\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00208}00208\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00209}00209\ \textcolor{comment}{/*\ -\/-\/-\/\ Canonical\ Encrypted\ Zero\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00210}00210\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00211}\doxymbox{\hyperlink{secp256k1__mpt_8h_a8ae186158bc89ecce7bd0e03e0d00a3d}{00211}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a58ec970fa1fc5b8fa5e4946dacc59a87}{generate\_canonical\_encrypted\_zero}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00212}00212\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00213}00213\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ enc\_zero\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00214}00214\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ enc\_zero\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00215}00215\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00216}00216\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ account\_id,\ \ \ \ \ \textcolor{comment}{//\ 20\ bytes}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00217}00217\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ mpt\_issuance\_id\ \textcolor{comment}{//\ 24\ bytes}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00218}00218\ )\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00219}00219\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ deterministic\_scalar[32];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00220}00220\ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ hash\_input[51];\ \textcolor{comment}{//\ 7\ ("{}EncZero"{})\ +\ 20\ +\ 24}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00221}00221\ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{char}*\ domain\ =\ \textcolor{stringliteral}{"{}EncZero"{}};}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00222}00222\ \ \ \ \ \textcolor{keywordtype}{int}\ ret;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00223}00223\ \ \ \ \ SHA256\_CTX\ sha;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00224}00224\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00225}00225\ \ \ \ \ \textcolor{comment}{//\ Build\ static\ buffer\ part}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00226}00226\ \ \ \ \ memcpy(hash\_input,\ domain,\ 7);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00227}00227\ \ \ \ \ memcpy(hash\_input\ +\ 7,\ account\_id,\ 20);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00228}00228\ \ \ \ \ memcpy(hash\_input\ +\ 27,\ mpt\_issuance\_id,\ 24);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00229}00229\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00230}00230\ \ \ \ \ \textcolor{comment}{/*\ Rejection\ sampling\ loop\ to\ ensure\ scalar\ is\ valid\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00231}00231\ \ \ \ \ \textcolor{keywordflow}{do}\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00232}00232\ \ \ \ \ \ \ \ \ SHA256(hash\_input,\ 51,\ deterministic\_scalar);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00233}00233\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00234}00234\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ If\ invalid,\ re-\/hash\ the\ hash\ (standard\ chain\ method\ for\ determinism)}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00235}00235\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Or\ simply\ fail\ if\ strict\ canonical\ behavior\ is\ required.}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00236}00236\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Assuming\ rejection\ sampling\ is\ the\ intended\ design\ for\ safety:}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00237}00237\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (secp256k1\_ec\_seckey\_verify(ctx,\ deterministic\_scalar))\ \textcolor{keywordflow}{break};}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00238}00238\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00239}00239\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Update\ input\ for\ next\ iteration\ to\ get\ new\ hash}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00240}00240\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ (Note:\ The\ original\ code\ just\ looped\ SHA256\ on\ same\ input\ which\ is\ static,}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00241}00241\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ so\ it\ would\ loop\ forever\ if\ the\ first\ hash\ was\ invalid.}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00242}00242\ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Fixed\ here\ by\ re-\/hashing\ the\ output\ if\ needed,\ though\ highly\ unlikely\ to\ fail).}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00243}00243\ \ \ \ \ \ \ \ \ memcpy(hash\_input,\ deterministic\_scalar,\ 32);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00244}00244\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00245}00245\ \ \ \ \ \}\ \textcolor{keywordflow}{while}\ (1);}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00246}00246\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00247}00247\ \ \ \ \ ret\ =\ \doxymbox{\hyperlink{elgamal_8c_a7a7207617adc020d9dcfc7174b792012}{secp256k1\_elgamal\_encrypt}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00248}00248\ \ \ \ \ \ \ \ \ \ \ \ \ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00249}00249\ \ \ \ \ \ \ \ \ \ \ \ \ enc\_zero\_c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00250}00250\ \ \ \ \ \ \ \ \ \ \ \ \ enc\_zero\_c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00251}00251\ \ \ \ \ \ \ \ \ \ \ \ \ pubkey,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00252}00252\ \ \ \ \ \ \ \ \ \ \ \ \ 0,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00253}00253\ \ \ \ \ \ \ \ \ \ \ \ \ deterministic\_scalar}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00254}00254\ \ \ \ \ );}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00255}00255\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00256}00256\ \ \ \ \ OPENSSL\_cleanse(deterministic\_scalar,\ 32);\ \textcolor{comment}{//\ Secure\ cleanup}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00257}00257\ \ \ \ \ \textcolor{keywordflow}{return}\ ret;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00258}00258\ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00259}00259\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00260}00260\ \textcolor{comment}{/*\ -\/-\/-\/\ Direct\ Verification\ (Convert)\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00261}00261\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00262}\doxymbox{\hyperlink{secp256k1__mpt_8h_a12dd9e76ae1ce525d6b80aa13012276e}{00262}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{elgamal_8c_a12dd9e76ae1ce525d6b80aa13012276e}{secp256k1\_elgamal\_verify\_encryption}}(}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00263}00263\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00264}00264\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00265}00265\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00266}00266\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey\_Q,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00267}00267\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00268}00268\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor)}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00269}00269\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00270}00270\ \ \ \ \ secp256k1\_pubkey\ expected\_c1,\ expected\_c2,\ mG,\ S;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00271}00271\ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pts[2];}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00272}00272\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00273}00273\ \ \ \ \ \textcolor{comment}{/*\ 1.\ Verify\ C1\ ==\ r\ *\ G\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00274}00274\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_create(ctx,\ \&expected\_c1,\ blinding\_factor))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00275}00275\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ c1,\ \&expected\_c1))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00276}00276\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00277}00277\ \ \ \ \ \textcolor{comment}{/*\ 2.\ Verify\ C2\ ==\ r*Q\ +\ m*G\ */}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00278}00278\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00279}00279\ \ \ \ \ \textcolor{comment}{//\ S\ =\ r\ *\ Q}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00280}00280\ \ \ \ \ S\ =\ *pubkey\_Q;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00281}00281\ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_tweak\_mul(ctx,\ \&S,\ blinding\_factor))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00282}00282\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00283}00283\ \ \ \ \ \textcolor{keywordflow}{if}\ (amount\ ==\ 0)\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00284}00284\ \ \ \ \ \ \ \ \ expected\_c2\ =\ S;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00285}00285\ \ \ \ \ \}\ \textcolor{keywordflow}{else}\ \{}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00286}00286\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{elgamal_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\_amount\_point}}(ctx,\ \&mG,\ amount))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00287}00287\ \ \ \ \ \ \ \ \ pts[0]\ =\ \&mG;\ pts[1]\ =\ \&S;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00288}00288\ \ \ \ \ \ \ \ \ \textcolor{keywordflow}{if}\ (!secp256k1\_ec\_pubkey\_combine(ctx,\ \&expected\_c2,\ pts,\ 2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00289}00289\ \ \ \ \ \}}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00290}00290\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00291}00291\ \ \ \ \ \textcolor{keywordflow}{if}\ (!\doxymbox{\hyperlink{elgamal_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\_equal}}(ctx,\ c2,\ \&expected\_c2))\ \textcolor{keywordflow}{return}\ 0;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00292}00292\ }
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00293}00293\ \ \ \ \ \textcolor{keywordflow}{return}\ 1;}
+\DoxyCodeLine{\Hypertarget{elgamal_8c_source_l00294}00294\ \}}
+
+\end{DoxyCode}

@@ -1,0 +1,5 @@
+<map id="generate_random_scalar" name="generate_random_scalar">
+<area shape="rect" id="Node000001" title=" " alt="" coords="190,13,353,38"/>
+<area shape="rect" id="Node000002" href="$equality__proof_8c.html#a1c067b6c0d1b841f48fad4df70e1a84a" title="Generates a proof that an ElGamal ciphertext correctly encrypts a known plaintext m and that the prov..." alt="" coords="5,5,142,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="172,26,142,28,142,23,177,25"/>
+</map>

@@ -1,0 +1,7 @@
+<map id="secp256k1_bulletproof_compute_vectors_block" name="secp256k1_bulletproof_compute_vectors_block">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,27,172,68"/>
+<area shape="rect" id="Node000002" href="$bulletproof__aggregated_8c.html#ab09b940b0052db9ea6b727f2efb0f60d" title=" " alt="" coords="220,5,383,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="172,33,207,31,202,32,173,39"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#a16f2cb394d4a0860c696b4709aa7e71e" title=" " alt="" coords="224,55,379,96"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="172,56,211,63,206,64,172,61"/>
+</map>

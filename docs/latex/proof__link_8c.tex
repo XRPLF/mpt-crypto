@@ -1,0 +1,251 @@
+\doxysection{src/\+proof\+\_\+link.c File Reference}
+\hypertarget{proof__link_8c}{}\label{proof__link_8c}\index{src/proof\_link.c@{src/proof\_link.c}}
+
+
+Zero-\/\+Knowledge Proof Linking El\+Gamal Ciphertexts and Pedersen Commitments.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$assert.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdio.\+h$>$}\newline
+Include dependency graph for proof\+\_\+link.\+c:\+
+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Macros}
+\begin{DoxyCompactItemize}
+\item 
+\+\#define \doxymbox{\hyperlink{proof__link_8c_a5d1361c66ec2567d84943c81c2735cab}{SER\+\_\+\+AND\+\_\+\+HASH}}(pk\+\_\+ptr)
+\end{DoxyCompactItemize}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{proof__link_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{proof__link_8c_ab09b940b0052db9ea6b727f2efb0f60d}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar\+\_\+bytes)
+\item 
+static void \doxymbox{\hyperlink{proof__link_8c_a18ee785f7b6770e97477bc57847f9c88}{build\+\_\+link\+\_\+challenge\+\_\+hash}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}e\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pcm, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T3, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{proof__link_8c_ad119770e3c09b5f96f2bf7d33a228f68}{secp256k1\+\_\+elgamal\+\_\+pedersen\+\_\+link\+\_\+prove}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pcm, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}r, const unsigned char \texorpdfstring{$\ast$}{*}rho, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Proves the link between an El\+Gamal ciphertext and a Pedersen commitment. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{proof__link_8c_ae9383c9458394fa15006e7014c0753f1}{secp256k1\+\_\+elgamal\+\_\+pedersen\+\_\+link\+\_\+verify}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const unsigned char \texorpdfstring{$\ast$}{*}proof, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pcm, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Verifies the link proof between El\+Gamal and Pedersen commitments. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Zero-\/\+Knowledge Proof Linking El\+Gamal Ciphertexts and Pedersen Commitments. 
+
+This module implements a Sigma protocol to prove that an El\+Gamal ciphertext and a Pedersen commitment encode the same underlying plaintext value $ m $, without revealing $ m $ or the blinding factors.
+
+{\bfseries{Statement:\+}} The prover demonstrates knowledge of scalars $ (m, r, \rho) $ such that:\+
+\begin{DoxyEnumerate}
+\item $ C_1 = r \cdot G $ (El\+Gamal Ephemeral Key)
+\item $ C_2 = m \cdot G + r \cdot P $ (El\+Gamal Masked Value)
+\item $ PC_m = m \cdot G + \rho \cdot H $ (Pedersen Commitment)
+\end{DoxyEnumerate}
+
+{\bfseries{Protocol (Schnorr-\/style):\+}}
+\begin{DoxyEnumerate}
+\item {\bfseries{Commitment:\+}} Prover samples nonces $ k_m, k_r, k_\rho $ and computes:\+
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ T_1 = k_r \cdot G $
+\item $ T_2 = k_m \cdot G + k_r \cdot P $
+\item $ T_3 = k_m \cdot G + k_\rho \cdot H $
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Challenge:\+}} \[ e = H(\text{"MPT_ELGAMAL_PEDERSEN_LINK"} \parallel C_1 \parallel C_2 \parallel P \parallel PC_m \parallel T_1 \parallel T_2 \parallel T_3 \parallel \dots) \]
+\item {\bfseries{Response:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_m = k_m + e \cdot m $
+\item $ s_r = k_r + e \cdot r $
+\item $ s_\rho = k_\rho + e \cdot \rho $
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Verification:\+}} Verifier checks:\+
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_r \cdot G \stackrel{?}{=} T_1 + e \cdot C_1 $
+\item $ s_m \cdot G + s_r \cdot P \stackrel{?}{=} T_2 + e \cdot C_2 $
+\item $ s_m \cdot G + s_\rho \cdot H \stackrel{?}{=} T_3 + e \cdot PC_m $ \begin{DoxyVerb}  **Security Context:**
+\end{DoxyVerb}
+ This proof prevents "{}bait-\/and-\/switch"{} attacks where a user sends a valid range proof for a small amount (e.\+g., 10) but updates the ledger balance with a large or negative amount (e.\+g., 1,000,000 or -\/5). It binds the two representations together.
+\end{DoxyItemize}
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+5]\+ Linking El\+Gamal Ciphertexts and Pedersen Commitments 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+
+
+\label{doc-define-members}
+\Hypertarget{proof__link_8c_doc-define-members}
+\doxysubsection{Macro Definition Documentation}
+\Hypertarget{proof__link_8c_a5d1361c66ec2567d84943c81c2735cab}\index{proof\_link.c@{proof\_link.c}!SER\_AND\_HASH@{SER\_AND\_HASH}}
+\index{SER\_AND\_HASH@{SER\_AND\_HASH}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{SER\_AND\_HASH}{SER\_AND\_HASH}}
+{\footnotesize\ttfamily \label{proof__link_8c_a5d1361c66ec2567d84943c81c2735cab} 
+\+\#define SER\+\_\+\+AND\+\_\+\+HASH(\begin{DoxyParamCaption}\item[{}]{pk\+\_\+ptr}{}\end{DoxyParamCaption})}
+
+{\bfseries Value:\+}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\ \ \ \ \textcolor{keywordflow}{do}\ \{\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ len\ =\ 33;\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ secp256k1\_ec\_pubkey\_serialize(ctx,\ buf,\ \&len,\ pk\_ptr,\ SECP256K1\_EC\_COMPRESSED);\ \(\backslash\)}
+\DoxyCodeLine{\ \ \ \ SHA256\_Update(\&sha,\ buf,\ 33);\ \(\backslash\)}
+\DoxyCodeLine{\}\ \textcolor{keywordflow}{while}(0)}
+
+\end{DoxyCode}
+
+
+\label{doc-func-members}
+\Hypertarget{proof__link_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{proof__link_8c_a18ee785f7b6770e97477bc57847f9c88}\index{proof\_link.c@{proof\_link.c}!build\_link\_challenge\_hash@{build\_link\_challenge\_hash}}
+\index{build\_link\_challenge\_hash@{build\_link\_challenge\_hash}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{build\_link\_challenge\_hash()}{build\_link\_challenge\_hash()}}
+{\footnotesize\ttfamily \label{proof__link_8c_a18ee785f7b6770e97477bc57847f9c88} 
+void build\+\_\+link\+\_\+challenge\+\_\+hash (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{e\+\_\+out}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pcm}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T3}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__link_8c_source_l00064}{64}} of file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c_a18ee785f7b6770e97477bc57847f9c88_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c_a18ee785f7b6770e97477bc57847f9c88_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__link_8c_ab09b940b0052db9ea6b727f2efb0f60d}\index{proof\_link.c@{proof\_link.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{proof__link_8c_ab09b940b0052db9ea6b727f2efb0f60d} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar\+\_\+bytes}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__link_8c_source_l00057}{57}} of file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c_ab09b940b0052db9ea6b727f2efb0f60d_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__link_8c_ad323664144afbe26cc90816a513f79c0}\index{proof\_link.c@{proof\_link.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{proof__link_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__link_8c_source_l00053}{53}} of file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=339pt]{proof__link_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__link_8c_ad119770e3c09b5f96f2bf7d33a228f68}\index{proof\_link.c@{proof\_link.c}!secp256k1\_elgamal\_pedersen\_link\_prove@{secp256k1\_elgamal\_pedersen\_link\_prove}}
+\index{secp256k1\_elgamal\_pedersen\_link\_prove@{secp256k1\_elgamal\_pedersen\_link\_prove}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_pedersen\_link\_prove()}{secp256k1\_elgamal\_pedersen\_link\_prove()}}
+{\footnotesize\ttfamily \label{proof__link_8c_ad119770e3c09b5f96f2bf7d33a228f68} 
+int secp256k1\+\_\+elgamal\+\_\+pedersen\+\_\+link\+\_\+prove (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pcm}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{r}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{rho}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Proves the link between an El\+Gamal ciphertext and a Pedersen commitment. 
+
+
+\begin{DoxyItemize}
+\item Formal Statement:\+ Knowledge of (m, r, rho) such that:\+ C1 = r\texorpdfstring{$\ast$}{*}G, C2 = m\texorpdfstring{$\ast$}{*}G + r\texorpdfstring{$\ast$}{*}\+Pk, and PCm = m\texorpdfstring{$\ast$}{*}G + rho\texorpdfstring{$\ast$}{*}H.
+\item 
+\begin{DoxyParams}{Parameters}
+{\em ctx} & Pointer to a secp256k1 context object. \\
+\hline
+{\em proof} & \+[OUT]\+ Pointer to 195-\/byte buffer for the proof output. \\
+\hline
+{\em c1} & Pointer to the El\+Gamal C1 point (r\texorpdfstring{$\ast$}{*}G). \\
+\hline
+{\em c2} & Pointer to the El\+Gamal C2 point (m\texorpdfstring{$\ast$}{*}G + r\texorpdfstring{$\ast$}{*}\+Pk). \\
+\hline
+{\em pk} & Pointer to the recipient\textquotesingle{}s public key. \\
+\hline
+{\em pcm} & Pointer to the Pedersen Commitment (m\texorpdfstring{$\ast$}{*}G + rho\texorpdfstring{$\ast$}{*}H). \\
+\hline
+{\em amount} & The plaintext amount (m). \\
+\hline
+{\em r} & The 32-\/byte secret El\+Gamal blinding factor. \\
+\hline
+{\em rho} & The 32-\/byte secret Pedersen blinding factor. \\
+\hline
+{\em context\+\_\+id} & 32-\/byte unique transaction context identifier. \\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+\end{DoxyItemize}
+
+Definition at line \doxymbox{\hyperlink{proof__link_8c_source_l00108}{108}} of file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c_ad119770e3c09b5f96f2bf7d33a228f68_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__link_8c_ae9383c9458394fa15006e7014c0753f1}\index{proof\_link.c@{proof\_link.c}!secp256k1\_elgamal\_pedersen\_link\_verify@{secp256k1\_elgamal\_pedersen\_link\_verify}}
+\index{secp256k1\_elgamal\_pedersen\_link\_verify@{secp256k1\_elgamal\_pedersen\_link\_verify}!proof\_link.c@{proof\_link.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_elgamal\_pedersen\_link\_verify()}{secp256k1\_elgamal\_pedersen\_link\_verify()}}
+{\footnotesize\ttfamily \label{proof__link_8c_ae9383c9458394fa15006e7014c0753f1} 
+int secp256k1\+\_\+elgamal\+\_\+pedersen\+\_\+link\+\_\+verify (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pcm}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Verifies the link proof between El\+Gamal and Pedersen commitments. 
+
+
+\begin{DoxyItemize}
+\item \begin{DoxyReturn}{Returns}
+1 if the proof is valid, 0 otherwise. 
+\end{DoxyReturn}
+
+\end{DoxyItemize}
+
+Definition at line \doxymbox{\hyperlink{proof__link_8c_source_l00212}{212}} of file \doxymbox{\hyperlink{proof__link_8c_source}{proof\+\_\+link.\+c}}.
+
+Here is the call graph for this function:\+
+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__link_8c_ae9383c9458394fa15006e7014c0753f1_cgraph}
+\end{center}
+\end{figure}

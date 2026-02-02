@@ -1,0 +1,13 @@
+<map id="secp256k1_mpt_scalar_inverse" name="secp256k1_mpt_scalar_inverse">
+<area shape="rect" id="Node000001" title=" " alt="" coords="404,74,559,114"/>
+<area shape="rect" id="Node000002" href="$bulletproof__aggregated_8c.html#a973f4819c6216ff34f80888dca08e8c4" title=" " alt="" coords="218,5,343,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="409,68,317,34,317,29,414,67"/>
+<area shape="rect" id="Node000003" href="$bulletproof__aggregated_8c.html#a0f8215fab678563b03757e56cb7e5308" title=" " alt="" coords="5,31,157,72"/>
+<area shape="poly" id="edge6_Node000001_Node000003" title=" " alt="" coords="387,87,157,62,157,57,390,82"/>
+<area shape="rect" id="Node000004" href="$bulletproof__aggregated_8c.html#a961fdecda5bee93aa0667bd722478255" title=" " alt="" coords="5,118,157,158"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="388,107,158,133,157,127,389,102"/>
+<area shape="rect" id="Node000005" href="$bulletproof__aggregated_8c.html#a0f2171e520416eff8a0019eba26fb52c" title=" " alt="" coords="205,156,356,197"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="419,120,333,158,331,153,414,121"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="200,33,158,41,156,36,204,30"/>
+<area shape="poly" id="edge5_Node000005_Node000004" title=" " alt="" coords="186,159,157,156,157,150,192,159"/>
+</map>

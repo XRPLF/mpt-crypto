@@ -1,3 +1,37 @@
+/**
+ * @file mpt_scalar.c
+ * @brief Scalar Field Arithmetic Abstraction Layer.
+ *
+ * This module provides a safe, portable interface for performing arithmetic
+ * in the scalar field of the secp256k1 curve (integers modulo \f$ n \f$, the group order).
+ *
+ * @details
+ * **Purpose:**
+ * While `libsecp256k1` exposes point operations via its public API, it does not
+ * typically expose low-level scalar arithmetic. However, protocols like Bulletproofs
+ * and ElGamal require extensive scalar math (e.g., polynomial evaluation, inner products)
+ * to be performed by the client.
+ *
+ * **Implementation:**
+ * This file includes internal `libsecp256k1` headers (`scalar.h`, `scalar_impl.h`)
+ * to access the optimized, constant-time scalar implementations.
+ *
+ * **Operations:**
+ * All operations are performed modulo the curve order \f$ n \f$:
+ * - Addition: \f$ a + b \pmod{n} \f$
+ * - Multiplication: \f$ a \cdot b \pmod{n} \f$
+ * - Inversion: \f$ a^{-1} \pmod{n} \f$
+ * - Negation: \f$ -a \pmod{n} \f$
+ *
+ * **Platform Specifics:**
+ * Includes logic for 128-bit integer support (`int128.h`) required for efficient
+ * computation on modern architectures (e.g., ARM64/Apple Silicon).
+ *
+ * @warning These functions operate on 32-byte big-endian scalars. Inputs must be
+ * properly reduced or handled by `secp256k1_mpt_scalar_reduce32` before use if they
+ * might exceed \f$ n \f$.
+ */
+
 #include "secp256k1_mpt.h"
 #include <string.h>
 

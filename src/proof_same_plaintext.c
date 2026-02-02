@@ -1,3 +1,50 @@
+/**
+ * @file proof_same_plaintext.c
+ * @brief Zero-Knowledge Proof of Plaintext Equality (1-to-1).
+ *
+ * This module implements a multi-statement Sigma protocol to prove that two
+ * different ElGamal ciphertexts encrypt the **same** underlying plaintext amount,
+ * potentially under different public keys and using different randomness.
+ *
+ * @details
+ * **Statement:**
+ * Given two ciphertexts \f$ (R_1, S_1) \f$ and \f$ (R_2, S_2) \f$ encrypted under
+ * public keys \f$ P_1 \f$ and \f$ P_2 \f$ respectively, the prover demonstrates
+ * knowledge of scalars \f$ m, r_1, r_2 \f$ such that:
+ * 1. \f$ R_1 = r_1 \cdot G \f$ and \f$ S_1 = m \cdot G + r_1 \cdot P_1 \f$
+ * 2. \f$ R_2 = r_2 \cdot G \f$ and \f$ S_2 = m \cdot G + r_2 \cdot P_2 \f$
+ *
+ * **Protocol Logic (Shared Nonce):**
+ * To prove that \f$ m \f$ is identical in both ciphertexts without revealing it,
+ * the prover uses a **shared random nonce** \f$ k_m \f$ for the amount commitment
+ * across both logical branches of the proof.
+ *
+ * 1. **Commitments:**
+ * - \f$ T_m = k_m \cdot G \f$ (Shared commitment to amount nonce)
+ * - \f$ T_{r1,G} = k_{r1} \cdot G \f$, \f$ T_{r1,P1} = k_{r1} \cdot P_1 \f$
+ * - \f$ T_{r2,G} = k_{r2} \cdot G \f$, \f$ T_{r2,P2} = k_{r2} \cdot P_2 \f$
+ *
+ * 2. **Challenge:**
+ * \f$ e = H(\dots \parallel T_m \parallel \dots) \f$
+ *
+ * 3. **Responses:**
+ * - \f$ s_m = k_m + e \cdot m \f$ (Shared response for amount)
+ * - \f$ s_{r1} = k_{r1} + e \cdot r_1 \f$
+ * - \f$ s_{r2} = k_{r2} + e \cdot r_2 \f$
+ *
+ * 4. **Verification:**
+ * The verifier checks 4 equations. Crucially, the "Amount" equations for both
+ * ciphertexts use the **same** \f$ s_m \f$ and \f$ T_m \f$, mathematically enforcing equality:
+ * - \f$ s_m \cdot G + s_{r1} \cdot P_1 \stackrel{?}{=} T_m + T_{r1,P1} + e \cdot S_1 \f$
+ * - \f$ s_m \cdot G + s_{r2} \cdot P_2 \stackrel{?}{=} T_m + T_{r2,P2} + e \cdot S_2 \f$
+ *
+ * **Security Context:**
+ * This is used when transferring confidential tokens between accounts (re-encrypting
+ * the sender's balance for the receiver) or updating keys, ensuring no value is
+ * created or destroyed during the transformation.
+ *
+ * @see [Spec (ConfidentialMPT_20260106.pdf) Section 3.3.3] Proof of Equality of Plaintexts (Different Keys, Same Secret Amount)
+ */
 #include "secp256k1_mpt.h"
 #include <openssl/sha.h>
 #include <openssl/rand.h>

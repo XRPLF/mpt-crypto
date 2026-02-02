@@ -1,0 +1,67 @@
+\doxysection{mpt\+\_\+scalar.\+c}
+\hypertarget{mpt__scalar_8c_source}{}\label{mpt__scalar_8c_source}\index{src/mpt\_scalar.c@{src/mpt\_scalar.c}}
+\doxymbox{\hyperlink{mpt__scalar_8c}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00001}00001\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00034}00034\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00035}00035\ \textcolor{preprocessor}{\#include\ "{}\doxymbox{\hyperlink{secp256k1__mpt_8h}{secp256k1\_mpt.h}}"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00036}00036\ \textcolor{preprocessor}{\#include\ <string.h>}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00037}00037\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00038}00038\ \textcolor{comment}{/*\ 1.\ Backend\ Configuration\ Definitions\ */}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00039}00039\ \textcolor{preprocessor}{\#ifndef\ USE\_SCALAR\_8X32}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00040}\doxymbox{\hyperlink{mpt__scalar_8c_a59f1d691dca2b2deddaba44d76296613}{00040}}\ \textcolor{preprocessor}{\#define\ USE\_SCALAR\_8X32}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00041}00041\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00042}00042\ \textcolor{preprocessor}{\#ifndef\ USE\_FIELD\_10X26}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00043}\doxymbox{\hyperlink{mpt__scalar_8c_a9ffdc2aedc35dd6be75764e098c8035e}{00043}}\ \textcolor{preprocessor}{\#define\ USE\_FIELD\_10X26}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00044}00044\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00045}00045\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00046}00046\ \textcolor{comment}{/*\ 2.\ Include\ low-\/level\ utilities\ first.}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00047}00047\ \textcolor{comment}{\ \ \ \ \ \ On\ ARM64/Apple\ Silicon,\ the\ scalar\ math\ depends\ on\ 128-\/bit}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00048}00048\ \textcolor{comment}{\ \ \ \ \ \ integer\ helpers\ defined\ in\ these\ headers.\ */}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00049}00049\ \textcolor{preprocessor}{\#include\ "{}util.h"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00050}00050\ \textcolor{preprocessor}{\#include\ "{}int128.h"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00051}00051\ \textcolor{preprocessor}{\#include\ "{}int128\_impl.h"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00052}00052\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00053}00053\ \textcolor{comment}{/*\ 3.\ Include\ the\ actual\ scalar\ implementations\ */}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00054}00054\ \textcolor{preprocessor}{\#include\ "{}scalar.h"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00055}00055\ \textcolor{preprocessor}{\#include\ "{}scalar\_impl.h"{}}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00056}00056\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00057}00057\ \textcolor{comment}{/*\ -\/-\/-\/\ Implementation\ -\/-\/-\/\ */}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00058}00058\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00059}\doxymbox{\hyperlink{secp256k1__mpt_8h_abc19bd5be104bcd602d306f3fa543c08}{00059}}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{mpt__scalar_8c_abc19bd5be104bcd602d306f3fa543c08}{secp256k1\_mpt\_scalar\_add}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *a,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *b)\ \{}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00060}00060\ \ \ \ \ secp256k1\_scalar\ s\_res,\ s\_a,\ s\_b;}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00061}00061\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s\_a,\ a,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00062}00062\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s\_b,\ b,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00063}00063\ \ \ \ \ secp256k1\_scalar\_add(\&s\_res,\ \&s\_a,\ \&s\_b);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00064}00064\ \ \ \ \ secp256k1\_scalar\_get\_b32(res,\ \&s\_res);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00065}00065\ \}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00066}00066\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00067}\doxymbox{\hyperlink{secp256k1__mpt_8h_a8e15477ac841922f6d5b03b1b21de1a9}{00067}}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{mpt__scalar_8c_a8e15477ac841922f6d5b03b1b21de1a9}{secp256k1\_mpt\_scalar\_mul}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *a,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *b)\ \{}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00068}00068\ \ \ \ \ secp256k1\_scalar\ s\_res,\ s\_a,\ s\_b;}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00069}00069\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s\_a,\ a,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00070}00070\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s\_b,\ b,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00071}00071\ \ \ \ \ secp256k1\_scalar\_mul(\&s\_res,\ \&s\_a,\ \&s\_b);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00072}00072\ \ \ \ \ secp256k1\_scalar\_get\_b32(res,\ \&s\_res);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00073}00073\ \}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00074}00074\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00075}\doxymbox{\hyperlink{secp256k1__mpt_8h_af936e8fd06e9d14cfa37d3e530dbcc52}{00075}}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{mpt__scalar_8c_af936e8fd06e9d14cfa37d3e530dbcc52}{secp256k1\_mpt\_scalar\_inverse}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *in)\ \{}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00076}00076\ \ \ \ \ secp256k1\_scalar\ s;}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00077}00077\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s,\ in,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00078}00078\ \ \ \ \ secp256k1\_scalar\_inverse(\&s,\ \&s);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00079}00079\ \ \ \ \ secp256k1\_scalar\_get\_b32(res,\ \&s);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00080}00080\ \}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00081}00081\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00082}\doxymbox{\hyperlink{secp256k1__mpt_8h_a16f2cb394d4a0860c696b4709aa7e71e}{00082}}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{mpt__scalar_8c_a16f2cb394d4a0860c696b4709aa7e71e}{secp256k1\_mpt\_scalar\_negate}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *in)\ \{}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00083}00083\ \ \ \ \ secp256k1\_scalar\ s;}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00084}00084\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s,\ in,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00085}00085\ \ \ \ \ secp256k1\_scalar\_negate(\&s,\ \&s);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00086}00086\ \ \ \ \ secp256k1\_scalar\_get\_b32(res,\ \&s);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00087}00087\ \}}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00088}00088\ }
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00089}\doxymbox{\hyperlink{secp256k1__mpt_8h_aac5cece668acbd6bb052aafe9e3eaa75}{00089}}\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{mpt__scalar_8c_aac5cece668acbd6bb052aafe9e3eaa75}{secp256k1\_mpt\_scalar\_reduce32}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ out32[32],\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ in32[32])\ \{}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00090}00090\ \ \ \ \ secp256k1\_scalar\ s;}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00091}00091\ \ \ \ \ secp256k1\_scalar\_set\_b32(\&s,\ in32,\ NULL);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00092}00092\ \ \ \ \ secp256k1\_scalar\_get\_b32(out32,\ \&s);}
+\DoxyCodeLine{\Hypertarget{mpt__scalar_8c_source_l00093}00093\ \}}
+
+\end{DoxyCode}

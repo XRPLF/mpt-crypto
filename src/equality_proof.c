@@ -1,3 +1,43 @@
+/**
+* @file equality_proof.c
+* @brief Zero-Knowledge Proof of Knowledge of Plaintext and Randomness.
+*
+* This module implements a Sigma protocol (Chaum-Pedersen style) to prove that
+        * an ElGamal ciphertext \f$ (C_1, C_2) \f$ encrypts a specific known plaintext
+* \f$ m \f$ under a public key \f$ P \f$, and that the prover knows the
+* randomness \f$ r \f$ used in the encryption.
+*
+* @details
+        * **Statement:**
+* The prover demonstrates knowledge of \f$ r \in \mathbb{Z}_q \f$ such that:
+* \f[ C_1 = r \cdot G \f]
+* \f[ C_2 = m \cdot G + r \cdot P \f]
+*
+* **Protocol:**
+* 1. **Commitment:**
+* Prover samples \f$ t \leftarrow \mathbb{Z}_q \f$ and computes:
+* \f[ T_1 = t \cdot G \f]
+* \f[ T_2 = t \cdot P \f]
+*
+* 2. **Challenge:**
+* \f[ e = H(\text{"MPT_POK_PLAINTEXT_PROOF"} \parallel C_1 \parallel C_2 \parallel P \parallel T_1 \parallel T_2 \parallel \dots) \f]
+*
+* 3. **Response:**
+* \f[ s = t + e \cdot r \pmod{q} \f]
+*
+* 4. **Verification:**
+* Verifier checks:
+* \f[ s \cdot G \stackrel{?}{=} T_1 + e \cdot C_1 \f]
+* \f[ s \cdot P \stackrel{?}{=} T_2 + e \cdot (C_2 - m \cdot G) \f]
+*
+* **Context:**
+* This proof is used in `ConfidentialMPTConvert` (explicit randomness verification)
+* and `ConfidentialMPTClawback` (where the issuer proves the ciphertext matches
+        * a revealed amount using their secret key, a variant of this logic).
+*
+* @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.3] Optimized Ciphertext-Amount Consistency Protocol
+*/
+
 #include "secp256k1_mpt.h"
 #include <openssl/sha.h>
 #include <openssl/rand.h>

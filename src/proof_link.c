@@ -1,3 +1,46 @@
+/**
+* @file proof_link.c
+* @brief Zero-Knowledge Proof Linking ElGamal Ciphertexts and Pedersen Commitments.
+*
+* This module implements a Sigma protocol to prove that an ElGamal ciphertext
+* and a Pedersen commitment encode the same underlying plaintext value \f$ m \f$,
+* without revealing \f$ m \f$ or the blinding factors.
+*
+* @details
+        * **Statement:**
+* The prover demonstrates knowledge of scalars \f$ (m, r, \rho) \f$ such that:
+* 1. \f$ C_1 = r \cdot G \f$ (ElGamal Ephemeral Key)
+* 2. \f$ C_2 = m \cdot G + r \cdot P \f$ (ElGamal Masked Value)
+* 3. \f$ PC_m = m \cdot G + \rho \cdot H \f$ (Pedersen Commitment)
+*
+* **Protocol (Schnorr-style):**
+* 1. **Commitment:**
+* Prover samples nonces \f$ k_m, k_r, k_\rho \f$ and computes:
+* - \f$ T_1 = k_r \cdot G \f$
+* - \f$ T_2 = k_m \cdot G + k_r \cdot P \f$
+* - \f$ T_3 = k_m \cdot G + k_\rho \cdot H \f$
+*
+* 2. **Challenge:**
+* \f[ e = H(\text{"MPT_ELGAMAL_PEDERSEN_LINK"} \parallel C_1 \parallel C_2 \parallel P \parallel PC_m \parallel T_1 \parallel T_2 \parallel T_3 \parallel \dots) \f]
+*
+* 3. **Response:**
+* - \f$ s_m = k_m + e \cdot m \f$
+* - \f$ s_r = k_r + e \cdot r \f$
+* - \f$ s_\rho = k_\rho + e \cdot \rho \f$
+*
+* 4. **Verification:**
+* Verifier checks:
+* - \f$ s_r \cdot G \stackrel{?}{=} T_1 + e \cdot C_1 \f$
+* - \f$ s_m \cdot G + s_r \cdot P \stackrel{?}{=} T_2 + e \cdot C_2 \f$
+* - \f$ s_m \cdot G + s_\rho \cdot H \stackrel{?}{=} T_3 + e \cdot PC_m \f$
+        *
+        * **Security Context:**
+* This proof prevents "bait-and-switch" attacks where a user sends a valid range proof
+* for a small amount (e.g., 10) but updates the ledger balance with a large or negative
+* amount (e.g., 1,000,000 or -5). It binds the two representations together.
+*
+* @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.5] Linking ElGamal Ciphertexts and Pedersen Commitments
+*/
 #include "secp256k1_mpt.h"
 #include <openssl/sha.h>
 #include <openssl/rand.h>
@@ -168,7 +211,7 @@ int secp256k1_elgamal_pedersen_link_prove(
 
 int secp256k1_elgamal_pedersen_link_verify(
         const secp256k1_context* ctx,
-        const unsigned char* proof, /* Caller must ensure buffer is >= 195 bytes */
+        const unsigned char* proof,
         const secp256k1_pubkey* c1,
         const secp256k1_pubkey* c2,
         const secp256k1_pubkey* pk,

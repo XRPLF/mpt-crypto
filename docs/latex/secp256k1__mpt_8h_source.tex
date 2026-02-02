@@ -1,0 +1,315 @@
+\doxysection{secp256k1\+\_\+mpt.\+h}
+\hypertarget{secp256k1__mpt_8h_source}{}\label{secp256k1__mpt_8h_source}\index{include/secp256k1\_mpt.h@{include/secp256k1\_mpt.h}}
+\doxymbox{\hyperlink{secp256k1__mpt_8h}{Go to the documentation of this file.}}
+\begin{DoxyCode}{0}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00001}00001\ \textcolor{preprocessor}{\#ifndef\ SECP256K1\_MPT\_H}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00002}00002\ \textcolor{preprocessor}{\#define\ SECP256K1\_MPT\_H}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00003}00003\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00004}00004\ \textcolor{preprocessor}{\#include\ <secp256k1.h>}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00005}00005\ \textcolor{preprocessor}{\#include\ <stdint.h>}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00006}00006\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00007}00007\ \textcolor{preprocessor}{\#ifdef\ \_\_cplusplus}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00008}00008\ \textcolor{keyword}{extern}\ \textcolor{stringliteral}{"{}C"{}}\ \{}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00009}00009\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00010}00010\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00014}00014\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a0b80556f2f4995ce7f0c4da2219e6508}{secp256k1\_elgamal\_generate\_keypair}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00015}00015\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00016}00016\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ privkey,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00017}00017\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ pubkey}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00018}00018\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00019}00019\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00023}00023\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aacd35659d8d879c927b52e7cbaa249bb}{secp256k1\_elgamal\_encrypt}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00024}00024\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00025}00025\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00026}00026\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00027}00027\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey\_Q,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00028}00028\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00029}00029\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00030}00030\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00031}00031\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00035}00035\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a7a2155472193bf56bb79c5eeaf8de359}{secp256k1\_elgamal\_decrypt}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00036}00036\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00037}00037\ \ \ \ \ \ \ \ \ uint64\_t*\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00038}00038\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00039}00039\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00040}00040\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ privkey}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00041}00041\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00042}00042\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00046}00046\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a9930964f5e29a81d9538c8a7ef017986}{secp256k1\_elgamal\_add}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00047}00047\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00048}00048\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ sum\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00049}00049\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ sum\_c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00050}00050\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00051}00051\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00052}00052\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00053}00053\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c2}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00054}00054\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00055}00055\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00059}00059\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aa8c154347d78220cbf99e4eb84ee3ace}{secp256k1\_elgamal\_subtract}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00060}00060\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00061}00061\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ diff\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00062}00062\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ diff\_c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00063}00063\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00064}00064\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ a\_c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00065}00065\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00066}00066\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ b\_c2}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00067}00067\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00068}00068\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00069}00069\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00085}00085\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a8ae186158bc89ecce7bd0e03e0d00a3d}{generate\_canonical\_encrypted\_zero}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00086}00086\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00087}00087\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ enc\_zero\_c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00088}00088\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ enc\_zero\_c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00089}00089\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00090}00090\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ account\_id,\ \ \ \ \ \textcolor{comment}{//\ 20\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00091}00091\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ mpt\_issuance\_id\ \textcolor{comment}{//\ 24\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00092}00092\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00093}00093\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00094}00094\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00095}00095\ \textcolor{comment}{//\ ...\ (includes\ and\ previous\ ElGamal\ declarations)\ ...}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00096}00096\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00097}00097\ \textcolor{comment}{/*}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00098}00098\ \textcolor{comment}{================================================================================}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00099}00099\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00100}00100\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ PROOF\ OF\ KNOWLEDGE\ OF\ PLAINTEXT\ AND\ RANDOMNESS\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00101}00101\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (Chaum-\/Pedersen\ Equality\ Proof)\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00102}00102\ \textcolor{comment}{================================================================================}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00103}00103\ \textcolor{comment}{*/}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00104}00104\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00122}00122\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a21e6d1646119c376f7e66aa49d295d0e}{secp256k1\_equality\_plaintext\_prove}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00123}00123\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00124}00124\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,\ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Output:\ 98\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00125}00125\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00126}00126\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00127}00127\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_recipient,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00128}00128\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00129}00129\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ randomness\_r,\ \textcolor{comment}{//\ Secret\ input}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00130}00130\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id\ \textcolor{comment}{//\ 32\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00131}00131\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00132}00132\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00150}00150\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_ac1a3657fbdbad4815b05199ae6ca9176}{secp256k1\_equality\_plaintext\_verify}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00151}00151\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00152}00152\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,\ \ \ \ \ \ \ \ \textcolor{comment}{//\ Input:\ 98\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00153}00153\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00154}00154\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00155}00155\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_recipient,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00156}00156\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00157}00157\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id\ \textcolor{comment}{//\ 32\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00158}00158\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00159}00159\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00160}00160\ \textcolor{comment}{//\ ...\ (rest\ of\ header,\ \#endif\ etc.)}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00161}00161\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00162}00162\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00163}00163\ \textcolor{comment}{/*}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00164}00164\ \textcolor{comment}{================================================================================}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00165}00165\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00166}00166\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ PROOF\ OF\ EQUALITY\ OF\ SECRET\ PLAINTEXTS\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00167}00167\ \textcolor{comment}{|\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ (Multi-\/Statement\ Chaum-\/Pedersen)\ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ \ |}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00168}00168\ \textcolor{comment}{================================================================================}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00169}00169\ \textcolor{comment}{*/}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00170}00170\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00186}00186\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aa5a4714a1136e0147ff6a3acb1daa8e3}{secp256k1\_mpt\_prove\_same\_plaintext}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00187}00187\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00188}00188\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof\_out,\ \ \ \ \ \ \ \ \ \ \textcolor{comment}{//\ Output:\ 261\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00189}00189\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ P1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00190}00190\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R2,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S2,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ P2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00191}00191\ \ \ \ \ \ \ \ \ uint64\_t\ amount\_m,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00192}00192\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ randomness\_r1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00193}00193\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ randomness\_r2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00194}00194\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00195}00195\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00196}00196\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00208}00208\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aad3a7f10fbb5a4842072e4513dd41034}{secp256k1\_mpt\_verify\_same\_plaintext}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00209}00209\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00210}00210\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,\ \ \ \ \ \ \ \ \textcolor{comment}{//\ Input:\ 261\ bytes}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00211}00211\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S1,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ P1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00212}00212\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R2,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S2,\ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ P2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00213}00213\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00214}00214\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00215}00215\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00216}00216\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00217}00217\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00221}00221\ SECP256K1\_API\ \textcolor{keywordtype}{size\_t}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a4ad61eb7854a8340da368f74db511ff1}{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size}}(\textcolor{keywordtype}{size\_t}\ n\_ciphertexts);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00222}00222\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00239}00239\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a98c42cca9a85eb245d553208cba0464e}{secp256k1\_mpt\_prove\_same\_plaintext\_multi}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00240}00240\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00241}00241\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof\_out,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00242}00242\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}*\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00243}00243\ \ \ \ \ \ \ \ \ uint64\_t\ amount\_m,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00244}00244\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n\_ciphertexts,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00245}00245\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00246}00246\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00247}00247\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ Pk\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00248}00248\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ r\_array,\ \textcolor{comment}{//\ Flat\ array:\ r1\ ||\ r2\ ||\ ...\ (N\ *\ 32\ bytes)}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00249}00249\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00250}00250\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00251}00251\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00255}00255\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a4e6b7421c7bb4b0965b4246c28bc722b}{secp256k1\_mpt\_verify\_same\_plaintext\_multi}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00256}00256\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00257}00257\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00258}00258\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00259}00259\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n\_ciphertexts,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00260}00260\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ R\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00261}00261\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ S\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00262}00262\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ Pk\_array,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00263}00263\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ tx\_context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00264}00264\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00265}00265\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00266}00266\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00281}00281\ SECP256K1\_API\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_af962f3158c7d84721f564064c6dca4b3}{secp256k1\_bulletproof\_create\_commitment}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00282}00282\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00283}00283\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ commitment\_C,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00284}00284\ \ \ \ \ \ \ \ \ uint64\_t\ value,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00285}00285\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00286}00286\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_base}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00287}00287\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00288}00288\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00289}00289\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00290}\doxymbox{\hyperlink{secp256k1__mpt_8h_ada64e97a85a348fddb1c11c3dd7be6d1}{00290}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_ada64e97a85a348fddb1c11c3dd7be6d1}{secp256k1\_bulletproof\_prove}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00291}00291\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00292}00292\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof\_out,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00293}00293\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}*\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00294}00294\ \ \ \ \ \ \ \ \ uint64\_t\ value,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00295}00295\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00296}00296\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_base,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00297}00297\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id,\ \ \ \ \textcolor{comment}{/*\ <-\/-\/-\/\ AND\ HERE\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00298}00298\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{int}\ proof\_type}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00299}00299\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00300}00300\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00301}00301\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00302}\doxymbox{\hyperlink{secp256k1__mpt_8h_a1966bed7e188956928ea748923885f5d}{00302}}\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a1966bed7e188956928ea748923885f5d}{secp256k1\_bulletproof\_verify}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00303}00303\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00304}00304\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ G\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00305}00305\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ H\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00306}00306\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00307}00307\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00308}00308\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ commitment\_C,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00309}00309\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_base,\ \textcolor{comment}{/*\ This\ is\ generator\ H\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00310}00310\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00311}00311\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00328}00328\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_ad119770e3c09b5f96f2bf7d33a228f68}{secp256k1\_elgamal\_pedersen\_link\_prove}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00329}00329\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00330}00330\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00331}00331\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00332}00332\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00333}00333\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00334}00334\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pcm,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00335}00335\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00336}00336\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ r,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00337}00337\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ rho,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00338}00338\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00339}00339\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00344}00344\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_ae9383c9458394fa15006e7014c0753f1}{secp256k1\_elgamal\_pedersen\_link\_verify}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00345}00345\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00346}00346\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00347}00347\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00348}00348\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00349}00349\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00350}00350\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pcm,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00351}00351\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00352}00352\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00357}00357\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a12dd9e76ae1ce525d6b80aa13012276e}{secp256k1\_elgamal\_verify\_encryption}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00358}00358\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00359}00359\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00360}00360\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ c2,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00361}00361\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pubkey\_Q,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00362}00362\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00363}00363\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00364}00364\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00365}00365\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00367}00367\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a4b57bd656595b7cb58a888de15e7d1e5}{secp256k1\_mpt\_pok\_sk\_prove}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00368}00368\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00369}00369\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,\ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ Expected\ size:\ 65\ bytes\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00370}00370\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00371}00371\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ sk,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00372}00372\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00373}00373\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00374}00374\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00375}00375\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a900a067a62bcf194a5546f22ee1f86b5}{secp256k1\_mpt\_pok\_sk\_verify}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00376}00376\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00377}00377\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,\ \ \ \ \ \textcolor{comment}{/*\ Expected\ size:\ 65\ bytes\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00378}00378\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00379}00379\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00380}00380\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00381}00381\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00386}00386\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a854f62b9b9e53f643ba87cea615aad1f}{secp256k1\_mpt\_pedersen\_commit}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00387}00387\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00388}00388\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ commitment,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00389}00389\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00390}00390\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blinding\_factor\_rho\ \ \textcolor{comment}{/*\ 32\ bytes\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00391}00391\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00392}00392\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00394}00394\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a7aaffafbd7bf29380177a031c673872b}{secp256k1\_mpt\_get\_h\_generator}}(\textcolor{keyword}{const}\ secp256k1\_context*\ ctx,\ secp256k1\_pubkey*\ h);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00395}00395\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00399}00399\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a6a45b5b11888db76787492c2eab2754a}{secp256k1\_mpt\_get\_generator\_vector}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00400}00400\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00401}00401\ \ \ \ \ \ \ \ \ secp256k1\_pubkey*\ vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00402}00402\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00403}00403\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ label,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00404}00404\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ label\_len}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00405}00405\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00406}00406\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00407}00407\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_abc19bd5be104bcd602d306f3fa543c08}{secp256k1\_mpt\_scalar\_add}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *a,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *b);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00408}00408\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a8e15477ac841922f6d5b03b1b21de1a9}{secp256k1\_mpt\_scalar\_mul}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *a,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *b);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00409}00409\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_af936e8fd06e9d14cfa37d3e530dbcc52}{secp256k1\_mpt\_scalar\_inverse}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *in);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00410}00410\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a16f2cb394d4a0860c696b4709aa7e71e}{secp256k1\_mpt\_scalar\_negate}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *res,\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ *in);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00411}00411\ \textcolor{keywordtype}{void}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aac5cece668acbd6bb052aafe9e3eaa75}{secp256k1\_mpt\_scalar\_reduce32}}(\textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ out32[32],\ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}\ in32[32]);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00412}00412\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00413}00413\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00418}00418\ \textcolor{keywordtype}{size\_t}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a0d66f344b0d64b287e67424161638d1f}{secp256k1\_mpt\_proof\_equality\_shared\_r\_size}}(\textcolor{keywordtype}{size\_t}\ n);}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00419}00419\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00424}00424\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_aac27be764c6b221d93ad846e54ec41af}{secp256k1\_mpt\_prove\_equality\_shared\_r}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00425}00425\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00426}00426\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof\_out,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00427}00427\ \ \ \ \ \ \ \ \ uint64\_t\ amount,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00428}00428\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ r\_shared,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00429}00429\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00430}00430\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ C1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00431}00431\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ C2\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00432}00432\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ Pk\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00433}00433\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00434}00434\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00435}00435\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00439}00439\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_ae0c79d0464d4940381eab1ac3de0bf8c}{secp256k1\_mpt\_verify\_equality\_shared\_r}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00440}00440\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00441}00441\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00442}00442\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ n,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00443}00443\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ C1,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00444}00444\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ C2\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00445}00445\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ Pk\_vec,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00446}00446\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00447}00447\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00448}00448\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00449}00449\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a961fdecda5bee93aa0667bd722478255}{secp256k1\_bulletproof\_prove\_agg}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00450}00450\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00451}00451\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof\_out,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00452}00452\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}*\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00453}00453\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ uint64\_t*\ values,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00454}00454\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ blindings\_flat,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00455}00455\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ m,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00456}00456\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_base,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00457}00457\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00458}00458\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00459}00459\ \textcolor{keywordtype}{int}\ \doxymbox{\hyperlink{secp256k1__mpt_8h_a0f8215fab678563b03757e56cb7e5308}{secp256k1\_bulletproof\_verify\_agg}}(}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00460}00460\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_context*\ ctx,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00461}00461\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ G\_vec,\ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ length\ n\ =\ 64*m\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00462}00462\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ H\_vec,\ \ \ \ \ \ \ \ \ \ \ \ \ \ \textcolor{comment}{/*\ length\ n\ =\ 64*m\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00463}00463\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ proof,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00464}00464\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ proof\_len,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00465}00465\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ commitment\_C\_vec,\ \ \ \textcolor{comment}{/*\ length\ m\ */}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00466}00466\ \ \ \ \ \ \ \ \ \textcolor{keywordtype}{size\_t}\ m,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00467}00467\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ secp256k1\_pubkey*\ pk\_base,}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00468}00468\ \ \ \ \ \ \ \ \ \textcolor{keyword}{const}\ \textcolor{keywordtype}{unsigned}\ \textcolor{keywordtype}{char}*\ context\_id}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00469}00469\ );}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00470}00470\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00471}00471\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00472}00472\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00473}00473\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00474}00474\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00475}00475\ \textcolor{preprocessor}{\#ifdef\ \_\_cplusplus}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00476}00476\ \}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00477}00477\ \textcolor{preprocessor}{\#endif}}
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00478}00478\ }
+\DoxyCodeLine{\Hypertarget{secp256k1__mpt_8h_source_l00479}00479\ \textcolor{preprocessor}{\#endif\ }\textcolor{comment}{//\ SECP256K1\_MPT\_H}}
+
+\end{DoxyCode}

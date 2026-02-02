@@ -1,0 +1,236 @@
+\doxysection{src/\+proof\+\_\+same\+\_\+plaintext\+\_\+multi.c File Reference}
+\hypertarget{proof__same__plaintext__multi_8c}{}\label{proof__same__plaintext__multi_8c}\index{src/proof\_same\_plaintext\_multi.c@{src/proof\_same\_plaintext\_multi.c}}
+
+
+Zero-\/\+Knowledge Proof of Plaintext Equality (1-\/to-\/N).  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+Include dependency graph for proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar)
+\item 
+static void \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_ab19601480ad097fbeefe911f64001251}{compute\+\_\+challenge\+\_\+multi}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}e\+\_\+out, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}S, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Tm, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}TrG, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}TrP, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+id)
+\item 
+size\+\_\+t \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_a34c4be5f89f535eb8782596ddd366766}{secp256k1\+\_\+mpt\+\_\+prove\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+size}} (size\+\_\+t n)
+\begin{DoxyCompactList}\small\item\em Calculates the expected proof size for a given number of ciphertexts. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_af2ac55beba54985b65a88e8c0cac58f7}{secp256k1\+\_\+mpt\+\_\+prove\+\_\+same\+\_\+plaintext\+\_\+multi}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof\+\_\+out, size\+\_\+t \texorpdfstring{$\ast$}{*}proof\+\_\+len, uint64\+\_\+t amount\+\_\+m, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}S, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk, const unsigned char \texorpdfstring{$\ast$}{*}r\+\_\+array, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Generates a proof that N ciphertexts encrypt the same secret amount \textquotesingle{}m\textquotesingle{}. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_a763afcb3dc83d78ba058438a9370e0ac}{secp256k1\+\_\+mpt\+\_\+verify\+\_\+same\+\_\+plaintext\+\_\+multi}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const unsigned char \texorpdfstring{$\ast$}{*}proof, size\+\_\+t proof\+\_\+len, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}R, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}S, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Verifies a proof that N ciphertexts encrypt the same secret amount. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Zero-\/\+Knowledge Proof of Plaintext Equality (1-\/to-\/N). 
+
+This module implements a generalized multi-\/statement Sigma protocol to prove that $ N $ distinct El\+Gamal ciphertexts all encrypt the {\bfseries{same}} underlying plaintext amount $ m $, using distinct randomness $ r_i $ for each.
+
+{\bfseries{Statement:\+}} Given $ N $ ciphertexts $ (R_i, S_i) $ encrypted under public keys $ P_i $, the prover demonstrates knowledge of scalars $ m $ and $ \{r_1, \dots, r_N\} $ such that for all $ i \in [1, N] $:\+
+\begin{DoxyEnumerate}
+\item $ R_i = r_i \cdot G $
+\item $ S_i = m \cdot G + r_i \cdot P_i $
+\end{DoxyEnumerate}
+
+{\bfseries{Protocol (Shared Amount Nonce):\+}} The efficiency gain comes from reusing the random nonce for the amount ( $ k_m $) across all $ N $ proofs, tying them mathematically to the same value $ m $.
+
+
+\begin{DoxyEnumerate}
+\item {\bfseries{Commitments:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ T_m = k_m \cdot G $ (Shared commitment to amount nonce)
+\item For each $ i $:\+
+\item $ T_{r,G}^{(i)} = k_{r,i} \cdot G $
+\item $ T_{r,P}^{(i)} = k_{r,i} \cdot P_i $
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Challenge:\+}} \[ e = H(\dots \parallel T_m \parallel \{T_{r,G}^{(i)}, T_{r,P}^{(i)}\}_{i=1}^N \parallel \dots) \]
+\item {\bfseries{Responses:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_m = k_m + e \cdot m $ (Shared response for amount)
+\item For each $ i $:\+ $ s_{r,i} = k_{r,i} + e \cdot r_i $
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Verification:\+}} For each $ i \in [1, N] $, the verifier checks:\+
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_{r,i} \cdot G \stackrel{?}{=} T_{r,G}^{(i)} + e \cdot R_i $
+\item $ s_m \cdot G + s_{r,i} \cdot P_i \stackrel{?}{=} T_m + T_{r,P}^{(i)} + e \cdot S_i $
+\end{DoxyItemize}
+
+{\bfseries{Security Context:\+}} This is crucial for "{}fan-\/out"{} transactions or auditing scenarios where a single value must be proven correct against multiple encrypted destinations simultaneously, ensuring consistency without revealing the value.
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260106.\+pdf) Section 3.\+3.\+4]\+ Generalization for Multiple Ciphertexts 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{proof__same__plaintext__multi_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{proof__same__plaintext__multi_8c_ab19601480ad097fbeefe911f64001251}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!compute\_challenge\_multi@{compute\_challenge\_multi}}
+\index{compute\_challenge\_multi@{compute\_challenge\_multi}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{compute\_challenge\_multi()}{compute\_challenge\_multi()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_ab19601480ad097fbeefe911f64001251} 
+void compute\+\_\+challenge\+\_\+multi (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{e\+\_\+out}{, }\item[{size\+\_\+t}]{n}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{S}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Tm}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{TrG}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{TrP}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00067}{67}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_ab19601480ad097fbeefe911f64001251_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_ab19601480ad097fbeefe911f64001251_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi_8c_aeaf385d364818242f9b4d3d3c14312b0}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_aeaf385d364818242f9b4d3d3c14312b0} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00057}{57}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_aeaf385d364818242f9b4d3d3c14312b0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi_8c_ad323664144afbe26cc90816a513f79c0}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00053}{53}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=306pt]{proof__same__plaintext__multi_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi_8c_af2ac55beba54985b65a88e8c0cac58f7}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!secp256k1\_mpt\_prove\_same\_plaintext\_multi@{secp256k1\_mpt\_prove\_same\_plaintext\_multi}}
+\index{secp256k1\_mpt\_prove\_same\_plaintext\_multi@{secp256k1\_mpt\_prove\_same\_plaintext\_multi}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_prove\_same\_plaintext\_multi()}{secp256k1\_mpt\_prove\_same\_plaintext\_multi()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_af2ac55beba54985b65a88e8c0cac58f7} 
+int secp256k1\+\_\+mpt\+\_\+prove\+\_\+same\+\_\+plaintext\+\_\+multi (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof\+\_\+out}{, }\item[{size\+\_\+t \texorpdfstring{$\ast$}{*}}]{proof\+\_\+len}{, }\item[{uint64\+\_\+t}]{amount\+\_\+m}{, }\item[{size\+\_\+t}]{n\+\_\+ciphertexts}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R\+\_\+array}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{S\+\_\+array}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk\+\_\+array}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{r\+\_\+array}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Generates a proof that N ciphertexts encrypt the same secret amount \textquotesingle{}m\textquotesingle{}. 
+
+
+\begin{DoxyParams}[1]{Parameters}
+\doxymbox{\texttt{in}}  & {\em ctx} & A pointer to a valid secp256k1 context. \\
+\hline
+\doxymbox{\texttt{out}}  & {\em proof\+\_\+out} & A pointer to a buffer to store the proof. \\
+\hline
+\doxymbox{\texttt{in,out}}  & {\em proof\+\_\+len} & Input:\+ buffer size. Output:\+ actual proof size. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em amount\+\_\+m} & The secret common uint64\+\_\+t plaintext value \textquotesingle{}m\textquotesingle{}. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em n\+\_\+ciphertexts} & The number (N) of ciphertexts. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em R\+\_\+array} & Array of N \textquotesingle{}R\textquotesingle{} points (C1 components). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em S\+\_\+array} & Array of N \textquotesingle{}S\textquotesingle{} points (C2 components). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em Pk\+\_\+array} & Array of N recipient public keys. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em r\+\_\+array} & Array of N 32-\/byte secret scalars (randomness). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em tx\+\_\+context\+\_\+id} & 32-\/byte unique transaction identifier.\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00135}{135}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_af2ac55beba54985b65a88e8c0cac58f7_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi_8c_a34c4be5f89f535eb8782596ddd366766}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size@{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size}}
+\index{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size@{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size()}{secp256k1\_mpt\_prove\_same\_plaintext\_multi\_size()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_a34c4be5f89f535eb8782596ddd366766} 
+size\+\_\+t secp256k1\+\_\+mpt\+\_\+prove\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+size (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+
+
+Calculates the expected proof size for a given number of ciphertexts. 
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00130}{130}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_a34c4be5f89f535eb8782596ddd366766_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi_8c_a763afcb3dc83d78ba058438a9370e0ac}\index{proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}!secp256k1\_mpt\_verify\_same\_plaintext\_multi@{secp256k1\_mpt\_verify\_same\_plaintext\_multi}}
+\index{secp256k1\_mpt\_verify\_same\_plaintext\_multi@{secp256k1\_mpt\_verify\_same\_plaintext\_multi}!proof\_same\_plaintext\_multi.c@{proof\_same\_plaintext\_multi.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_verify\_same\_plaintext\_multi()}{secp256k1\_mpt\_verify\_same\_plaintext\_multi()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi_8c_a763afcb3dc83d78ba058438a9370e0ac} 
+int secp256k1\+\_\+mpt\+\_\+verify\+\_\+same\+\_\+plaintext\+\_\+multi (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{size\+\_\+t}]{proof\+\_\+len}{, }\item[{size\+\_\+t}]{n}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{R}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{S}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Verifies a proof that N ciphertexts encrypt the same secret amount. 
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source_l00250}{250}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi_8c_a763afcb3dc83d78ba058438a9370e0ac_cgraph}
+\end{center}
+\end{figure}

@@ -1,0 +1,226 @@
+\doxysection{src/\+equality\+\_\+proof.c File Reference}
+\hypertarget{equality__proof_8c}{}\label{equality__proof_8c}\index{src/equality\_proof.c@{src/equality\_proof.c}}
+
+
+Zero-\/\+Knowledge Proof of Knowledge of Plaintext and Randomness.  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+Include dependency graph for equality\+\_\+proof.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{equality__proof_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar)
+\item 
+static int \doxymbox{\hyperlink{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}{compute\+\_\+amount\+\_\+point}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}mG, uint64\+\_\+t amount)
+\item 
+static void \doxymbox{\hyperlink{equality__proof_8c_a406d56417e45d82af45619dec5678048}{compute\+\_\+challenge\+\_\+equality}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}e\+\_\+out, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}mG, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}T2, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{equality__proof_8c_a1c067b6c0d1b841f48fad4df70e1a84a}{secp256k1\+\_\+equality\+\_\+plaintext\+\_\+prove}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk\+\_\+recipient, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}randomness\+\_\+r, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+context\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Generates a proof that an El\+Gamal ciphertext correctly encrypts a known plaintext {\ttfamily m} and that the prover knows the randomness {\ttfamily r}. \end{DoxyCompactList}\item 
+int \doxymbox{\hyperlink{equality__proof_8c_a083c0396f1877995d608e8f3caafd7ba}{secp256k1\+\_\+equality\+\_\+plaintext\+\_\+verify}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const unsigned char \texorpdfstring{$\ast$}{*}proof, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}c2, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk\+\_\+recipient, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}tx\+\_\+context\+\_\+id)
+\begin{DoxyCompactList}\small\item\em Verifies a proof of knowledge of plaintext and randomness. \end{DoxyCompactList}\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Zero-\/\+Knowledge Proof of Knowledge of Plaintext and Randomness. 
+
+This module implements a Sigma protocol (Chaum-\/\+Pedersen style) to prove that an El\+Gamal ciphertext $ (C_1, C_2) $ encrypts a specific known plaintext $ m $ under a public key $ P $, and that the prover knows the randomness $ r $ used in the encryption.
+
+{\bfseries{Statement:\+}} The prover demonstrates knowledge of $ r \in \mathbb{Z}_q $ such that:\+ \[ C_1 = r \cdot G \] \[ C_2 = m \cdot G + r \cdot P \]
+
+{\bfseries{Protocol:\+}}
+\begin{DoxyEnumerate}
+\item {\bfseries{Commitment:\+}} Prover samples $ t \leftarrow \mathbb{Z}_q $ and computes:\+ \[ T_1 = t \cdot G \] \[ T_2 = t \cdot P \]
+\item {\bfseries{Challenge:\+}} \[ e = H(\text{"MPT_POK_PLAINTEXT_PROOF"} \parallel C_1 \parallel C_2 \parallel P \parallel T_1 \parallel T_2 \parallel \dots) \]
+\item {\bfseries{Response:\+}} \[ s = t + e \cdot r \pmod{q} \]
+\item {\bfseries{Verification:\+}} Verifier checks:\+ \[ s \cdot G \stackrel{?}{=} T_1 + e \cdot C_1 \] \[ s \cdot P \stackrel{?}{=} T_2 + e \cdot (C_2 - m \cdot G) \]
+\end{DoxyEnumerate}
+
+{\bfseries{Context:\+}} This proof is used in {\ttfamily Confidential\+MPTConvert} (explicit randomness verification) and {\ttfamily Confidential\+MPTClawback} (where the issuer proves the ciphertext matches a revealed amount using their secret key, a variant of this logic).
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+3]\+ Optimized Ciphertext-\/\+Amount Consistency Protocol 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{equality__proof_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009}\index{equality\_proof.c@{equality\_proof.c}!compute\_amount\_point@{compute\_amount\_point}}
+\index{compute\_amount\_point@{compute\_amount\_point}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{compute\_amount\_point()}{compute\_amount\_point()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009} 
+int compute\+\_\+amount\+\_\+point (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{mG}{, }\item[{uint64\+\_\+t}]{amount}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00060}{60}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=336pt]{equality__proof_8c_a9a0a1101e6a9c85297ee14e90686e009_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{equality__proof_8c_a406d56417e45d82af45619dec5678048}\index{equality\_proof.c@{equality\_proof.c}!compute\_challenge\_equality@{compute\_challenge\_equality}}
+\index{compute\_challenge\_equality@{compute\_challenge\_equality}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{compute\_challenge\_equality()}{compute\_challenge\_equality()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_a406d56417e45d82af45619dec5678048} 
+void compute\+\_\+challenge\+\_\+equality (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{e\+\_\+out}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{mG}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{T2}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+context\+\_\+id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+Streaming Hash Builder (Avoids large stack buffers) 
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00072}{72}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{equality__proof_8c_a406d56417e45d82af45619dec5678048_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{equality__proof_8c_a406d56417e45d82af45619dec5678048_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0}\index{equality\_proof.c@{equality\_proof.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00053}{53}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=341pt]{equality__proof_8c_aeaf385d364818242f9b4d3d3c14312b0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{equality__proof_8c_ad323664144afbe26cc90816a513f79c0}\index{equality\_proof.c@{equality\_proof.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00049}{49}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=294pt]{equality__proof_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{equality__proof_8c_a1c067b6c0d1b841f48fad4df70e1a84a}\index{equality\_proof.c@{equality\_proof.c}!secp256k1\_equality\_plaintext\_prove@{secp256k1\_equality\_plaintext\_prove}}
+\index{secp256k1\_equality\_plaintext\_prove@{secp256k1\_equality\_plaintext\_prove}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_equality\_plaintext\_prove()}{secp256k1\_equality\_plaintext\_prove()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_a1c067b6c0d1b841f48fad4df70e1a84a} 
+int secp256k1\+\_\+equality\+\_\+plaintext\+\_\+prove (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk\+\_\+recipient}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{randomness\+\_\+r}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Generates a proof that an El\+Gamal ciphertext correctly encrypts a known plaintext {\ttfamily m} and that the prover knows the randomness {\ttfamily r}. 
+
+
+\begin{DoxyParams}[1]{Parameters}
+\doxymbox{\texttt{in}}  & {\em ctx} & A pointer to a valid secp256k1 context object, initialized for signing. \\
+\hline
+\doxymbox{\texttt{out}}  & {\em proof} & A pointer to a 98-\/byte buffer to store the proof (T1 \+[33 bytes]\+ \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} T2 \+[33 bytes]\+ \texorpdfstring{$\vert$}{|}\texorpdfstring{$\vert$}{|} s \+[32 bytes]\+). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em c1} & The C1 component of the ciphertext (r\texorpdfstring{$\ast$}{*}G). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em c2} & The C2 component of the ciphertext (m\texorpdfstring{$\ast$}{*}G + r\texorpdfstring{$\ast$}{*}\+Pk). \\
+\hline
+\doxymbox{\texttt{in}}  & {\em pk\+\_\+recipient} & The public key used for encryption. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em amount} & The known plaintext value {\ttfamily m}. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em randomness\+\_\+r} & The 32-\/byte secret random scalar {\ttfamily r} used in encryption. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em tx\+\_\+context\+\_\+id} & A 32-\/byte unique identifier for the transaction context.\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 on success, 0 on failure. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00115}{115}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{equality__proof_8c_a1c067b6c0d1b841f48fad4df70e1a84a_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{equality__proof_8c_a083c0396f1877995d608e8f3caafd7ba}\index{equality\_proof.c@{equality\_proof.c}!secp256k1\_equality\_plaintext\_verify@{secp256k1\_equality\_plaintext\_verify}}
+\index{secp256k1\_equality\_plaintext\_verify@{secp256k1\_equality\_plaintext\_verify}!equality\_proof.c@{equality\_proof.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_equality\_plaintext\_verify()}{secp256k1\_equality\_plaintext\_verify()}}
+{\footnotesize\ttfamily \label{equality__proof_8c_a083c0396f1877995d608e8f3caafd7ba} 
+int secp256k1\+\_\+equality\+\_\+plaintext\+\_\+verify (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{c2}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk\+\_\+recipient}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{tx\+\_\+context\+\_\+id}{}\end{DoxyParamCaption})}
+
+
+
+Verifies a proof of knowledge of plaintext and randomness. 
+
+Checks if the proof correctly demonstrates that (C1, C2) encrypts {\ttfamily m} under {\ttfamily pk\+\_\+recipient}.
+
+
+\begin{DoxyParams}[1]{Parameters}
+\doxymbox{\texttt{in}}  & {\em ctx} & A pointer to a valid secp256k1 context object, initialized for verification. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em proof} & A pointer to the 98-\/byte proof to verify. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em c1} & The C1 component of the ciphertext. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em c2} & The C2 component of the ciphertext. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em pk\+\_\+recipient} & The public key used for encryption. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em amount} & The known plaintext value {\ttfamily m}. \\
+\hline
+\doxymbox{\texttt{in}}  & {\em tx\+\_\+context\+\_\+id} & A 32-\/byte unique identifier for the transaction context.\\
+\hline
+\end{DoxyParams}
+\begin{DoxyReturn}{Returns}
+1 if the proof is valid, 0 otherwise. 
+\end{DoxyReturn}
+
+
+Definition at line \doxymbox{\hyperlink{equality__proof_8c_source_l00181}{181}} of file \doxymbox{\hyperlink{equality__proof_8c_source}{equality\+\_\+proof.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{equality__proof_8c_a083c0396f1877995d608e8f3caafd7ba_cgraph}
+\end{center}
+\end{figure}

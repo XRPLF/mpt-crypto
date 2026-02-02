@@ -1,0 +1,55 @@
+<map id="secp256k1_mpt_scalar_reduce32" name="secp256k1_mpt_scalar_reduce32">
+<area shape="rect" id="Node000001" title=" " alt="" coords="682,627,838,667"/>
+<area shape="rect" id="Node000002" href="$proof__link_8c.html#a18ee785f7b6770e97477bc57847f9c88" title=" " alt="" coords="456,78,628,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="752,610,739,533,716,428,681,311,658,253,632,198,615,170,594,145,558,107,558,102,598,142,619,167,637,195,663,251,686,309,721,427,744,532,757,612"/>
+<area shape="rect" id="Node000005" href="$proof__pok__sk_8c.html#a9f8bba911c73dcc01ec5eb2385dc8d8f" title=" " alt="" coords="472,209,611,234"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="747,611,731,554,706,480,673,399,632,322,594,273,559,238,558,232,598,270,637,319,678,397,711,478,736,553,753,613"/>
+<area shape="rect" id="Node000008" href="$proof__same__plaintext_8c.html#a5075fc89f4a81ba103f51c12909ec8ad" title=" " alt="" coords="470,332,613,373"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="736,613,690,542,632,459,562,376,563,370,636,456,695,539,741,614"/>
+<area shape="rect" id="Node000011" href="$equality__proof_8c.html#a406d56417e45d82af45619dec5678048" title=" " alt="" coords="449,470,634,496"/>
+<area shape="poly" id="edge10_Node000001_Node000011" title=" " alt="" coords="717,618,560,499,561,494,722,617"/>
+<area shape="rect" id="Node000014" href="$proof__same__plaintext__multi__shared__r_8c.html#a8567301fbdfbc17bd43d31d6f8ba3531" title=" " alt="" coords="449,593,634,634"/>
+<area shape="poly" id="edge13_Node000001_Node000014" title=" " alt="" coords="665,633,635,630,634,625,670,632"/>
+<area shape="rect" id="Node000017" href="$proof__same__plaintext__multi_8c.html#ab19601480ad097fbeefe911f64001251" title=" " alt="" coords="458,666,626,692"/>
+<area shape="poly" id="edge16_Node000001_Node000017" title=" " alt="" coords="664,662,627,669,626,664,669,660"/>
+<area shape="rect" id="Node000020" href="$bulletproof__aggregated_8c.html#a11ef6ada10a3709c94de8753017d59f0" title=" " alt="" coords="239,953,367,994"/>
+<area shape="poly" id="edge19_Node000001_Node000020" title=" " alt="" coords="752,680,737,729,714,784,680,839,660,864,636,886,605,908,571,926,499,952,429,967,368,974,367,969,428,961,498,946,569,921,602,903,633,882,656,861,676,836,709,782,732,728,748,684"/>
+<area shape="rect" id="Node000021" href="$bulletproof__aggregated_8c.html#a961fdecda5bee93aa0667bd722478255" title=" " alt="" coords="5,839,157,879"/>
+<area shape="poly" id="edge27_Node000001_Node000021" title=" " alt="" coords="701,675,635,707,517,749,423,776,205,830,158,842,155,837,204,824,421,771,515,744,633,702,706,673"/>
+<area shape="rect" id="Node000022" href="$bulletproof__aggregated_8c.html#a0f8215fab678563b03757e56cb7e5308" title=" " alt="" coords="5,953,157,994"/>
+<area shape="poly" id="edge28_Node000001_Node000022" title=" " alt="" coords="758,681,749,745,728,823,712,863,692,902,667,937,636,968,608,988,578,1004,514,1026,446,1037,377,1039,310,1034,246,1023,143,997,144,992,247,1018,310,1028,377,1034,446,1032,513,1021,576,999,605,983,633,964,663,934,687,899,707,861,723,821,744,744,754,685"/>
+<area shape="rect" id="Node000023" href="$bulletproof__aggregated_8c.html#a908ed3c3cddc486034e426c6c64d6270" title=" " alt="" coords="451,846,632,872"/>
+<area shape="poly" id="edge22_Node000001_Node000023" title=" " alt="" coords="744,680,700,752,670,790,636,822,613,837,589,848,587,843,611,832,633,818,667,786,696,749,739,683"/>
+<area shape="rect" id="Node000003" href="$proof__link_8c.html#ad119770e3c09b5f96f2bf7d33a228f68" title="Proves the link between an ElGamal ciphertext and a Pedersen commitment." alt="" coords="205,71,401,111"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="438,93,403,93,400,89,442,89"/>
+<area shape="rect" id="Node000004" href="$proof__link_8c.html#ae9383c9458394fa15006e7014c0753f1" title="Verifies the link proof between ElGamal and Pedersen commitments." alt="" coords="205,5,401,46"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="475,75,381,49,379,44,480,72"/>
+<area shape="rect" id="Node000006" href="$proof__pok__sk_8c.html#af628ab6192e8b1cab4d63ff17e5e5b4f" title=" " alt="" coords="222,201,384,242"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="455,223,386,224,383,219,459,220"/>
+<area shape="rect" id="Node000007" href="$proof__pok__sk_8c.html#a900a067a62bcf194a5546f22ee1f86b5" title=" " alt="" coords="222,136,384,177"/>
+<area shape="poly" id="edge6_Node000005_Node000007" title=" " alt="" coords="475,206,381,180,379,175,480,203"/>
+<area shape="rect" id="Node000009" href="$proof__same__plaintext_8c.html#a7b5e8127e713b22a6226224f135d80c3" title="Generates a proof that two ciphertexts (under different keys) encrypt the same secret amount &#39;m&#39;." alt="" coords="227,332,379,373"/>
+<area shape="poly" id="edge8_Node000008_Node000009" title=" " alt="" coords="452,354,381,355,378,350,456,351"/>
+<area shape="rect" id="Node000010" href="$proof__same__plaintext_8c.html#ab6dc267e2d35e156732dabce4b5f38ff" title="Verifies a proof that two ciphertexts encrypt the same secret amount." alt="" coords="227,267,379,307"/>
+<area shape="poly" id="edge9_Node000008_Node000010" title=" " alt="" coords="452,330,380,310,379,305,457,327"/>
+<area shape="rect" id="Node000012" href="$equality__proof_8c.html#a1c067b6c0d1b841f48fad4df70e1a84a" title="Generates a proof that an ElGamal ciphertext correctly encrypts a known plaintext m and that the prov..." alt="" coords="235,463,371,503"/>
+<area shape="poly" id="edge11_Node000011_Node000012" title=" " alt="" coords="431,484,372,485,370,481,435,482"/>
+<area shape="rect" id="Node000013" href="$equality__proof_8c.html#a083c0396f1877995d608e8f3caafd7ba" title="Verifies a proof of knowledge of plaintext and randomness." alt="" coords="235,397,371,438"/>
+<area shape="poly" id="edge12_Node000011_Node000013" title=" " alt="" coords="475,467,372,439,371,434,480,464"/>
+<area shape="rect" id="Node000015" href="$proof__same__plaintext__multi__shared__r_8c.html#aac27be764c6b221d93ad846e54ec41af" title=" " alt="" coords="227,593,379,634"/>
+<area shape="poly" id="edge14_Node000014_Node000015" title=" " alt="" coords="431,615,380,616,379,611,436,612"/>
+<area shape="rect" id="Node000016" href="$proof__same__plaintext__multi__shared__r_8c.html#ae0c79d0464d4940381eab1ac3de0bf8c" title=" " alt="" coords="227,528,379,569"/>
+<area shape="poly" id="edge15_Node000014_Node000016" title=" " alt="" coords="448,590,380,572,379,567,453,588"/>
+<area shape="rect" id="Node000018" href="$proof__same__plaintext__multi_8c.html#af2ac55beba54985b65a88e8c0cac58f7" title="Generates a proof that N ciphertexts encrypt the same secret amount &#39;m&#39;." alt="" coords="227,724,379,765"/>
+<area shape="poly" id="edge17_Node000017_Node000018" title=" " alt="" coords="475,698,381,726,378,721,480,695"/>
+<area shape="rect" id="Node000019" href="$proof__same__plaintext__multi_8c.html#a763afcb3dc83d78ba058438a9370e0ac" title="Verifies a proof that N ciphertexts encrypt the same secret amount." alt="" coords="227,659,379,699"/>
+<area shape="poly" id="edge18_Node000017_Node000019" title=" " alt="" coords="440,680,380,682,379,676,444,678"/>
+<area shape="poly" id="edge20_Node000020_Node000021" title=" " alt="" coords="222,951,203,944,151,913,109,883,109,877,154,909,206,939,227,950"/>
+<area shape="poly" id="edge21_Node000020_Node000022" title=" " alt="" coords="220,974,157,976,157,971,225,973"/>
+<area shape="rect" id="Node000024" href="$bulletproof__aggregated_8c.html#a973f4819c6216ff34f80888dca08e8c4" title=" " alt="" coords="240,904,366,929"/>
+<area shape="poly" id="edge23_Node000023_Node000024" title=" " alt="" coords="468,877,360,905,359,900,473,875"/>
+<area shape="rect" id="Node000025" href="$bulletproof__aggregated_8c.html#a0f2171e520416eff8a0019eba26fb52c" title=" " alt="" coords="227,839,378,879"/>
+<area shape="poly" id="edge25_Node000023_Node000025" title=" " alt="" coords="433,860,379,862,378,856,438,858"/>
+<area shape="poly" id="edge24_Node000024_Node000022" title=" " alt="" coords="233,935,158,957,156,952,238,932"/>
+<area shape="poly" id="edge26_Node000025_Node000021" title=" " alt="" coords="209,860,158,862,156,856,214,858"/>
+</map>

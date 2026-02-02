@@ -1,3 +1,44 @@
+/**
+ * @file proof_same_plaintext_multi_shared_r.c
+ * @brief Zero-Knowledge Proof of Plaintext Equality (1-to-N, Shared Randomness).
+ *
+ * This module implements an optimized multi-recipient Sigma protocol to prove that
+ * \f$ N \f$ distinct ElGamal ciphertexts encrypt the **same** plaintext amount \f$ m \f$
+ * using the **same** randomness \f$ r \f$, but under different public keys.
+ *
+ * @details
+ * **Statement:**
+ * Given a shared ephemeral key \f$ C_1 = r \cdot G \f$ and \f$ N \f$ components
+ * \f$ C_{2,i} = m \cdot G + r \cdot P_i \f$ (where \f$ P_i \f$ is the public key for recipient \f$ i \f$),
+ * the prover demonstrates knowledge of scalars \f$ m, r \f$ such that all equations hold.
+ *
+ * **Optimization:**
+ * Unlike the general "Multi-Statement" proof (where \f$ r_i \f$ varies), this variant
+ * enforces \f$ r_1 = r_2 = \dots = r_N = r \f$. This reduces the proof size significantly
+ * because we only need one response scalar \f$ s_r \f$ for the randomness, rather than \f$ N \f$.
+ *
+ * **Protocol:**
+ * 1. **Commitments:**
+ * - \f$ T_r = k_r \cdot G \f$ (Commitment to shared randomness nonce)
+ * - \f$ T_{m,i} = k_m \cdot G + k_r \cdot P_i \f$ (Commitment for each recipient)
+ *
+ * 2. **Challenge:**
+ * \f$ e = H(\dots \parallel C_1 \parallel \{C_{2,i}, P_i\} \parallel T_r \parallel \{T_{m,i}\} \dots) \f$
+ *
+ * 3. **Responses:**
+ * - \f$ s_m = k_m + e \cdot m \f$
+ * - \f$ s_r = k_r + e \cdot r \f$
+ *
+ * 4. **Verification:**
+ * - \f$ s_r \cdot G \stackrel{?}{=} T_r + e \cdot C_1 \f$
+ * - For each \f$ i \f$: \f$ s_m \cdot G + s_r \cdot P_i \stackrel{?}{=} T_{m,i} + e \cdot C_{2,i} \f$
+ *
+ * **Security Context:**
+ * This is used for broadcast-style transactions where the sender wants to prove to multiple
+ * auditors or recipients that they are all receiving the exact same message/amount, efficiently.
+ *
+ * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.4] Proof of Equality of Plaintexts with Shared Randomness
+ */
 #include "secp256k1_mpt.h"
 #include <openssl/sha.h>
 #include <openssl/rand.h>
@@ -41,7 +82,7 @@ static void compute_challenge_equality_shared_r(
     unsigned char h[32];
     size_t len;
     size_t i;
-    const char* domain = "MPT_POK_EQUALITY_SHARED_R";
+    const char* domain = "MPT_POK_SAME_PLAINTEXT_SHARED_R";
 
     SHA256_Init(&sha);
     SHA256_Update(&sha, domain, strlen(domain));

@@ -1,0 +1,13 @@
+<map id="secp256k1_elgamal_pedersen_link_verify" name="secp256k1_elgamal_pedersen_link_verify">
+<area shape="rect" id="Node000001" title="Verifies the link proof between ElGamal and Pedersen commitments." alt="" coords="5,55,202,95"/>
+<area shape="rect" id="Node000002" href="$proof__link_8c.html#a18ee785f7b6770e97477bc57847f9c88" title=" " alt="" coords="250,13,422,38"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="201,52,260,41,255,43,203,57"/>
+<area shape="rect" id="Node000004" href="$proof__link_8c.html#ad323664144afbe26cc90816a513f79c0" title=" " alt="" coords="285,62,386,88"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="202,72,272,74,267,76,203,78"/>
+<area shape="rect" id="Node000005" href="$commitments_8c.html#a7aaffafbd7bf29380177a031c673872b" title="Derives the secondary base point (H) for Pedersen commitments." alt="" coords="260,112,412,153"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="189,93,247,110,242,110,188,99"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#aac5cece668acbd6bb052aafe9e3eaa75" title=" " alt="" coords="470,5,625,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="422,23,457,25,451,26,423,28"/>
+<area shape="rect" id="Node000006" href="$commitments_8c.html#a9cc043f2f420bd7eab3f0f13e48e9afd" title="Deterministically derives a NUMS (Nothing&#45;Up&#45;My&#45;Sleeve) generator point." alt="" coords="474,112,622,153"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="412,130,461,132,455,132,412,135"/>
+</map>

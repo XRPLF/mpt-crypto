@@ -446,6 +446,32 @@ int secp256k1_mpt_verify_equality_shared_r(
         const unsigned char* context_id
 );
 
+int secp256k1_bulletproof_prove_agg(
+        const secp256k1_context* ctx,
+        unsigned char* proof_out,
+        size_t* proof_len,
+        const uint64_t* values,
+        const unsigned char* blindings_flat,
+        size_t m,
+        const secp256k1_pubkey* pk_base,
+        const unsigned char* context_id
+);
+int secp256k1_bulletproof_verify_agg(
+        const secp256k1_context* ctx,
+        const secp256k1_pubkey* G_vec,              /* length n = 64*m */
+        const secp256k1_pubkey* H_vec,              /* length n = 64*m */
+        const unsigned char* proof,
+        size_t proof_len,
+        const secp256k1_pubkey* commitment_C_vec,   /* length m */
+        size_t m,
+        const secp256k1_pubkey* pk_base,
+        const unsigned char* context_id
+);
+
+
+
+
+
 #ifdef __cplusplus
 }
 #endif

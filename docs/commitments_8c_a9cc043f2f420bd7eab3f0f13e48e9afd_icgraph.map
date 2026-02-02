@@ -1,0 +1,17 @@
+<map id="secp256k1_mpt_hash_to_point_nums" name="secp256k1_mpt_hash_to_point_nums">
+<area shape="rect" id="Node000001" title="Deterministically derives a NUMS (Nothing&#45;Up&#45;My&#45;Sleeve) generator point." alt="" coords="497,136,645,177"/>
+<area shape="rect" id="Node000002" href="$commitments_8c.html#a6a45b5b11888db76787492c2eab2754a" title="Generates a vector of N independent NUMS generators." alt="" coords="250,71,449,111"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="483,132,421,115,421,109,488,131"/>
+<area shape="rect" id="Node000005" href="$commitments_8c.html#a7aaffafbd7bf29380177a031c673872b" title="Derives the secondary base point (H) for Pedersen commitments." alt="" coords="273,168,426,209"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="480,170,426,180,425,175,485,169"/>
+<area shape="rect" id="Node000003" href="$bulletproof__aggregated_8c.html#a961fdecda5bee93aa0667bd722478255" title=" " alt="" coords="28,5,179,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="253,67,180,48,179,43,258,65"/>
+<area shape="rect" id="Node000004" href="$bulletproof__aggregated_8c.html#a0f8215fab678563b03757e56cb7e5308" title=" " alt="" coords="28,71,179,111"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="231,92,181,94,179,88,236,90"/>
+<area shape="rect" id="Node000006" href="$proof__link_8c.html#ad119770e3c09b5f96f2bf7d33a228f68" title="Proves the link between an ElGamal ciphertext and a Pedersen commitment." alt="" coords="5,136,202,177"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="255,177,202,172,202,166,261,176"/>
+<area shape="rect" id="Node000007" href="$proof__link_8c.html#ae9383c9458394fa15006e7014c0753f1" title="Verifies the link proof between ElGamal and Pedersen commitments." alt="" coords="5,201,202,242"/>
+<area shape="poly" id="edge6_Node000005_Node000007" title=" " alt="" coords="255,202,203,211,201,206,260,200"/>
+<area shape="rect" id="Node000008" href="$commitments_8c.html#a2b41edc19e3c26a6b927dbc3fc03c445" title="Creates a Pedersen Commitment C = amount*G + rho*H." alt="" coords="17,267,190,307"/>
+<area shape="poly" id="edge7_Node000005_Node000008" title=" " alt="" coords="293,215,203,256,169,269,167,264,201,251,288,216"/>
+</map>

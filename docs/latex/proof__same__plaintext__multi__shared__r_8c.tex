@@ -1,0 +1,192 @@
+\doxysection{src/\+proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.c File Reference}
+\hypertarget{proof__same__plaintext__multi__shared__r_8c}{}\label{proof__same__plaintext__multi__shared__r_8c}\index{src/proof\_same\_plaintext\_multi\_shared\_r.c@{src/proof\_same\_plaintext\_multi\_shared\_r.c}}
+
+
+Zero-\/\+Knowledge Proof of Plaintext Equality (1-\/to-\/N, Shared Randomness).  
+
+
+{\ttfamily \+\#include "{}secp256k1\+\_\+mpt.\+h"{}}\newline
+{\ttfamily \+\#include $<$openssl/\+sha.\+h$>$}\newline
+{\ttfamily \+\#include $<$openssl/\+rand.\+h$>$}\newline
+{\ttfamily \+\#include $<$string.\+h$>$}\newline
+{\ttfamily \+\#include $<$stdlib.\+h$>$}\newline
+Include dependency graph for proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c__incl}
+\end{center}
+\end{figure}
+\doxysubsubsection*{Functions}
+\begin{DoxyCompactItemize}
+\item 
+static int \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_ad323664144afbe26cc90816a513f79c0}{pubkey\+\_\+equal}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}pk2)
+\item 
+static int \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_aeaf385d364818242f9b4d3d3c14312b0}{generate\+\_\+random\+\_\+scalar}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}scalar)
+\item 
+size\+\_\+t \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_a7c5a4263375f8d6de5b18b7948a97aa3}{secp256k1\+\_\+mpt\+\_\+proof\+\_\+equality\+\_\+shared\+\_\+r\+\_\+size}} (size\+\_\+t n\+\_\+recipients)
+\item 
+static void \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_a8567301fbdfbc17bd43d31d6f8ba3531}{compute\+\_\+challenge\+\_\+equality\+\_\+shared\+\_\+r}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}e\+\_\+out, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C2\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Tr, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Tm\+\_\+vec, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_aac27be764c6b221d93ad846e54ec41af}{secp256k1\+\_\+mpt\+\_\+prove\+\_\+equality\+\_\+shared\+\_\+r}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, unsigned char \texorpdfstring{$\ast$}{*}proof\+\_\+out, uint64\+\_\+t amount, const unsigned char \texorpdfstring{$\ast$}{*}r\+\_\+shared, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C2\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk\+\_\+vec, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\item 
+int \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_ae0c79d0464d4940381eab1ac3de0bf8c}{secp256k1\+\_\+mpt\+\_\+verify\+\_\+equality\+\_\+shared\+\_\+r}} (const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}ctx, const unsigned char \texorpdfstring{$\ast$}{*}proof, size\+\_\+t n, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C1, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}C2\+\_\+vec, const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}Pk\+\_\+vec, const unsigned char \texorpdfstring{$\ast$}{*}context\+\_\+id)
+\end{DoxyCompactItemize}
+
+
+\doxysubsection{Detailed Description}
+Zero-\/\+Knowledge Proof of Plaintext Equality (1-\/to-\/N, Shared Randomness). 
+
+This module implements an optimized multi-\/recipient Sigma protocol to prove that $ N $ distinct El\+Gamal ciphertexts encrypt the {\bfseries{same}} plaintext amount $ m $ using the {\bfseries{same}} randomness $ r $, but under different public keys.
+
+{\bfseries{Statement:\+}} Given a shared ephemeral key $ C_1 = r \cdot G $ and $ N $ components $ C_{2,i} = m \cdot G + r \cdot P_i $ (where $ P_i $ is the public key for recipient $ i $), the prover demonstrates knowledge of scalars $ m, r $ such that all equations hold.
+
+{\bfseries{Optimization:\+}} Unlike the general "{}\+Multi-\/\+Statement"{} proof (where $ r_i $ varies), this variant enforces $ r_1 = r_2 = \dots = r_N = r $. This reduces the proof size significantly because we only need one response scalar $ s_r $ for the randomness, rather than $ N $.
+
+{\bfseries{Protocol:\+}}
+\begin{DoxyEnumerate}
+\item {\bfseries{Commitments:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ T_r = k_r \cdot G $ (Commitment to shared randomness nonce)
+\item $ T_{m,i} = k_m \cdot G + k_r \cdot P_i $ (Commitment for each recipient)
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Challenge:\+}} $ e = H(\dots \parallel C_1 \parallel \{C_{2,i}, P_i\} \parallel T_r \parallel \{T_{m,i}\} \dots) $
+\item {\bfseries{Responses:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_m = k_m + e \cdot m $
+\item $ s_r = k_r + e \cdot r $
+\end{DoxyItemize}
+\begin{DoxyEnumerate}
+\item {\bfseries{Verification:\+}}
+\end{DoxyEnumerate}
+\begin{DoxyItemize}
+\item $ s_r \cdot G \stackrel{?}{=} T_r + e \cdot C_1 $
+\item For each $ i $:\+ $ s_m \cdot G + s_r \cdot P_i \stackrel{?}{=} T_{m,i} + e \cdot C_{2,i} $
+\end{DoxyItemize}
+
+{\bfseries{Security Context:\+}} This is used for broadcast-\/style transactions where the sender wants to prove to multiple auditors or recipients that they are all receiving the exact same message/\+amount, efficiently.
+
+\begin{DoxySeeAlso}{See also}
+\+[Spec (Confidential\+MPT\+\_\+20260201.\+pdf) Section 3.\+3.\+4]\+ Proof of Equality of Plaintexts with Shared Randomness 
+\end{DoxySeeAlso}
+
+
+Definition in file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+
+
+\label{doc-func-members}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_doc-func-members}
+\doxysubsection{Function Documentation}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_a8567301fbdfbc17bd43d31d6f8ba3531}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!compute\_challenge\_equality\_shared\_r@{compute\_challenge\_equality\_shared\_r}}
+\index{compute\_challenge\_equality\_shared\_r@{compute\_challenge\_equality\_shared\_r}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{compute\_challenge\_equality\_shared\_r()}{compute\_challenge\_equality\_shared\_r()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_a8567301fbdfbc17bd43d31d6f8ba3531} 
+void compute\+\_\+challenge\+\_\+equality\+\_\+shared\+\_\+r (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{e\+\_\+out}{, }\item[{size\+\_\+t}]{n}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C2\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Tr}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Tm\+\_\+vec}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00069}{69}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_a8567301fbdfbc17bd43d31d6f8ba3531_cgraph}
+\end{center}
+\end{figure}
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_a8567301fbdfbc17bd43d31d6f8ba3531_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_aeaf385d364818242f9b4d3d3c14312b0}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!generate\_random\_scalar@{generate\_random\_scalar}}
+\index{generate\_random\_scalar@{generate\_random\_scalar}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{generate\_random\_scalar()}{generate\_random\_scalar()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_aeaf385d364818242f9b4d3d3c14312b0} 
+int generate\+\_\+random\+\_\+scalar (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{scalar}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00054}{54}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_aeaf385d364818242f9b4d3d3c14312b0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_ad323664144afbe26cc90816a513f79c0}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!pubkey\_equal@{pubkey\_equal}}
+\index{pubkey\_equal@{pubkey\_equal}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{pubkey\_equal()}{pubkey\_equal()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_ad323664144afbe26cc90816a513f79c0} 
+int pubkey\+\_\+equal (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{pk2}{}\end{DoxyParamCaption})\hspace{0.3cm}{\ttfamily [static]}}
+
+
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00050}{50}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=306pt]{proof__same__plaintext__multi__shared__r_8c_ad323664144afbe26cc90816a513f79c0_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_a7c5a4263375f8d6de5b18b7948a97aa3}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!secp256k1\_mpt\_proof\_equality\_shared\_r\_size@{secp256k1\_mpt\_proof\_equality\_shared\_r\_size}}
+\index{secp256k1\_mpt\_proof\_equality\_shared\_r\_size@{secp256k1\_mpt\_proof\_equality\_shared\_r\_size}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_proof\_equality\_shared\_r\_size()}{secp256k1\_mpt\_proof\_equality\_shared\_r\_size()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_a7c5a4263375f8d6de5b18b7948a97aa3} 
+size\+\_\+t secp256k1\+\_\+mpt\+\_\+proof\+\_\+equality\+\_\+shared\+\_\+r\+\_\+size (\begin{DoxyParamCaption}\item[{size\+\_\+t}]{n}{}\end{DoxyParamCaption})}
+
+Returns the size of the serialized proof for N recipients. Size:\+ (1 + N) \texorpdfstring{$\ast$}{*} 33 bytes for points + 2 \texorpdfstring{$\ast$}{*} 32 bytes for scalars. 
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00061}{61}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the caller graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_a7c5a4263375f8d6de5b18b7948a97aa3_icgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_aac27be764c6b221d93ad846e54ec41af}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!secp256k1\_mpt\_prove\_equality\_shared\_r@{secp256k1\_mpt\_prove\_equality\_shared\_r}}
+\index{secp256k1\_mpt\_prove\_equality\_shared\_r@{secp256k1\_mpt\_prove\_equality\_shared\_r}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_prove\_equality\_shared\_r()}{secp256k1\_mpt\_prove\_equality\_shared\_r()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_aac27be764c6b221d93ad846e54ec41af} 
+int secp256k1\+\_\+mpt\+\_\+prove\+\_\+equality\+\_\+shared\+\_\+r (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{unsigned char \texorpdfstring{$\ast$}{*}}]{proof\+\_\+out}{, }\item[{uint64\+\_\+t}]{amount}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{r\+\_\+shared}{, }\item[{size\+\_\+t}]{n}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C2\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk\+\_\+vec}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+Generates a proof that multiple ciphertexts encrypt the same amount m using the SAME shared randomness r. 
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00123}{123}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_aac27be764c6b221d93ad846e54ec41af_cgraph}
+\end{center}
+\end{figure}
+\Hypertarget{proof__same__plaintext__multi__shared__r_8c_ae0c79d0464d4940381eab1ac3de0bf8c}\index{proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}!secp256k1\_mpt\_verify\_equality\_shared\_r@{secp256k1\_mpt\_verify\_equality\_shared\_r}}
+\index{secp256k1\_mpt\_verify\_equality\_shared\_r@{secp256k1\_mpt\_verify\_equality\_shared\_r}!proof\_same\_plaintext\_multi\_shared\_r.c@{proof\_same\_plaintext\_multi\_shared\_r.c}}
+\doxysubsubsection{\texorpdfstring{secp256k1\_mpt\_verify\_equality\_shared\_r()}{secp256k1\_mpt\_verify\_equality\_shared\_r()}}
+{\footnotesize\ttfamily \label{proof__same__plaintext__multi__shared__r_8c_ae0c79d0464d4940381eab1ac3de0bf8c} 
+int secp256k1\+\_\+mpt\+\_\+verify\+\_\+equality\+\_\+shared\+\_\+r (\begin{DoxyParamCaption}\item[{const secp256k1\+\_\+context \texorpdfstring{$\ast$}{*}}]{ctx}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{proof}{, }\item[{size\+\_\+t}]{n}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C1}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{C2\+\_\+vec}{, }\item[{const secp256k1\+\_\+pubkey \texorpdfstring{$\ast$}{*}}]{Pk\+\_\+vec}{, }\item[{const unsigned char \texorpdfstring{$\ast$}{*}}]{context\+\_\+id}{}\end{DoxyParamCaption})}
+
+Verifies the proof of equality with shared randomness. 
+
+Definition at line \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source_l00234}{234}} of file \doxymbox{\hyperlink{proof__same__plaintext__multi__shared__r_8c_source}{proof\+\_\+same\+\_\+plaintext\+\_\+multi\+\_\+shared\+\_\+r.\+c}}.
+
+Here is the call graph for this function:\+\nopagebreak
+\begin{figure}[H]
+\begin{center}
+\leavevmode
+\includegraphics[width=350pt]{proof__same__plaintext__multi__shared__r_8c_ae0c79d0464d4940381eab1ac3de0bf8c_cgraph}
+\end{center}
+\end{figure}

@@ -1,0 +1,9 @@
+<map id="secp256k1_mpt_get_h_generator" name="secp256k1_mpt_get_h_generator">
+<area shape="rect" id="Node000001" title="Derives the secondary base point (H) for Pedersen commitments." alt="" coords="250,71,402,111"/>
+<area shape="rect" id="Node000002" href="$proof__link_8c.html#ad119770e3c09b5f96f2bf7d33a228f68" title="Proves the link between an ElGamal ciphertext and a Pedersen commitment." alt="" coords="5,5,202,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="237,67,175,49,175,44,242,65"/>
+<area shape="rect" id="Node000003" href="$proof__link_8c.html#ae9383c9458394fa15006e7014c0753f1" title="Verifies the link proof between ElGamal and Pedersen commitments." alt="" coords="5,71,202,111"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="232,92,202,94,202,88,237,90"/>
+<area shape="rect" id="Node000004" href="$commitments_8c.html#a2b41edc19e3c26a6b927dbc3fc03c445" title="Creates a Pedersen Commitment C = amount*G + rho*H." alt="" coords="17,136,190,177"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="242,116,176,138,175,133,237,117"/>
+</map>

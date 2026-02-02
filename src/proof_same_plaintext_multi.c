@@ -1,3 +1,48 @@
+/**
+ * @file proof_same_plaintext_multi.c
+ * @brief Zero-Knowledge Proof of Plaintext Equality (1-to-N).
+ *
+ * This module implements a generalized multi-statement Sigma protocol to prove that
+ * \f$ N \f$ distinct ElGamal ciphertexts all encrypt the **same** underlying
+ * plaintext amount \f$ m \f$, using distinct randomness \f$ r_i \f$ for each.
+ *
+ * @details
+ * **Statement:**
+ * Given \f$ N \f$ ciphertexts \f$ (R_i, S_i) \f$ encrypted under public keys \f$ P_i \f$,
+ * the prover demonstrates knowledge of scalars \f$ m \f$ and \f$ \{r_1, \dots, r_N\} \f$
+ * such that for all \f$ i \in [1, N] \f$:
+ * 1. \f$ R_i = r_i \cdot G \f$
+ * 2. \f$ S_i = m \cdot G + r_i \cdot P_i \f$
+ *
+ * **Protocol (Shared Amount Nonce):**
+ * The efficiency gain comes from reusing the random nonce for the amount (\f$ k_m \f$)
+ * across all \f$ N \f$ proofs, tying them mathematically to the same value \f$ m \f$.
+ *
+ * 1. **Commitments:**
+ * - \f$ T_m = k_m \cdot G \f$ (Shared commitment to amount nonce)
+ * - For each \f$ i \f$:
+ * - \f$ T_{r,G}^{(i)} = k_{r,i} \cdot G \f$
+ * - \f$ T_{r,P}^{(i)} = k_{r,i} \cdot P_i \f$
+ *
+ * 2. **Challenge:**
+ * \f[ e = H(\dots \parallel T_m \parallel \{T_{r,G}^{(i)}, T_{r,P}^{(i)}\}_{i=1}^N \parallel \dots) \f]
+ *
+ * 3. **Responses:**
+ * - \f$ s_m = k_m + e \cdot m \f$ (Shared response for amount)
+ * - For each \f$ i \f$: \f$ s_{r,i} = k_{r,i} + e \cdot r_i \f$
+ *
+ * 4. **Verification:**
+ * For each \f$ i \in [1, N] \f$, the verifier checks:
+ * - \f$ s_{r,i} \cdot G \stackrel{?}{=} T_{r,G}^{(i)} + e \cdot R_i \f$
+ * - \f$ s_m \cdot G + s_{r,i} \cdot P_i \stackrel{?}{=} T_m + T_{r,P}^{(i)} + e \cdot S_i \f$
+ *
+ * **Security Context:**
+ * This is crucial for "fan-out" transactions or auditing scenarios where a single value
+ * must be proven correct against multiple encrypted destinations simultaneously, ensuring
+ * consistency without revealing the value.
+ *
+ * @see [Spec (ConfidentialMPT_20260106.pdf) Section 3.3.4] Generalization for Multiple Ciphertexts
+ */
 #include "secp256k1_mpt.h"
 #include <openssl/sha.h>
 #include <openssl/rand.h>

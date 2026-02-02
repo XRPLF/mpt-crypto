@@ -1,0 +1,7 @@
+<map id="secp256k1_bulletproof_ipa_compress_step" name="secp256k1_bulletproof_ipa_compress_step">
+<area shape="rect" id="Node000001" title=" " alt="" coords="5,23,157,64"/>
+<area shape="rect" id="Node000002" href="$mpt__scalar_8c.html#abc19bd5be104bcd602d306f3fa543c08" title=" " alt="" coords="205,5,388,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="157,32,192,30,187,31,158,37"/>
+<area shape="rect" id="Node000003" href="$mpt__scalar_8c.html#a8e15477ac841922f6d5b03b1b21de1a9" title=" " alt="" coords="205,55,388,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="157,49,192,55,186,56,157,55"/>
+</map>

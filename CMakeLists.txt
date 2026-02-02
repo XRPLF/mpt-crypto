@@ -29,12 +29,13 @@ add_library(mpt-crypto
         src/equality_proof.c
         src/proof_same_plaintext.c
         src/proof_same_plaintext_multi.c
-        src/bulletproof.c
+        #src/bulletproof.c
         src/proof_link.c
         src/proof_pok_sk.c
         src/commitments.c
         src/mpt_scalar.c
         src/proof_same_plaintext_multi_shared_r.c
+        src/bulletproof_aggregated.c
         )
 
 # --- Set Include Directories ---

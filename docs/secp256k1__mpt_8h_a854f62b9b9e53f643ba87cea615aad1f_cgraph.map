@@ -1,0 +1,7 @@
+<map id="secp256k1_mpt_pedersen_commit" name="secp256k1_mpt_pedersen_commit">
+<area shape="rect" id="Node000001" title="Creates a Pedersen Commitment C = amount*G + rho*H." alt="" coords="5,5,179,46"/>
+<area shape="rect" id="Node000002" href="$commitments_8c.html#a7aaffafbd7bf29380177a031c673872b" title="Derives the secondary base point (H) for Pedersen commitments." alt="" coords="227,5,379,46"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="179,23,214,25,208,26,179,28"/>
+<area shape="rect" id="Node000003" href="$commitments_8c.html#a9cc043f2f420bd7eab3f0f13e48e9afd" title="Deterministically derives a NUMS (Nothing&#45;Up&#45;My&#45;Sleeve) generator point." alt="" coords="427,5,575,46"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="379,23,414,26,409,26,379,28"/>
+</map>

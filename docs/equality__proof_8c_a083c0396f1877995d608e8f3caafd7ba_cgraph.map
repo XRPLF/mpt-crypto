@@ -1,0 +1,11 @@
+<map id="secp256k1_equality_plaintext_verify" name="secp256k1_equality_plaintext_verify">
+<area shape="rect" id="Node000001" title="Verifies a proof of knowledge of plaintext and randomness." alt="" coords="5,47,142,88"/>
+<area shape="rect" id="Node000002" href="$equality__proof_8c.html#a9a0a1101e6a9c85297ee14e90686e009" title=" " alt="" coords="204,5,360,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="141,49,212,34,208,36,143,54"/>
+<area shape="rect" id="Node000003" href="$equality__proof_8c.html#a406d56417e45d82af45619dec5678048" title=" " alt="" coords="190,55,375,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="141,65,177,67,172,68,142,70"/>
+<area shape="rect" id="Node000005" href="$equality__proof_8c.html#ad323664144afbe26cc90816a513f79c0" title=" " alt="" coords="232,104,333,130"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="142,81,219,101,214,102,142,86"/>
+<area shape="rect" id="Node000004" href="$mpt__scalar_8c.html#aac5cece668acbd6bb052aafe9e3eaa75" title=" " alt="" coords="423,47,578,88"/>
+<area shape="poly" id="edge3_Node000003_Node000004" title=" " alt="" coords="375,65,410,67,404,68,375,70"/>
+</map>

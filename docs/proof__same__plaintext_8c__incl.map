@@ -1,0 +1,17 @@
+<map id="src/proof_same_plaintext.c" name="src/proof_same_plaintext.c">
+<area shape="rect" id="Node000001" title="Zero&#45;Knowledge Proof of Plaintext Equality (1&#45;to&#45;1)." alt="" coords="281,5,460,31"/>
+<area shape="rect" id="Node000002" href="$secp256k1__mpt_8h.html" title=" " alt="" coords="43,79,167,105"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="324,34,166,77,164,72,327,29"/>
+<area shape="rect" id="Node000005" title=" " alt="" coords="191,79,294,105"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="351,30,279,73,276,69,346,33"/>
+<area shape="rect" id="Node000006" title=" " alt="" coords="317,79,424,105"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="372,29,373,65,368,62,369,33"/>
+<area shape="rect" id="Node000007" title=" " alt="" coords="448,79,512,105"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="389,29,451,70,446,70,388,34"/>
+<area shape="rect" id="Node000008" title=" " alt="" coords="536,79,599,105"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="404,29,524,73,519,74,403,34"/>
+<area shape="rect" id="Node000003" title=" " alt="" coords="5,153,101,178"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="99,104,73,142,69,138,94,106"/>
+<area shape="rect" id="Node000004" title=" " alt="" coords="125,153,189,178"/>
+<area shape="poly" id="edge3_Node000002_Node000004" title=" " alt="" coords="115,103,142,140,137,140,112,107"/>
+</map>
