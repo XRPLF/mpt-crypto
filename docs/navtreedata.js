@@ -25,6 +25,7 @@
 var NAVTREE =
 [
   [ "mpt-crypto", "index.html", [
+    [ "MPT-Crypto: Cryptographic Primitives for Confidential Assets", "index.html", "index" ],
     [ "Files", "files.html", [
       [ "File List", "files.html", "files_dup" ],
       [ "Globals", "globals.html", [

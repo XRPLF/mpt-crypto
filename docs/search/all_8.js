@@ -1,5 +1,7 @@
 var searchData=
 [
-  ['mpt_5fscalar_2ec_0',['mpt_scalar.c',['../mpt__scalar_8c.html',1,'']]],
-  ['msm_5ftry_5fadd_1',['msm_try_add',['../bulletproof__aggregated_8c.html#a4eea4e3f6c279f55e4015108a2a97628',1,'bulletproof_aggregated.c']]]
+  ['derive_5fipa_5fbinding_5fchallenge_0',['derive_ipa_binding_challenge',['../bulletproof__aggregated_8c.html#a11ef6ada10a3709c94de8753017d59f0',1,'bulletproof_aggregated.c']]],
+  ['derive_5fipa_5fround_5fchallenge_1',['derive_ipa_round_challenge',['../bulletproof__aggregated_8c.html#a908ed3c3cddc486034e426c6c64d6270',1,'bulletproof_aggregated.c']]],
+  ['documentation_20doxygen_20_3a_2',['4. API Documentation (Doxygen):',['../index.html#autotoc_md6',1,'']]],
+  ['doxygen_20_3a_3',['4. API Documentation (Doxygen):',['../index.html#autotoc_md6',1,'']]]
 ];
