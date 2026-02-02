@@ -2186,5 +2186,3 @@ int secp256k1_bulletproof_verify_agg(
     free(R_vec);
     return 0;
 }
-
-

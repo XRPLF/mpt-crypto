@@ -91,4 +91,3 @@ void secp256k1_mpt_scalar_reduce32(unsigned char out32[32], const unsigned char 
     secp256k1_scalar_set_b32(&s, in32, NULL);
     secp256k1_scalar_get_b32(out32, &s);
 }
-
