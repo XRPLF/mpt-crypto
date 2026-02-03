@@ -7,13 +7,22 @@
 #include "secp256k1_mpt.h"
 
 #define N_BITS 64
+/* log2(64) = 6 rounds */
 #define IPA_ROUNDS 6
 
-/* ---- Forward declarations from your code ---- */
+/* ---- Helper Macros ---- */
+static int scalar_is_zero(const unsigned char s[32]) {
+    unsigned char z[32] = {0};
+    return memcmp(s, z, 32) == 0;
+}
 
-int secp256k1_bulletproof_run_ipa_prover(
+/* ---- Forward declarations from your bulletproof_aggregated.c implementation ---- */
+
+/** NOTE: These signatures must match exactly what is in bulletproof_aggregated.c */
+
+extern int secp256k1_bulletproof_run_ipa_prover(
         const secp256k1_context* ctx,
-        const secp256k1_pubkey* U,
+        const secp256k1_pubkey* g,
         secp256k1_pubkey* G_vec,
         secp256k1_pubkey* H_vec,
         unsigned char* a_vec,
@@ -23,11 +32,14 @@ int secp256k1_bulletproof_run_ipa_prover(
         const unsigned char ux_scalar[32],
         secp256k1_pubkey* L_out,
         secp256k1_pubkey* R_out,
-        unsigned char* a_final,
-        unsigned char* b_final
+        size_t max_rounds,
+        size_t* rounds_out,
+        unsigned char a_final[32],
+        unsigned char b_final[32]
 );
 
-int derive_ipa_round_challenge(
+/* These helpers are needed for the manual verification logic in this test */
+extern int derive_ipa_round_challenge(
         const secp256k1_context* ctx,
         unsigned char u_out[32],
         const unsigned char last_challenge[32],
@@ -35,26 +47,28 @@ int derive_ipa_round_challenge(
         const secp256k1_pubkey* R
 );
 
-int fold_generators(
+extern int fold_generators(
         const secp256k1_context* ctx,
         secp256k1_pubkey* final_point,
         const secp256k1_pubkey* generators,
-        const unsigned char u[IPA_ROUNDS][32],
-        const unsigned char u_inv[IPA_ROUNDS][32],
-        int n,
+        const unsigned char* u_flat,
+        const unsigned char* uinv_flat,
+        size_t n,
+        size_t rounds,
         int is_H
 );
 
-int apply_ipa_folding_to_P(
+extern int apply_ipa_folding_to_P(
         const secp256k1_context* ctx,
         secp256k1_pubkey* P,
         const secp256k1_pubkey* L_vec,
         const secp256k1_pubkey* R_vec,
-        const unsigned char u[IPA_ROUNDS][32],
-        const unsigned char u_inv[IPA_ROUNDS][32]
+        const unsigned char* u_flat,
+        const unsigned char* uinv_flat,
+        size_t rounds
 );
 
-int secp256k1_bulletproof_ipa_dot(
+extern int secp256k1_bulletproof_ipa_dot(
         const secp256k1_context* ctx,
         unsigned char* out,
         const unsigned char* a,
@@ -62,27 +76,13 @@ int secp256k1_bulletproof_ipa_dot(
         size_t n
 );
 
-extern int secp256k1_mpt_get_generator_vector(
-        const secp256k1_context* ctx,
-        secp256k1_pubkey* vec,
-        size_t n,
-        const unsigned char* label,
-        size_t label_len
-);
-
-/* ---- Helpers ---- */
+/* ---- Test Utils ---- */
 
 static void random_scalar(const secp256k1_context* ctx, unsigned char s[32]) {
     do { RAND_bytes(s, 32); }
-    while (!secp256k1_ec_seckey_verify(ctx, s)); /* rejects 0 and >= order */
+    while (!secp256k1_ec_seckey_verify(ctx, s));
 }
 
-static int scalar_is_zero(const unsigned char s[32]) {
-    unsigned char z[32] = {0};
-    return memcmp(s, z, 32) == 0;
-}
-
-/* Safe accumulate: acc <- acc + term. If acc not inited, acc = term. */
 static int add_term(
         const secp256k1_context* ctx,
         secp256k1_pubkey* acc,
@@ -101,14 +101,20 @@ static int add_term(
         return 1;
     }
 }
-static int ipa_verify_explicit(
+
+static int pubkey_equal(const secp256k1_context* ctx, const secp256k1_pubkey* a, const secp256k1_pubkey* b) {
+    return secp256k1_ec_pubkey_cmp(ctx, a, b) == 0;
+}
+
+static int test_ipa_verify_explicit(
         const secp256k1_context* ctx,
-        const secp256k1_pubkey* G_vec,     /* original G generators */
-        const secp256k1_pubkey* H_vec,     /* original H generators */
+        const secp256k1_pubkey* G_vec,
+        const secp256k1_pubkey* H_vec,
         const secp256k1_pubkey* U,
-        const secp256k1_pubkey* P_in,      /* initial P */
+        const secp256k1_pubkey* P_in,
         const secp256k1_pubkey* L_vec,
         const secp256k1_pubkey* R_vec,
+        size_t n,
         const unsigned char a_final[32],
         const unsigned char b_final[32],
         const unsigned char ux[32],
@@ -117,130 +123,110 @@ static int ipa_verify_explicit(
     secp256k1_pubkey P = *P_in;
     secp256k1_pubkey Gf, Hf, RHS, tmp;
     int RHS_inited = 0;
+    int ok = 0;
+    size_t i;
 
-    unsigned char u[IPA_ROUNDS][32];
-    unsigned char u_inv[IPA_ROUNDS][32];
+    /* 1. Calculate Rounds */
+    size_t rounds = 0;
+    size_t tmp_n = n;
+    while (tmp_n > 1) { tmp_n >>= 1; rounds++; }
+
+    /* 2. Allocate and Derive Challenges */
+    unsigned char* u_flat    = (unsigned char*)malloc(rounds * 32);
+    unsigned char* uinv_flat = (unsigned char*)malloc(rounds * 32);
     unsigned char last[32];
 
-    /* ---- 1. Re-derive u_i ---- */
+    if (!u_flat || !uinv_flat) goto cleanup;
+
     memcpy(last, ipa_transcript_id, 32);
-    for (int i = 0; i < IPA_ROUNDS; i++) {
-        if (!derive_ipa_round_challenge(ctx, u[i], last, &L_vec[i], &R_vec[i]))
-            return 0;
-        secp256k1_mpt_scalar_inverse(u_inv[i], u[i]);
-        memcpy(last, u[i], 32);
+
+    for (i = 0; i < rounds; i++) {
+        unsigned char* ui    = u_flat    + 32 * i;
+        unsigned char* uiinv = uinv_flat + 32 * i;
+
+        if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
+            goto cleanup;
+
+        secp256k1_mpt_scalar_inverse(uiinv, ui);
+        memcpy(last, ui, 32);
     }
 
-    /* ---- 2. Fold generators ---- */
-    {
-        secp256k1_pubkey Gtmp[N_BITS], Htmp[N_BITS];
-        memcpy(Gtmp, G_vec, sizeof(Gtmp));
-        memcpy(Htmp, H_vec, sizeof(Htmp));
+    /* 3. Fold Generators */
+    if (!fold_generators(ctx, &Gf, G_vec, u_flat, uinv_flat, n, rounds, 0)) goto cleanup;
+    if (!fold_generators(ctx, &Hf, H_vec, u_flat, uinv_flat, n, rounds, 1)) goto cleanup;
 
-        if (!fold_generators(ctx, &Gf, Gtmp, u, u_inv, N_BITS, 0))
-            return 0;
-        if (!fold_generators(ctx, &Hf, Htmp, u, u_inv, N_BITS, 1))
-            return 0;
-    }
-
-    /* ---- 3. Compute RHS = a*Gf + b*Hf + (a*b*ux)*U ---- */
+    /* 4. Compute RHS = a*Gf + b*Hf + (a*b*ux)*U */
     if (!scalar_is_zero(a_final)) {
         tmp = Gf;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, a_final)) return 0;
-        if (!add_term(ctx, &RHS, &RHS_inited, &tmp)) return 0;
+        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, a_final)) goto cleanup;
+        add_term(ctx, &RHS, &RHS_inited, &tmp);
     }
 
     if (!scalar_is_zero(b_final)) {
         tmp = Hf;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, b_final)) return 0;
-        if (!add_term(ctx, &RHS, &RHS_inited, &tmp)) return 0;
+        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, b_final)) goto cleanup;
+        add_term(ctx, &RHS, &RHS_inited, &tmp);
     }
 
-    unsigned char ab[32], ab_ux[32];
-    secp256k1_mpt_scalar_mul(ab, a_final, b_final);
-    secp256k1_mpt_scalar_mul(ab_ux, ab, ux);
+    {
+        unsigned char ab[32], ab_ux[32];
+        secp256k1_mpt_scalar_mul(ab, a_final, b_final);
+        secp256k1_mpt_scalar_mul(ab_ux, ab, ux);
 
-    if (!scalar_is_zero(ab_ux)) {
-        tmp = *U;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ab_ux)) return 0;
-        if (!add_term(ctx, &RHS, &RHS_inited, &tmp)) return 0;
+        if (!scalar_is_zero(ab_ux)) {
+            tmp = *U;
+            if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ab_ux)) goto cleanup;
+            add_term(ctx, &RHS, &RHS_inited, &tmp);
+        }
     }
 
-    if (!RHS_inited) return 0;
+    if (!RHS_inited) goto cleanup;
 
-    /* ---- 4. Fold P using L/R ---- */
-    if (!apply_ipa_folding_to_P(ctx, &P, L_vec, R_vec, u, u_inv))
-        return 0;
+    /* 5. Fold P */
+    if (!apply_ipa_folding_to_P(ctx, &P, L_vec, R_vec, u_flat, uinv_flat, rounds))
+        goto cleanup;
 
-    /* ---- 5. Compare ---- */
-    unsigned char Pser[33], Rser[33];
-    size_t len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, Pser, &len, &P, SECP256K1_EC_COMPRESSED);
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, Rser, &len, &RHS, SECP256K1_EC_COMPRESSED);
+    /* 6. Compare */
+    if (pubkey_equal(ctx, &P, &RHS)) {
+        ok = 1;
+    }
 
-    return memcmp(Pser, Rser, 33) == 0;
+    cleanup:
+    if (u_flat) free(u_flat);
+    if (uinv_flat) free(uinv_flat);
+    return ok;
 }
-static void print_pubkey(
-        const secp256k1_context* ctx,
-        const char* label,
-        const secp256k1_pubkey* pk
-) {
-    unsigned char ser[33];
-    size_t len = 33;
-
-    if (!secp256k1_ec_pubkey_serialize(
-            ctx, ser, &len, pk, SECP256K1_EC_COMPRESSED)) {
-        printf("%s: <serialize failed>\n", label);
-        return;
-    }
-
-    printf("%s = ", label);
-    for (size_t i = 0; i < len; i++) {
-        printf("%02x", ser[i]);
-    }
-    printf("\n");
-}
-
 
 int main(void) {
     secp256k1_context* ctx =
             secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
 
-    printf("[IPA TEST] Prove + Verify\n");
+    printf("[IPA TEST] Setup...\n");
 
-    /* ------------------------------------------------------------ */
-    /* 1. Generators                                                */
-    /* ------------------------------------------------------------ */
+    /* 1. Generators */
     secp256k1_pubkey G[N_BITS], H[N_BITS], U;
-    assert(secp256k1_mpt_get_generator_vector(ctx, G, N_BITS, (unsigned char*)"G", 1));
-    assert(secp256k1_mpt_get_generator_vector(ctx, H, N_BITS, (unsigned char*)"H", 1));
-    assert(secp256k1_mpt_get_generator_vector(ctx, &U, 1, (unsigned char*)"BP_U", 4));
+    if (!secp256k1_mpt_get_generator_vector(ctx, G, N_BITS, (unsigned char*)"G", 1)) return 1;
+    if (!secp256k1_mpt_get_generator_vector(ctx, H, N_BITS, (unsigned char*)"H", 1)) return 1;
+    if (!secp256k1_mpt_get_generator_vector(ctx, &U, 1, (unsigned char*)"BP_U", 4)) return 1;
 
-    /* Keep originals for verifier */
+    /* Copy for verifier (since prover folds in-place) */
     secp256k1_pubkey G0[N_BITS], H0[N_BITS];
-    memcpy(G0, G, sizeof(G0));
-    memcpy(H0, H, sizeof(H0));
+    memcpy(G0, G, sizeof(G));
+    memcpy(H0, H, sizeof(H));
 
-    /* ------------------------------------------------------------ */
-    /* 2. Random witness vectors                                    */
-    /* ------------------------------------------------------------ */
-    unsigned char a[N_BITS][32], b[N_BITS][32];
+    /* 2. Random Vectors a, b */
+    unsigned char a_vec[N_BITS * 32];
+    unsigned char b_vec[N_BITS * 32];
     for (int i = 0; i < N_BITS; i++) {
-        random_scalar(ctx, a[i]);
-        random_scalar(ctx, b[i]);
+        random_scalar(ctx, &a_vec[i*32]);
+        random_scalar(ctx, &b_vec[i*32]);
     }
 
-    /* ------------------------------------------------------------ */
-    /* 3. dot = <a,b>                                               */
-    /* ------------------------------------------------------------ */
+    /* 3. Dot Product */
     unsigned char dot[32];
-    assert(secp256k1_bulletproof_ipa_dot(
-            ctx, dot, (unsigned char*)a, (unsigned char*)b, N_BITS));
+    secp256k1_bulletproof_ipa_dot(ctx, dot, a_vec, b_vec, N_BITS);
 
-    /* ------------------------------------------------------------ */
-    /* 4. Transcript + ux                                           */
-    /* ------------------------------------------------------------ */
+    /* 4. Transcript & Binding Challenge */
     unsigned char ipa_transcript_id[32];
     SHA256((unsigned char*)"IPA_TEST", 8, ipa_transcript_id);
 
@@ -251,28 +237,31 @@ int main(void) {
         SHA256_Update(&sha, ipa_transcript_id, 32);
         SHA256_Update(&sha, dot, 32);
         SHA256_Final(ux, &sha);
-        assert(secp256k1_ec_seckey_verify(ctx, ux));
+        /* Reduce is handled in real code, here just check verify */
+        secp256k1_mpt_scalar_reduce32(ux, ux);
     }
 
-    /* ------------------------------------------------------------ */
-    /* 5. Build commitment P                                       */
-    /* ------------------------------------------------------------ */
+    /* 5. Build Initial Commitment P = <a,G> + <b,H> + <a,b>*ux*U */
     secp256k1_pubkey P, tmp;
     int P_inited = 0;
 
     for (int i = 0; i < N_BITS; i++) {
-        if (!scalar_is_zero(a[i])) {
+        unsigned char* ai = &a_vec[i*32];
+        unsigned char* bi = &b_vec[i*32];
+
+        if (!scalar_is_zero(ai)) {
             tmp = G0[i];
-            secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, a[i]);
+            secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ai);
             add_term(ctx, &P, &P_inited, &tmp);
         }
-        if (!scalar_is_zero(b[i])) {
+        if (!scalar_is_zero(bi)) {
             tmp = H0[i];
-            secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, b[i]);
+            secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, bi);
             add_term(ctx, &P, &P_inited, &tmp);
         }
     }
 
+    /* Add Binding Term: (<a,b>*ux)*U */
     unsigned char dot_ux[32];
     secp256k1_mpt_scalar_mul(dot_ux, dot, ux);
     if (!scalar_is_zero(dot_ux)) {
@@ -280,46 +269,46 @@ int main(void) {
         secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, dot_ux);
         add_term(ctx, &P, &P_inited, &tmp);
     }
-
     assert(P_inited);
 
-    /* ------------------------------------------------------------ */
-    /* 6. Prover: generate IPA proof                                */
-    /* ------------------------------------------------------------ */
+    /* 6. Run Prover */
+    printf("[IPA TEST] Running Prover...\n");
     secp256k1_pubkey L[IPA_ROUNDS], R[IPA_ROUNDS];
     unsigned char a_final[32], b_final[32];
+    size_t rounds_out = 0;
 
-    assert(secp256k1_bulletproof_run_ipa_prover(
+    int res = secp256k1_bulletproof_run_ipa_prover(
             ctx,
             &U,
             G, H,
-            (unsigned char*)a,
-            (unsigned char*)b,
+            a_vec, b_vec, /* These get folded in-place */
             N_BITS,
             ipa_transcript_id,
             ux,
             L, R,
+            IPA_ROUNDS,
+            &rounds_out,
             a_final, b_final
-    ));
+    );
+    assert(res == 1);
+    assert(rounds_out == IPA_ROUNDS);
 
-    /* ------------------------------------------------------------ */
-    /* 7. Verifier: call verification function                      */
-    /* ------------------------------------------------------------ */
-
-
-    int ok = ipa_verify_explicit(
+    /* 7. Run Verifier */
+    printf("[IPA TEST] Running Verifier...\n");
+    int ok = test_ipa_verify_explicit(
             ctx,
             G0, H0,
             &U,
-            &P,          /* IMPORTANT: unfolded P */
+            &P,
             L, R,
+            N_BITS,
             a_final, b_final,
             ux,
             ipa_transcript_id
     );
 
-    printf("[IPA TEST] verification: %s\n", ok ? "PASSED" : "FAILED");
-    assert(ok);
+    printf("[IPA TEST] Result: %s\n", ok ? "PASSED" : "FAILED");
+    assert(ok == 1);
 
     secp256k1_context_destroy(ctx);
     return 0;

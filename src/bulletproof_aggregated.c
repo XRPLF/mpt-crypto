@@ -59,8 +59,7 @@ static inline size_t bp_ipa_rounds(size_t total_bits) {
     return r;
 }
 
-/** Generates a secure 32-byte scalar (private key).
- * NOTE: This is a TEMPORARY duplication of a helper that will be moved to proof_util.c.
+/** Generates a secure 32-byte random scalar.
  * Returns 1 on success, 0 on failure.
  */
 static int generate_random_scalar(
@@ -108,7 +107,7 @@ static int add_term(
 ) {
     if (!(*acc_inited)) {
         *acc = *term;
-        *acc_inited = 1; /* <--- This line stops the "always true" warning */
+        *acc_inited = 1;
         return 1;
     } else {
         const secp256k1_pubkey* pts[2] = { acc, term };
