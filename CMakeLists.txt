@@ -1,25 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(mpt-crypto C CXX)
 
 # --- Find Dependencies ---
 find_package(OpenSSL REQUIRED)
-
-set(SECP256K1_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../secp256k1" CACHE PATH "Path to secp256k1 source directory")
-
-if (NOT EXISTS ${SECP256K1_SOURCE_DIR}/CMakeLists.txt)
-    message(FATAL_ERROR "Could not find libsecp256k1 source directory at ${SECP256K1_SOURCE_DIR}.
-    Ensure it is located at the same level as the mpt-crypto directory.")
-endif ()
-
-# Configure libsecp256k1 build options
-set(SECP256K1_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(SECP256K1_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(SECP256K1_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-set(SECP256K1_BUILD_EXHAUSTIVE_TESTS OFF CACHE BOOL "" FORCE)
-
-# Add libsecp256k1 as a sub-project (it's now a peer, but CMake treats it as a sub-project here)
-# We provide a binary dir name since it's outside our current source tree
-add_subdirectory(${SECP256K1_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/secp256k1_build)
+find_package(secp256k1 REQUIRED)
 
 # --- Define The Library ---
 add_library(mpt-crypto
@@ -35,16 +19,18 @@ add_library(mpt-crypto
             src/proof_same_plaintext_multi_shared_r.c)
 
 # --- Set Include Directories ---
-target_include_directories(mpt-crypto PUBLIC include PRIVATE ${SECP256K1_SOURCE_DIR}/include
-                           PRIVATE ${SECP256K1_SOURCE_DIR}/src)
+target_include_directories(mpt-crypto PUBLIC include)
 
 # --- Set Compile Definitions ---
 target_compile_definitions(mpt-crypto PRIVATE USE_SCALAR_8X32 USE_FIELD_10X26 ECMULT_WINDOW_SIZE=15
                                               ECMULT_GEN_PREC_BITS=4)
 
 # --- Link Dependencies ---
-target_link_libraries(mpt-crypto PUBLIC secp256k1 PUBLIC OpenSSL::Crypto)
+target_link_libraries(mpt-crypto PUBLIC secp256k1::secp256k1 PUBLIC OpenSSL::Crypto)
 
 # --- Testing ---
-enable_testing()
-add_subdirectory(tests)
+option(ENABLE_TESTS "Enable building tests" ON)
+if (ENABLE_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif ()
