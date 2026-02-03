@@ -116,8 +116,3 @@ The following tests should pass:
 - `test_same_plaintext_multi_shared_r` - Shared randomness variant
 
 **Note:** `test_bulletproof.c` is excluded from the build because the aggregated implementation (bulletproof_aggregated.c) is fully general; verifying the m=1 case is now covered by test_bulletproof_agg.c.
-
-
-## API Documentation (Doxygen)
-
-### https://mrtcnk.github.io/mpt-crypto/
