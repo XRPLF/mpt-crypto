@@ -69,7 +69,7 @@ Projects/
 
 2. **Build the library and tests:**
    ```bash
-   make -j4
+   make -j
    ```
 
 #### Platform-Specific Notes
