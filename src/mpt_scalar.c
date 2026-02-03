@@ -34,6 +34,7 @@
 
 #include "secp256k1_mpt.h"
 #include <string.h>
+#include <openssl/crypto.h>
 
 /* 1. Backend Configuration Definitions */
 #ifndef USE_SCALAR_8X32
@@ -62,6 +63,11 @@ void secp256k1_mpt_scalar_add(unsigned char *res, const unsigned char *a, const 
     secp256k1_scalar_set_b32(&s_b, b, NULL);
     secp256k1_scalar_add(&s_res, &s_a, &s_b);
     secp256k1_scalar_get_b32(res, &s_res);
+
+    /* SECURE CLEANUP */
+    OPENSSL_cleanse(&s_a, sizeof(s_a));
+    OPENSSL_cleanse(&s_b, sizeof(s_b));
+    OPENSSL_cleanse(&s_res, sizeof(s_res));
 }
 
 void secp256k1_mpt_scalar_mul(unsigned char *res, const unsigned char *a, const unsigned char *b) {
@@ -70,6 +76,11 @@ void secp256k1_mpt_scalar_mul(unsigned char *res, const unsigned char *a, const 
     secp256k1_scalar_set_b32(&s_b, b, NULL);
     secp256k1_scalar_mul(&s_res, &s_a, &s_b);
     secp256k1_scalar_get_b32(res, &s_res);
+
+    /* SECURE CLEANUP */
+    OPENSSL_cleanse(&s_a, sizeof(s_a));
+    OPENSSL_cleanse(&s_b, sizeof(s_b));
+    OPENSSL_cleanse(&s_res, sizeof(s_res));
 }
 
 void secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in) {
@@ -77,6 +88,9 @@ void secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in) {
     secp256k1_scalar_set_b32(&s, in, NULL);
     secp256k1_scalar_inverse(&s, &s);
     secp256k1_scalar_get_b32(res, &s);
+
+    /* SECURE CLEANUP */
+    OPENSSL_cleanse(&s, sizeof(s));
 }
 
 void secp256k1_mpt_scalar_negate(unsigned char *res, const unsigned char *in) {
@@ -84,10 +98,16 @@ void secp256k1_mpt_scalar_negate(unsigned char *res, const unsigned char *in) {
     secp256k1_scalar_set_b32(&s, in, NULL);
     secp256k1_scalar_negate(&s, &s);
     secp256k1_scalar_get_b32(res, &s);
+
+    /* SECURE CLEANUP */
+    OPENSSL_cleanse(&s, sizeof(s));
 }
 
 void secp256k1_mpt_scalar_reduce32(unsigned char out32[32], const unsigned char in32[32]) {
     secp256k1_scalar s;
     secp256k1_scalar_set_b32(&s, in32, NULL);
     secp256k1_scalar_get_b32(out32, &s);
+
+    /* SECURE CLEANUP */
+    OPENSSL_cleanse(&s, sizeof(s));
 }

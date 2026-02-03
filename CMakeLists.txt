@@ -4,7 +4,6 @@ project(mpt-crypto C CXX)
 # --- Find Dependencies ---
 find_package(OpenSSL REQUIRED)
 
-
 set(SECP256K1_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../secp256k1" CACHE PATH "Path to secp256k1 source directory")
 
 if(NOT EXISTS ${SECP256K1_SOURCE_DIR}/CMakeLists.txt)

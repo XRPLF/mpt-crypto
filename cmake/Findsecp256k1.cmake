@@ -39,4 +39,3 @@ if(secp256k1_FOUND AND NOT TARGET secp256k1::secp256k1)
             INTERFACE_INCLUDE_DIRECTORIES "${secp256k1_INCLUDE_DIR}"
     )
 endif()
-
