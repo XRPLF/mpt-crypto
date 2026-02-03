@@ -4,6 +4,8 @@ project(mpt-crypto C CXX)
 # --- Find Dependencies ---
 find_package(OpenSSL REQUIRED)
 
+# --- Add libsecp256k1 as a Peer Dependency ---
+# Using "../secp256k1" makes it work regardless of which machine it's on
 set(SECP256K1_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../secp256k1" CACHE PATH "Path to secp256k1 source directory")
 
 if(NOT EXISTS ${SECP256K1_SOURCE_DIR}/CMakeLists.txt)
@@ -27,6 +29,7 @@ add_library(mpt-crypto
         src/equality_proof.c
         src/proof_same_plaintext.c
         src/proof_same_plaintext_multi.c
+        #src/bulletproof.c
         src/proof_link.c
         src/proof_pok_sk.c
         src/commitments.c
@@ -59,8 +62,3 @@ target_link_libraries(mpt-crypto
 # --- Testing ---
 enable_testing()
 add_subdirectory(tests)
-
-# --- Utility Tool ---
-add_executable(confidential_utility tools/confidential_utility.cpp)
-target_include_directories(confidential_utility PUBLIC include)
-target_link_libraries(confidential_utility PUBLIC mpt-crypto)

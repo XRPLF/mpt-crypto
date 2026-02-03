@@ -1,0 +1,25 @@
+/Applications/CLion.app/Contents/bin/cmake/mac/bin/cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_MAKE_PROGRAM=/Applications/CLion.app/Contents/bin/ninja/mac/ninja -G Ninja -S /Users/mcenk/Documents/Projects/mpt-crypto-clean-for-xrplf-git -B /Users/mcenk/Documents/Projects/mpt-crypto-clean-for-xrplf-git/cmake-build-debug
+-- The C compiler identification is AppleClang 17.0.0.17000013
+-- The CXX compiler identification is AppleClang 17.0.0.17000013
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /Library/Developer/CommandLineTools/usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /Library/Developer/CommandLineTools/usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found OpenSSL: /opt/homebrew/Cellar/openssl@3/3.5.0/lib/libcrypto.dylib (found version "3.5.0")  
+CMake Error at CMakeLists.txt:12 (message):
+  Could not find libsecp256k1 source directory at
+  /Users/mcenk/Documents/Projects/mpt-crypto-clean-for-xrplf-git/../secp256k1.
+
+
+      Ensure it is located at the same level as the mpt-crypto directory.
+
+
+-- Configuring incomplete, errors occurred!
+See also "/Users/mcenk/Documents/Projects/mpt-crypto-clean-for-xrplf-git/cmake-build-debug/CMakeFiles/CMakeOutput.log".
+See also "/Users/mcenk/Documents/Projects/mpt-crypto-clean-for-xrplf-git/cmake-build-debug/CMakeFiles/CMakeError.log".
