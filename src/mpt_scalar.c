@@ -48,12 +48,12 @@
       On ARM64/Apple Silicon, the scalar math depends on 128-bit
       integer helpers defined in these headers. */
 #include "util.h"
-#include "int128.h"
-#include "int128_impl.h"
+#include "private/int128.h"
+#include "private/int128_impl.h"
 
 /* 3. Include the actual scalar implementations */
-#include "scalar.h"
-#include "scalar_impl.h"
+#include "private/scalar.h"
+#include "private/scalar_impl.h"
 
 /* --- Implementation --- */
 
