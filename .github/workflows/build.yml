@@ -1,0 +1,53 @@
+name: Build and Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: heavy
+    container: ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696
+
+    strategy:
+      matrix:
+        conan_profile: [gcc, clang]
+        build_type: [Release, Debug]
+
+    env:
+      BUILD_DIR: build
+      BUILD_TYPE: ${{ matrix.build_type }}
+
+    steps:
+      - name: Cleanup workspace
+        if: ${{ runner.os == 'macOS' }}
+        uses: XRPLF/actions/cleanup-workspace@cf0433aa74563aead044a1e395610c96d65a37cf
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run Conan
+        env:
+          CONAN_PROFILE: ${{ matrix.conan_profile }}
+        run: conan \
+          install . \
+          -of "${BUILD_DIR}" \
+          -b missing \
+          -s "build_type=${BUILD_TYPE}" \
+          --profile:all "${CONAN_PROFILE}"
+
+      - name: Run CMake
+        run: |
+          cmake \
+            -B "${BUILD_DIR}" \
+            -S . \
+            -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
+            -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
+
+      - name: Build
+        run: ninja
+        working-directory: ${{ env.BUILD_DIR }}
