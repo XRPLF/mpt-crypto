@@ -32,7 +32,8 @@ jobs:
       - name: Run Conan
         env:
           CONAN_PROFILE: ${{ matrix.conan_profile }}
-        run: conan \
+        run: |
+          conan \
           install . \
           -of "${BUILD_DIR}" \
           -b missing \
