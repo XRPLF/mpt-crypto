@@ -33,64 +33,49 @@ Before building, ensure you have the following installed:
 
 - **CMake** (version 3.10 or higher)
 - **C Compiler** (GCC, Clang, or AppleClang)
-- **OpenSSL 3.x** (development headers and libraries)
 
 On macOS with Homebrew:
 
 ```bash
-brew install cmake openssl@3
+brew install cmake
 ```
 
 On Ubuntu/Debian:
 
 ```bash
-sudo apt-get install cmake libssl-dev build-essential
+sudo apt-get install cmake build-essential
 ```
 
 ### Dependency Setup
 
-This library requires `libsecp256k1` as a sibling directory. Clone it from the bitcoin-core repository:
-
-```bash
-# From the parent directory of mpt-crypto
-cd ..
-git clone https://github.com/bitcoin-core/secp256k1.git
-```
-
-Your directory structure should look like:
-
-```text
-Projects/
-├── mpt-crypto/
-└── secp256k1/
-```
+Set up Conan using [xrpld's BUILD.md](https://github.com/XRPLF/rippled/blob/develop/BUILD.md#steps)
 
 ### Build Instructions
 
-1. Set up Conan using [xrpld's BUILD.md](https://github.com/XRPLF/rippled/blob/develop/BUILD.md#steps)
+Run following commands to build the library
 
-2. Run following commands to build the library:
+1. Create build directory:
 
-```bash
-  mkdir build && cd build
-```
+   ```bash
+   mkdir build && cd build
+   ```
 
-1. Buld dependencies:
+2. Buld dependencies:
 
    ```bash
    conan install .. --build=missing -o "&:with_tests=True"
    ```
 
-2. Run CMake:
+3. Run CMake:
 
    ```bash
    cmake .. \
-    -DCMAKE_BUILD_TYPE=Release \
-    -G Ninja \
-    -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
+      -DCMAKE_BUILD_TYPE=Release \
+      -G Ninja \
+      -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
    ```
 
-3. **Build the library and tests:**
+4. **Build the library and tests:**
 
    ```bash
    ninja
@@ -98,10 +83,9 @@ Projects/
 
 ### Running Tests
 
-After building, run the test suite using CTest:
+After building, run the test suite using CTest from the build directory:
 
 ```bash
-cd build
 ctest --output-on-failure
 ```
 
