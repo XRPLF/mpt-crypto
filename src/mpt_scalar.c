@@ -47,7 +47,7 @@
 /* 2. Include low-level utilities first.
       On ARM64/Apple Silicon, the scalar math depends on 128-bit
       integer helpers defined in these headers. */
-#include "util.h"
+#include "private/util.h"
 #include "private/int128.h"
 #include "private/int128_impl.h"
 
