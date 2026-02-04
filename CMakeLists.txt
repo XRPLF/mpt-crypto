@@ -6,10 +6,10 @@ find_package(OpenSSL REQUIRED)
 
 set(SECP256K1_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../secp256k1" CACHE PATH "Path to secp256k1 source directory")
 
-if(NOT EXISTS ${SECP256K1_SOURCE_DIR}/CMakeLists.txt)
+if (NOT EXISTS ${SECP256K1_SOURCE_DIR}/CMakeLists.txt)
     message(FATAL_ERROR "Could not find libsecp256k1 source directory at ${SECP256K1_SOURCE_DIR}.
     Ensure it is located at the same level as the mpt-crypto directory.")
-endif()
+endif ()
 
 # Configure libsecp256k1 build options
 set(SECP256K1_BUILD_TESTS OFF CACHE BOOL "" FORCE)
@@ -23,38 +23,27 @@ add_subdirectory(${SECP256K1_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/secp256k1_b
 
 # --- Define The Library ---
 add_library(mpt-crypto
-        src/elgamal.c
-        src/equality_proof.c
-        src/proof_same_plaintext.c
-        src/proof_same_plaintext_multi.c
-        src/proof_link.c
-        src/proof_pok_sk.c
-        src/commitments.c
-        src/mpt_scalar.c
-        src/proof_same_plaintext_multi_shared_r.c
-        src/bulletproof_aggregated.c
-        )
+            src/bulletproof_aggregated.c
+            src/commitments.c
+            src/elgamal.c
+            src/equality_proof.c
+            src/mpt_scalar.c
+            src/proof_link.c
+            src/proof_pok_sk.c
+            src/proof_same_plaintext.c
+            src/proof_same_plaintext_multi.c
+            src/proof_same_plaintext_multi_shared_r.c)
 
 # --- Set Include Directories ---
-target_include_directories(mpt-crypto
-        PUBLIC include
-        PRIVATE ${SECP256K1_SOURCE_DIR}/include
-        PRIVATE ${SECP256K1_SOURCE_DIR}/src
-        )
+target_include_directories(mpt-crypto PUBLIC include PRIVATE ${SECP256K1_SOURCE_DIR}/include
+                           PRIVATE ${SECP256K1_SOURCE_DIR}/src)
 
 # --- Set Compile Definitions ---
-target_compile_definitions(mpt-crypto PRIVATE
-        USE_SCALAR_8X32
-        USE_FIELD_10X26
-        ECMULT_WINDOW_SIZE=15
-        ECMULT_GEN_PREC_BITS=4
-        )
+target_compile_definitions(mpt-crypto PRIVATE USE_SCALAR_8X32 USE_FIELD_10X26 ECMULT_WINDOW_SIZE=15
+                                              ECMULT_GEN_PREC_BITS=4)
 
 # --- Link Dependencies ---
-target_link_libraries(mpt-crypto
-        PUBLIC secp256k1
-        PUBLIC OpenSSL::Crypto
-        )
+target_link_libraries(mpt-crypto PUBLIC secp256k1 PUBLIC OpenSSL::Crypto)
 
 # --- Testing ---
 enable_testing()
