@@ -43,6 +43,7 @@ jobs:
           -of "${BUILD_DIR}" \
           -b missing \
           -s "build_type=${BUILD_TYPE}" \
+          -o "&:with_tests=True" \
           --profile:all "${CONAN_PROFILE}"
 
       - name: Run CMake

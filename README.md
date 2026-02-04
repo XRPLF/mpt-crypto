@@ -67,33 +67,34 @@ Projects/
 
 ### Build Instructions
 
-1. **Create the build directory and configure:**
+1. Set up Conan using [xrpld's BUILD.md](https://github.com/XRPLF/rippled/blob/develop/BUILD.md#steps)
 
-   ```bash
-   cd mpt-crypto
-   mkdir -p build && cd build
-   cmake ..
-   ```
-
-2. **Build the library and tests:**
-
-   ```bash
-   make -j
-   ```
-
-#### Platform-Specific Notes
-
-**macOS (Apple Silicon):** If you encounter architecture mismatch errors with OpenSSL, explicitly set the architecture:
+2. Run following commands to build the library:
 
 ```bash
-cmake -DCMAKE_OSX_ARCHITECTURES=arm64 ..
+  mkdir build && cd build
 ```
 
-**macOS (Intel):** Use `x86_64` instead:
+1. Buld dependencies:
 
-```bash
-cmake -DCMAKE_OSX_ARCHITECTURES=x86_64 ..
-```
+   ```bash
+   conan install .. --build=missing -o "&:with_tests=True"
+   ```
+
+2. Run CMake:
+
+   ```bash
+   cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
+   ```
+
+3. **Build the library and tests:**
+
+   ```bash
+   ninja
+   ```
 
 ### Running Tests
 
