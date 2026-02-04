@@ -59,7 +59,7 @@ git clone https://github.com/bitcoin-core/secp256k1.git
 
 Your directory structure should look like:
 
-```
+```text
 Projects/
 ├── mpt-crypto/
 └── secp256k1/
