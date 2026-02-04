@@ -29,6 +29,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare runner
+        uses: XRPLF/actions/prepare-runner@2cbf481018d930656e9276fcc20dc0e3a0be5b6d
+        with:
+          enable_ccache: false
+
       - name: Run Conan
         env:
           CONAN_PROFILE: ${{ matrix.conan_profile }}
@@ -51,4 +56,8 @@ jobs:
 
       - name: Build
         run: ninja
+        working-directory: ${{ env.BUILD_DIR }}
+
+      - name: Run tests
+        run: ctest --output-on-failure
         working-directory: ${{ env.BUILD_DIR }}
