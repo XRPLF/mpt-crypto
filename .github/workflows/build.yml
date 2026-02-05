@@ -6,15 +6,36 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  # Only cancel in-progress jobs or runs for the current workflow - matches against branch & tags
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
-    runs-on: heavy
-    container: ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696
-
     strategy:
+      fail-fast: false
       matrix:
-        conan_profile: [gcc, clang]
+        compiler: [gcc, clang]
+        sanitizer_ext: [.asan, .tsan, .ubsan]
         build_type: [Release, Debug]
+        os: [heavy, heavy-arm64]
+        container:
+          [
+            '{ "image": "ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696" }',
+          ]
+
+        include:
+          - compiler: apple-clang
+            build_type: Release
+            os: macos15
+          - compiler: apple-clang
+            build_type: Debug
+            os: macos15
+
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container != '' && fromJson(matrix.container) || null }}
+    timeout-minutes: 10
 
     env:
       BUILD_DIR: build
@@ -34,17 +55,24 @@ jobs:
         with:
           enable_ccache: false
 
+      - name: Set up Conan (macOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          conan remote add --index 0 xrplf https://conan.ripplex.io
+
+          mkdir -p "${CONAN_HOME}"/profiles/
+          cp .github/scripts/conan/apple-clang.profile "${CONAN_HOME}"/profiles/apple-clang
+
       - name: Run Conan
         env:
-          CONAN_PROFILE: ${{ matrix.conan_profile }}
+          CONAN_PROFILE: ${{ matrix.compiler }}${{ matrix.sanitizer_ext }}
         run: |
-          conan \
-          install . \
-          -of "${BUILD_DIR}" \
-          -b missing \
-          -s "build_type=${BUILD_TYPE}" \
-          -o "&:with_tests=True" \
-          --profile:all "${CONAN_PROFILE}"
+          conan install . \
+            -of "${BUILD_DIR}" \
+            -b missing \
+            -s "build_type=${BUILD_TYPE}" \
+            -o "&:with_tests=True" \
+            --profile:all "${CONAN_PROFILE}"
 
       - name: Run CMake
         run: |
