@@ -24,7 +24,7 @@ class MptCryptoConan(ConanFile):
 
     requires = [
         "openssl/3.5.5",
-        "secp256k1/0.7.0",
+        "secp256k1/0.7.1",
     ]
 
     def config_options(self):
