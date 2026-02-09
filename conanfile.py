@@ -14,12 +14,12 @@ class MptCryptoConan(ConanFile):
     options = {
         "shared": [True, False],
         "fPIC": [True, False],
-        "with_tests": [True, False],
+        "tests": [True, False],
     }
     default_options = {
         "shared": False,
         "fPIC": True,
-        "with_tests": False,
+        "tests": False,
     }
 
     requires = [
@@ -37,7 +37,7 @@ class MptCryptoConan(ConanFile):
 
     def generate(self):
         tc = CMakeToolchain(self)
-        tc.variables["ENABLE_TESTS"] = self.options.with_tests
+        tc.variables["ENABLE_TESTS"] = self.options.tests
         tc.generate()
 
         deps = CMakeDeps(self)

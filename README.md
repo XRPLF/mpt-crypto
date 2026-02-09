@@ -63,7 +63,7 @@ Run following commands to build the library
 2. Buld dependencies:
 
    ```bash
-   conan install .. --build=missing -o "&:with_tests=True"
+   conan install .. --build=missing -o "&:tests=True"
    ```
 
 3. Run CMake:
