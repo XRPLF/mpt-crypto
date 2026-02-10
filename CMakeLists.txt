@@ -3,15 +3,14 @@ project(mpt-crypto C CXX)
 
 # --- Global Architecture Detection ---
 include(CheckTypeSize)
-check_type_size("unsigned __int128" HAVE_INT128_T)
+# Check if the compiler supports __int128 (required for the optimized 64-bit code)
+check_type_size("__int128" HAVE___INT128)
 
-# Store definitions in a variable
-if (HAVE_INT128_T OR CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "arm64"
-    OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64")
-    message(STATUS "Build: Detected 64-bit system. Enforcing 64-bit arithmetic.")
-    set(MPT_ARCH_DEFS USE_SCALAR_4X64 USE_FIELD_5X52 HAVE___INT128)
+if (HAVE___INT128)
+    message(STATUS "Build: Detected 128-bit integer support. Enabling 64-bit optimizations.")
+    set(MPT_ARCH_DEFS SECP256K1_WIDEMUL_INT128 USE_FIELD_5X52 HAVE___INT128)
 else ()
-    message(STATUS "Build: Detected 32-bit system. Enforcing generic arithmetic.")
+    message(STATUS "Build: No 128-bit support detected. Using generic 32-bit arithmetic.")
     set(MPT_ARCH_DEFS USE_SCALAR_8X32 USE_FIELD_10X26)
 endif ()
 
@@ -36,6 +35,7 @@ add_library(mpt-crypto
 target_include_directories(mpt-crypto PUBLIC include)
 
 # --- Set Compile Definitions ---
+# Pass the architecture flags (MPT_ARCH_DEFS) to the compiler
 target_compile_definitions(mpt-crypto PRIVATE ECMULT_WINDOW_SIZE=15 ECMULT_GEN_PREC_BITS=4 PUBLIC ${MPT_ARCH_DEFS})
 
 # --- Link Dependencies ---
