@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(mpt-crypto C CXX)
 
+include(GNUInstallDirs)
+
 # --- Find Dependencies ---
 find_package(OpenSSL REQUIRED)
 find_package(secp256k1 REQUIRED)
@@ -19,7 +21,8 @@ add_library(mpt-crypto
             src/proof_same_plaintext_multi_shared_r.c)
 
 # --- Set Include Directories ---
-target_include_directories(mpt-crypto PUBLIC include)
+target_include_directories(mpt-crypto PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+                                             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 
 # --- Set Compile Definitions ---
 include(CheckTypeSize)
@@ -43,3 +46,6 @@ if (ENABLE_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif ()
+
+# --- Installation ---
+include(cmake/Install.cmake)

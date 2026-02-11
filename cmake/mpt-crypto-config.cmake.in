@@ -1,0 +1,10 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+find_dependency(OpenSSL REQUIRED)
+find_dependency(secp256k1 REQUIRED)
+
+# Include the exported targets
+include("${CMAKE_CURRENT_LIST_DIR}/mpt-crypto-targets.cmake")
