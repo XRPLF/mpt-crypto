@@ -7,11 +7,11 @@ include(CheckTypeSize)
 check_type_size("__int128" HAVE___INT128)
 
 if (HAVE___INT128)
-    message(STATUS "Build: Detected 128-bit integer support. Enabling 64-bit optimizations.")
-    set(MPT_ARCH_DEFS SECP256K1_WIDEMUL_INT128 USE_FIELD_5X52 HAVE___INT128)
+    message(STATUS "Build: Detected 128-bit integer support.")
+    set(MPT_ARCH_DEFS SECP256K1_WIDEMUL_INT128)
 else ()
-    message(STATUS "Build: No 128-bit support detected. Using generic 32-bit arithmetic.")
-    set(MPT_ARCH_DEFS SECP256K1_WIDEMUL_INT64 USE_FIELD_10X26)
+    message(STATUS "Build: No 128-bit support detected.")
+    set(MPT_ARCH_DEFS SECP256K1_WIDEMUL_INT64)
 endif ()
 
 # --- Find Dependencies ---
