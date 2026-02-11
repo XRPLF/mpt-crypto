@@ -36,7 +36,7 @@ target_include_directories(mpt-crypto PUBLIC include)
 
 # --- Set Compile Definitions ---
 # Pass the architecture flags (MPT_ARCH_DEFS) to the compiler
-target_compile_definitions(mpt-crypto PRIVATE ECMULT_WINDOW_SIZE=15 ECMULT_GEN_PREC_BITS=4 PUBLIC ${MPT_ARCH_DEFS})
+target_compile_definitions(mpt-crypto PUBLIC ${MPT_ARCH_DEFS})
 
 # --- Link Dependencies ---
 target_link_libraries(mpt-crypto PUBLIC secp256k1::secp256k1 PUBLIC OpenSSL::Crypto)
