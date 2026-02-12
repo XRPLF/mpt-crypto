@@ -86,16 +86,16 @@ struct Serializer {
 };
 
 void sha512_half(const uint8_t* data, size_t len, uint8_t* out) {
-    uint8_t full_hash[64];
+    uint8_t full_hash[SHA512_DIGEST_LENGTH];
     SHA512(data, len, full_hash);
-    memcpy(out, full_hash, 32); 
+    memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2); 
 }
 
 void mpt_add_common_zkp_fields(Serializer& s, uint16_t txType, account_id acc, uint32_t seq, mpt_issuance_id iss) {
     s.add16(txType);
-    s.addRaw(acc.bytes, 20);
+    s.addRaw(acc.bytes, size_acc);
     s.add32(seq);
-    s.addRaw(iss.bytes, 24);
+    s.addRaw(iss.bytes, size_iss);
 }
 
 std::size_t get_multi_ciphertext_equality_proof_size(std::size_t n_recipients)
@@ -108,11 +108,11 @@ std::size_t get_multi_ciphertext_equality_proof_size(std::size_t n_recipients)
 std::size_t get_confidential_send_proof_size(std::size_t n_recipients)
 {
     // Equality Proof + Amount Linkage (195) + Balance Linkage (195)
-    return get_multi_ciphertext_equality_proof_size(n_recipients) + (ec_pedersen_proof_length * 2);
+    return get_multi_ciphertext_equality_proof_size(n_recipients) + (size_pedersen_proof * 2);
 }
 
 bool mpt_make_ec_pair(
-    const uint8_t buffer[ec_gamal_ciphertext_total_length],
+    const uint8_t buffer[size_gamal_ciphertext_total],
     secp256k1_pubkey& out1,
     secp256k1_pubkey& out2)
 {
@@ -122,13 +122,13 @@ bool mpt_make_ec_pair(
         ctx, 
         &out1, 
         buffer, 
-        ec_gamal_ciphertext_length);
+        size_gamal_ciphertext);
 
     int ret2 = secp256k1_ec_pubkey_parse(
         ctx, 
         &out2, 
-        buffer + ec_gamal_ciphertext_length, 
-        ec_gamal_ciphertext_length);
+        buffer + size_gamal_ciphertext, 
+        size_gamal_ciphertext);
 
     return (ret1 == 1 && ret2 == 1);
 }
@@ -136,18 +136,18 @@ bool mpt_make_ec_pair(
 bool mpt_serialize_ec_pair(
     const secp256k1_pubkey& in1,
     const secp256k1_pubkey& in2,
-    uint8_t out[ec_gamal_ciphertext_total_length])
+    uint8_t out[size_gamal_ciphertext_total])
 {
     const secp256k1_context* ctx = mpt_secp256k1_context();
-    size_t len = ec_gamal_ciphertext_length;
+    size_t len = size_gamal_ciphertext;
 
     // Serialize C1
     if (secp256k1_ec_pubkey_serialize(ctx, out, &len, &in1, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     // Serialize C2
-    len = ec_gamal_ciphertext_length;
-    if (secp256k1_ec_pubkey_serialize(ctx, out + ec_gamal_ciphertext_length, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
+    len = size_gamal_ciphertext;
+    if (secp256k1_ec_pubkey_serialize(ctx, out + size_gamal_ciphertext, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     return true;
@@ -156,58 +156,58 @@ bool mpt_serialize_ec_pair(
 // --- PUBLIC API IMPLEMENTATION ---
 extern "C" {
 
-int mpt_get_convert_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint8_t out[32]) {
-    uint8_t buf[128];
+int mpt_get_convert_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint8_t out_hash[size_half_sha]) {
+    uint8_t buf[mpt_convert_hash_size];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, seq, iss);
     s.add64(amt);
 
-    sha512_half(buf, s.offset, out);
+    sha512_half(buf, s.offset, out_hash);
     return 0;
 }
 
-int mpt_get_convert_back_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint32_t ver, uint8_t out[32]) {
-    uint8_t buf[128];
+int mpt_get_convert_back_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint32_t ver, uint8_t out_hash[size_half_sha]) {
+    uint8_t buf[mpt_convert_back_hash_size];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, seq, iss);
     s.add64(amt);
     s.add32(ver);
 
-    sha512_half(buf, s.offset, out);
+    sha512_half(buf, s.offset, out_hash);
     return 0;
 }
 
-int mpt_get_send_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, account_id dest, uint32_t ver, uint8_t out[32]) {
-    uint8_t buf[128];
+int mpt_get_send_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, account_id dest, uint32_t ver, uint8_t out_hash[size_half_sha]) {
+    uint8_t buf[mpt_send_hash_size];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, seq, iss);
-    s.addRaw(dest.bytes, 20);
+    s.addRaw(dest.bytes, size_acc);
     s.add32(ver);
 
-    sha512_half(buf, s.offset, out);
+    sha512_half(buf, s.offset, out_hash);
     return 0;
 }
 
-int mpt_get_clawback_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, account_id holder, uint8_t out[32]) {
-    uint8_t buf[128];
+int mpt_get_clawback_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, account_id holder, uint8_t out_hash[size_half_sha]) {
+    uint8_t buf[mpt_clawback_hash_size];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, seq, iss);
     s.add64(amt);
-    s.addRaw(holder.bytes, 20);
+    s.addRaw(holder.bytes, size_acc);
 
-    sha512_half(buf, s.offset, out);
+    sha512_half(buf, s.offset, out_hash);
     return 0;
 }
 
-int mpt_generate_keypair(uint8_t out_privkey[ec_priv_key_length], uint8_t out_pubkey[ec_pub_key_length]) {
+int mpt_generate_keypair(uint8_t out_privkey[size_privkey], uint8_t out_pubkey[size_pubkey]) {
    if (!out_privkey || !out_pubkey) return -1;
 
-    std::span<uint8_t, ec_priv_key_length> priv(out_privkey, ec_priv_key_length);
-    std::span<uint8_t, ec_pub_key_length> pub(out_pubkey, ec_pub_key_length);
+    std::span<uint8_t, size_privkey> priv(out_privkey, size_privkey);
+    std::span<uint8_t, size_pubkey> pub(out_pubkey, size_pubkey);
 
     if (!secp256k1_elgamal_generate_keypair(mpt_secp256k1_context(), priv.data(), pub.data())) {
         return -1;
@@ -215,10 +215,10 @@ int mpt_generate_keypair(uint8_t out_privkey[ec_priv_key_length], uint8_t out_pu
     return 0;
 }
 
-int mpt_generate_blinding_factor(uint8_t out_factor[ec_blinding_factor_length]) {
+int mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]) {
     if (!out_factor) return -1;
     
-    if (RAND_bytes(out_factor, ec_blinding_factor_length) != 1) {
+    if (RAND_bytes(out_factor, size_blinding_factor) != 1) {
         return -1;
     }
     return 0;
@@ -226,14 +226,14 @@ int mpt_generate_blinding_factor(uint8_t out_factor[ec_blinding_factor_length]) 
 
 int mpt_encrypt_amount(
     uint64_t amount,
-    const uint8_t pubkey[ec_pub_key_length],
-    const uint8_t blinding_factor[ec_blinding_factor_length],
-    uint8_t out_ciphertext[ec_gamal_ciphertext_total_length]) 
+    const uint8_t pubkey[size_pubkey],
+    const uint8_t blinding_factor[size_blinding_factor],
+    uint8_t out_ciphertext[size_gamal_ciphertext_total]) 
 {
     if (!pubkey || !blinding_factor || !out_ciphertext) return -1;
 
     secp256k1_pubkey c1, c2, pk;
-    std::memcpy(pk.data, pubkey, ec_pub_key_length);
+    std::memcpy(pk.data, pubkey, size_pubkey);
 
     if (!secp256k1_elgamal_encrypt(
             mpt_secp256k1_context(), 
@@ -255,8 +255,8 @@ int mpt_encrypt_amount(
 }
 
 int mpt_decrypt_amount(
-    const uint8_t in_ciphertext[ec_gamal_ciphertext_total_length],
-    const uint8_t privkey[ec_priv_key_length],
+    const uint8_t in_ciphertext[size_gamal_ciphertext_total],
+    const uint8_t privkey[size_privkey],
     uint64_t* out_amount) 
 {
     if (!in_ciphertext || !privkey || !out_amount) return -1;

@@ -34,21 +34,21 @@ int main() {
     uint32_t mock_seq = 12345;
 
     // 1. Generate keypair for sender
-    uint8_t priv[ec_priv_key_length];
-    uint8_t pub[ec_pub_key_length];
+    uint8_t priv[size_privkey];
+    uint8_t pub[size_pubkey];
     assert(mpt_generate_keypair(priv, pub) == 0);
 
-    std::cout << "Private Key (" << ec_priv_key_length << "-byte Hex): " << to_hex(priv, ec_priv_key_length) << std::endl;
-    std::cout << "Public Key  (" << ec_pub_key_length << "-byte Hex): " << to_hex(pub, ec_pub_key_length) << std::endl;
+    std::cout << "Private Key (" << size_privkey << "-byte Hex): " << to_hex(priv, size_privkey) << std::endl;
+    std::cout << "Public Key  (" << size_pubkey << "-byte Hex): " << to_hex(pub, size_pubkey) << std::endl;
 
     // 2. Encrypt an amount (500)
-    uint8_t bf[ec_blinding_factor_length];
+    uint8_t bf[size_blinding_factor];
     uint64_t amount_to_encrypt = 500;
-    uint8_t ciphertext[ec_gamal_ciphertext_total_length];
+    uint8_t ciphertext[size_gamal_ciphertext_total];
     assert(mpt_generate_blinding_factor(bf) == 0);
-    std::cout << "Blinding Factor (" << ec_blinding_factor_length << "-byte Hex): " << to_hex(bf, ec_blinding_factor_length) << std::endl;
+    std::cout << "Blinding Factor (" << size_blinding_factor << "-byte Hex): " << to_hex(bf, size_blinding_factor) << std::endl;
     assert(mpt_encrypt_amount(amount_to_encrypt, pub, bf, ciphertext) == 0);
-    std::cout << "Encrypting Amount: " << amount_to_encrypt << " Ciphertext (" << ec_gamal_ciphertext_total_length << "-byte Hex): " << to_hex(ciphertext, ec_gamal_ciphertext_total_length) << std::endl;
+    std::cout << "Encrypting Amount: " << amount_to_encrypt << " Ciphertext (" << size_gamal_ciphertext_total << "-byte Hex): " << to_hex(ciphertext, size_gamal_ciphertext_total) << std::endl;
 
     // 3. Decrypt to verify the Ciphertext is 500
     uint64_t decrypted_amount = 0;
@@ -64,9 +64,9 @@ int main() {
         amount_to_encrypt, 
         tx_hash) == 0);
 
-    uint8_t proof[ec_schnorr_proof_length];
+    uint8_t proof[size_schnorr_proof];
     assert(mpt_get_convert_proof(pub, priv, tx_hash, proof) == 0);
-    std::cout << "ConfidentialMPTConvert Proof (" << ec_schnorr_proof_length << "-byte Hex): " << to_hex(proof, ec_schnorr_proof_length) << std::endl;
+    std::cout << "ConfidentialMPTConvert Proof (" << size_schnorr_proof << "-byte Hex): " << to_hex(proof, size_schnorr_proof) << std::endl;
 
     /*
     // 5. Generate proof for ConfidentialMPTSend
@@ -139,18 +139,18 @@ int main() {
     std::vector<mpt_confidential_recipient> recipients;
     
     mpt_confidential_recipient r_sender;
-    std::memcpy(r_sender.pubkey, pub, ec_pub_key_length);
-    std::memcpy(r_sender.encrypted_amount, sender_ciphertext, ec_gamal_ciphertext_length);
+    std::memcpy(r_sender.pubkey, pub, size_pubkey);
+    std::memcpy(r_sender.encrypted_amount, sender_ciphertext, size_gamal_ciphertext);
     recipients.push_back(r_sender);
 
     mpt_confidential_recipient r_dest;
-    std::memcpy(r_dest.pubkey, dest_pub, ec_pub_key_length);
-    std::memcpy(r_dest.encrypted_amount, dest_ciphertext, ec_gamal_ciphertext_length);
+    std::memcpy(r_dest.pubkey, dest_pub, size_pubkey);
+    std::memcpy(r_dest.encrypted_amount, dest_ciphertext, size_gamal_ciphertext);
     recipients.push_back(r_dest);
 
     mpt_confidential_recipient r_issuer;
-    std::memcpy(r_issuer.pubkey, issuer_pub, ec_pub_key_length);
-    std::memcpy(r_issuer.encrypted_amount, issuer_ciphertext, ec_gamal_ciphertext_length);
+    std::memcpy(r_issuer.pubkey, issuer_pub, size_pubkey);
+    std::memcpy(r_issuer.encrypted_amount, issuer_ciphertext, size_gamal_ciphertext);
     recipients.push_back(r_issuer);
 
     // 5(g) Prepare the pedersen params.
@@ -158,7 +158,7 @@ int main() {
     mpt_pedersen_proof_params amt_params;
     amt_params.amount = amount_to_send;
     std::memcpy(amt_params.pedersen_commitment, amount_commitment, 64);
-    std::memcpy(amt_params.encrypted_amount, sender_ciphertext, ec_gamal_ciphertext_length);
+    std::memcpy(amt_params.encrypted_amount, sender_ciphertext, size_gamal_ciphertext);
     std::memcpy(amt_params.blinding_factor, amount_bf, 32);
 
     // 5(g)(ii) Prepare pedersen balance params.
