@@ -44,3 +44,12 @@ if (ENABLE_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif ()
+
+# --- Console Application (Developer Tool) ---
+add_executable(confidential_utility tools/confidential_utility.cpp)
+target_link_libraries(confidential_utility PRIVATE mpt-crypto)
+target_include_directories(confidential_utility PRIVATE 
+    include 
+    src/utility
+)
+

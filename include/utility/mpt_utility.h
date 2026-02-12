@@ -218,10 +218,10 @@ int mpt_decrypt_amount(
  * @return 0 on success, -1 on failure.
  */
 int mpt_get_convert_proof(
-    const uint8_t pubkey[64],
-    const uint8_t privkey[32],
-    const uint8_t ctx_hash[32],
-    uint8_t out_proof[65]);
+    const uint8_t pubkey[size_pubkey],
+    const uint8_t privkey[size_privkey],
+    const uint8_t ctx_hash[size_half_sha],
+    uint8_t out_proof[size_schnorr_proof]);
 
 /**
  * @brief Computes a Pedersen Commitment point for Confidential MPT.
@@ -231,24 +231,24 @@ int mpt_get_convert_proof(
  */
 int mpt_get_pedersen_commitment(
     uint64_t amount,
-    const uint8_t blinding_factor[32],
-    uint8_t out_commitment[64]);
+    const uint8_t blinding_factor[size_blinding_factor],
+    uint8_t out_commitment[size_pedersen_commitment]);
 
 /**
  * @brief Generates a ZK linkage proof between an ElGamal ciphertext and a Pedersen commitment.
- * @param pub                 [in] 64-byte internal format of the sender's public key.
- * @param elgamal_r           [in] 32-byte blinding factor used for the ElGamal encryption.
+ * @param pubkey              [in] 64-byte internal format of the sender's public key.
+ * @param blinding_factor     [in] 32-byte blinding factor used for the ElGamal encryption.
  * @param context_hash        [in] 32-byte hash of the transaction context.
  * @param params              [in] Struct containing commitment, amount, and ciphertext.
  * @param out                 [out] Buffer of exactly 195 bytes to store the proof.
  * @return 0 on success, -1 on failure.
  */
 int mpt_get_amount_linkage_proof(
-    const uint8_t pub[64],
-    const uint8_t elgamal_r[32],
-    const uint8_t context_hash[32],
-    const mpt_pedersen_proof_params& params,
-    uint8_t out[195]);
+    const uint8_t pubkey[size_pubkey],
+    const uint8_t blinding_factor[size_blinding_factor],
+    const uint8_t context_hash[size_half_sha],
+    const mpt_pedersen_proof_params* params,
+    uint8_t out[size_pedersen_proof]);
 
 /**
  * @brief Generates a ZK linkage proof for the sender's balance.
@@ -260,11 +260,11 @@ int mpt_get_amount_linkage_proof(
  * @return 0 on success, -1 on failure.
  */
 int mpt_get_balance_linkage_proof(
-    const uint8_t priv[32],
-    const uint8_t pub[64],
-    const uint8_t context_hash[32],
-    const mpt_pedersen_proof_params& params,
-    uint8_t out[195]);
+    const uint8_t priv[size_privkey],
+    const uint8_t pub[size_pubkey],
+    const uint8_t context_hash[size_half_sha],
+    const mpt_pedersen_proof_params* params,
+    uint8_t out[size_pedersen_proof]);
 
 /**
  * @brief Generates the full ConfidentialMPTSend proof and fills a provided buffer.
@@ -280,13 +280,17 @@ int mpt_get_balance_linkage_proof(
  * @return 0 on success, -1 on failure (e.g., buffer too small or math error).
  */
 int mpt_get_confidential_send_proof(
-    const uint8_t priv[32],
+    const uint8_t priv[size_privkey],
     uint64_t amount,
-    const std::vector<mpt_confidential_recipient>& recipients,
-    const uint8_t tx_blinding_factor[32],
-    const uint8_t context_hash[32],
-    const mpt_pedersen_proof_params& amount_params,
-    const mpt_pedersen_proof_params& balance_params, uint8_t* out_proof, size_t* out_len);
+    const mpt_confidential_recipient* recipients,
+    size_t n_recipients,
+    const uint8_t tx_blinding_factor[size_blinding_factor],
+    const uint8_t context_hash[size_half_sha],
+    const mpt_pedersen_proof_params* amount_params,
+    const mpt_pedersen_proof_params* balance_params,
+    uint8_t* out_proof,
+    size_t* out_len);
+
 #ifdef __cplusplus
 }
 #endif
