@@ -2,6 +2,7 @@
 #define MPT_UTILITY_H
 
 #include <secp256k1.h>
+#include <cstddef>
 #include <stdint.h>
 #include <vector>
 
@@ -55,32 +56,55 @@ static constexpr std::size_t mpt_convert_back_hash_size =
 static constexpr std::size_t mpt_clawback_hash_size = 
     mpt_hash_common_size + size_amt + size_acc;  // 78 bytes
 
+/**
+ * @brief Represents a unique 24-byte MPT issuance ID.
+ */
 typedef struct {
-    uint8_t bytes[size_iss];  // 24-byte issuance ID
+    uint8_t bytes[size_iss];
 } mpt_issuance_id;
 
+/**
+ * @brief Represents a 20-byte account ID.
+ */
 typedef struct {
-    uint8_t bytes[size_acc];  // 20-byte account ID
+    uint8_t bytes[size_acc];
 } account_id;
 
 /**
  * @brief Represents a recipient in a Confidential Send transaction.
+ * Contains a pubkey and an encrypted amount.
  */
 struct mpt_confidential_recipient {
-    uint8_t pubkey[size_pubkey]; // The recipient's public key
-    uint8_t encrypted_amount[size_gamal_ciphertext_total]; // The C1 and C2 points (ElGamal)
+    uint8_t pubkey[size_pubkey];
+    uint8_t encrypted_amount[size_gamal_ciphertext_total];
 };
 
 /**
  * @brief Parameters required to generate a Pedersen Linkage Proof.
- * This links an ElGamal ciphertext to a Pedersen commitment.
  */
 struct mpt_pedersen_proof_params {
-    uint8_t pedersen_commitment[size_pedersen_commitment]; // Pedersen Commitment
-    uint64_t amount; // The amount in public format (for proof generation)
-    uint8_t encrypted_amount[size_gamal_ciphertext_total];   // ElGamal Ciphertext (C1, C2)
-    uint8_t blinding_factor[size_blinding_factor];     // The 'r' used in the commitment
+    /**
+     * @brief The 64-byte Pedersen commitment.
+     */
+    uint8_t pedersen_commitment[size_pedersen_commitment];
+
+    /**
+     * @brief The actual numeric value being committed.
+     */
+    uint64_t amount; 
+
+    /**
+     * @brief The 66-byte buffer containing the encrypted amount.
+     */
+    uint8_t encrypted_amount[size_gamal_ciphertext_total]; 
+
+    /**
+     * @brief The 32-byte secret random value used to blind the Pedersen commitment.
+     */
+    uint8_t blinding_factor[size_blinding_factor]; 
 };
+
+secp256k1_context* mpt_secp256k1_context();
 
 /**
  * @brief Context Hash for ConfidentialMPTConvert.
@@ -135,9 +159,13 @@ std::size_t get_multi_ciphertext_equality_proof_size(std::size_t n_recipients);
  */
 std::size_t get_confidential_send_proof_size(std::size_t n_recipients);
 
+/* ============================================================================
+ * Key & Ciphertext Utilities
+ * ============================================================================ */
+
 /**
  * @brief Parses a 66-byte buffer into two internal secp256k1 public keys.
- * @param buffer [in] 66-byte buffer containing two compressed points.
+ * @param buffer [in] 66-byte buffer containing two points.
  * @param out1   [out] First internal public key (C1).
  * @param out2   [out] Second internal public key (C2).
  * @return true on success, false if parsing fails.
@@ -149,12 +177,9 @@ bool mpt_make_ec_pair(
 
 /**
  * @brief Parses a 66-byte buffer into two internal secp256k1 public keys.
- * * This is the "Inverse" of serialization. It takes a compressed 66-byte wire 
- * format ciphertext (C1 + C2) and converts it into internal structures 
- * suitable for cryptographic operations like decryption or proof generation.
- * * @param buffer [in] 66-byte buffer containing two 33-byte compressed points.
- * @param out1   [out] Decoded internal format of the first point (C1).
- * @param out2   [out] Decoded internal format of the second point (C2).
+ * @param in1   [in] Internal format of the first point (C1).
+ * @param in2   [in] Internal format of the second point (C2).
+ * @param out   [out] 66-byte buffer to write the points.
  * @return true if both points were valid and successfully parsed, false otherwise.
  */
 bool mpt_serialize_ec_pair(
@@ -164,26 +189,25 @@ bool mpt_serialize_ec_pair(
 
 /**
  * @brief Generates a new Secp256k1 ElGamal keypair.
- * @param out_privkey [out] A 32-byte buffer where the private key will be stored.
- * @param out_pubkey  [out] A 64-byte buffer where the uncompressed public key.
+ * @param out_privkey [out] A 32-byte buffer for private key.
+ * @param out_pubkey  [out] A 64-byte buffer for public key.
  * @return 0 on success, -1 on failure.
  */
-int mpt_generate_keypair(uint8_t out_privkey[size_privkey], uint8_t out_pubkey[size_pubkey]);
+int mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub);
 
 /**
- * @brief Generates a cryptographically secure 32-byte blinding factor.
- * @param out_factor [out] A 32-byte buffer where the random blinding factor 
- * will be stored.
+ * @brief Generates a 32-byte blinding factor.
+ * @param out_factor [out] A 32-byte buffer to store the blinding factor.
  * @return 0 on success, -1 on failure.
  */
 int mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]);
 
 /**
- * @brief Encrypts a uint64 amount using an ElGamal public key.
- * @param amount The value to encrypt.
- * @param pubkey 64-byte public key.
- * @param blinding_factor 32-byte random factor.
- * @param out_ciphertext 66-byte buffer to store (C1, C2).
+ * @brief Encrypts an uint64 amount using an ElGamal public key.
+ * @param amount           [in]  The integer value to encrypt.
+ * @param pubkey           [in]  The 64-byte public key.
+ * @param blinding_factor  [in]  The 32-byte random blinding factor (scalar r).
+ * @param out_ciphertext   [out] A 66-byte buffer to store the resulting ciphertext (C1, C2).
  * @return 0 on success, -1 on failure.
  */
 int mpt_encrypt_amount(
@@ -194,15 +218,19 @@ int mpt_encrypt_amount(
 
 /**
  * @brief Decrypts an MPT amount from a ciphertext pair.
- * @param ciphertext 66-byte buffer
- * @param privkey 32-byte private key.
- * @param out_amount Pointer to store the recovered uint64_t.
+ * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
+ * @param privkey    [in]  The 32-byte private key.
+ * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
  * @return 0 on success, -1 on failure.
  */
 int mpt_decrypt_amount(
     const uint8_t ciphertext[size_gamal_ciphertext_total],
     const uint8_t privkey[size_privkey],
     uint64_t* out_amount);
+
+/* ============================================================================
+ * Proof Generation
+ * ============================================================================ */
 
 /**
  * @brief Generates a Schnorr Proof of Knowledge for a Confidential MPT conversion.
@@ -267,10 +295,11 @@ int mpt_get_balance_linkage_proof(
     uint8_t out[size_pedersen_proof]);
 
 /**
- * @brief Generates the full ConfidentialMPTSend proof and fills a provided buffer.
+ * @brief Generates proof for ConfidentialMPTSend.
  * @param priv.             [in] The sender's 32-byte private key.
  * @param amount            [in] The amount being sent.
  * @param recipients        [in] List of recipients (Sender, Dest, Issuer).
+ * @param n_recipients      [in] Number of recipients in the list.
  * @param tx_blinding_factor [in] The ElGamal 'r' used for the transaction.
  * @param context_hash      [in] The 32-byte context hash.
  * @param amount_params     [in] Linkage params for the transaction amount.
@@ -290,6 +319,40 @@ int mpt_get_confidential_send_proof(
     const mpt_pedersen_proof_params* balance_params,
     uint8_t* out_proof,
     size_t* out_len);
+
+/**
+ * @brief Generates proof for ConfidentialMPTConvertBack.
+ * @param priv          [in] The holder's 32-byte private key.
+ * @param pub           [in] The holder's 64-byte public key (internal format).
+ * @param context_hash  [in] The 32-byte context hash binding the proof to the transaction.
+ * @param params        [in] Pedersen commitment parameters.
+ * @param out_proof     [out] The 65-byte buffer to be filled with the Pedersen linkage proof.
+ * @return 0 on success, -1 on failure (e.g., math error or invalid parameters).
+ */
+int mpt_get_convert_back_proof(
+    const uint8_t priv[size_privkey],
+    const uint8_t pub[size_pubkey],
+    const uint8_t context_hash[size_half_sha],
+    const mpt_pedersen_proof_params* params,
+    uint8_t out_proof[size_pedersen_proof]);
+
+/**
+ * @brief Generates proof for ConfidentialMPTClawback.
+ * @param priv              [in] The issuer's 32-byte private key.
+ * @param pub               [in] The issuer's 64-byte public key.
+ * @param context_hash      [in] The 32-byte context hash binding the proof to the transaction.
+ * @param amount            [in] The plaintext amount to be clawed back.
+ * @param encrypted_amount  [in] The 66-byte sfIssuerEncryptedBalance blob from the ledger.
+ * @param out_proof         [out] The 64-byte buffer to be filled with the equality proof.
+ * @return 0 on success, -1 on failure (e.g., math error or invalid ciphertext).
+ */
+int mpt_get_clawback_proof(
+    const uint8_t priv[size_privkey],
+    const uint8_t pub[size_pubkey],
+    const uint8_t context_hash[size_half_sha],
+    const uint64_t amount,
+    const uint8_t encrypted_amount[size_gamal_ciphertext_total],
+    uint8_t out_proof[size_equality_proof]);
 
 #ifdef __cplusplus
 }
