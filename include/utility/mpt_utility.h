@@ -1,8 +1,8 @@
 #ifndef MPT_UTILITY_H
 #define MPT_UTILITY_H
 
-#include <secp256k1.h>
 #include <cstddef>
+#include <secp256k1.h>
 #include <stdint.h>
 #include <vector>
 
@@ -11,15 +11,15 @@ extern "C" {
 #endif
 
 // XRPL Transaction Types, the number MUST match rippled's definitions
-#define ttCONFIDENTIAL_MPT_CONVERT       85
-#define ttCONFIDENTIAL_MPT_MERGE_INBOX   86
-#define ttCONFIDENTIAL_MPT_CONVERT_BACK  87
-#define ttCONFIDENTIAL_MPT_SEND          88
-#define ttCONFIDENTIAL_MPT_CLAWBACK      89
+#define ttCONFIDENTIAL_MPT_CONVERT 85
+#define ttCONFIDENTIAL_MPT_MERGE_INBOX 86
+#define ttCONFIDENTIAL_MPT_CONVERT_BACK 87
+#define ttCONFIDENTIAL_MPT_SEND 88
+#define ttCONFIDENTIAL_MPT_CLAWBACK 89
 
 // General crypto primitive sizes
 static constexpr std::size_t size_half_sha = 32;
-static constexpr std::size_t size_pubkey = 64; 
+static constexpr std::size_t size_pubkey = 64;
 static constexpr std::size_t size_privkey = 32;
 static constexpr std::size_t size_blinding_factor = 32;
 
@@ -34,39 +34,40 @@ static constexpr std::size_t size_equality_proof = 98;
 static constexpr std::size_t size_pedersen_proof = 195;
 
 // Field sizes in bytes for context hash
-static constexpr std::size_t size_type     = 2;
-static constexpr std::size_t size_acc      = 20;
-static constexpr std::size_t size_seq      = 4;
-static constexpr std::size_t size_iss      = 24;
-static constexpr std::size_t size_amt      = 8;
-static constexpr std::size_t size_ver      = 4;
+static constexpr std::size_t size_type = 2;
+static constexpr std::size_t size_acc = 20;
+static constexpr std::size_t size_seq = 4;
+static constexpr std::size_t size_iss = 24;
+static constexpr std::size_t size_amt = 8;
+static constexpr std::size_t size_ver = 4;
 
-static constexpr std::size_t mpt_hash_common_size = 
+static constexpr std::size_t mpt_hash_common_size =
     size_type + size_acc + size_seq + size_iss;  // 50 bytes
 
-static constexpr std::size_t mpt_convert_hash_size = 
-    mpt_hash_common_size + size_amt; // 58 bytes
+static constexpr std::size_t mpt_convert_hash_size = mpt_hash_common_size + size_amt;  // 58 bytes
 
-static constexpr std::size_t mpt_send_hash_size = 
-    mpt_hash_common_size + size_acc + size_ver; // 74 bytes
+static constexpr std::size_t mpt_send_hash_size =
+    mpt_hash_common_size + size_acc + size_ver;  // 74 bytes
 
-static constexpr std::size_t mpt_convert_back_hash_size = 
+static constexpr std::size_t mpt_convert_back_hash_size =
     mpt_hash_common_size + size_amt + size_ver;  // 62 bytes
 
-static constexpr std::size_t mpt_clawback_hash_size = 
+static constexpr std::size_t mpt_clawback_hash_size =
     mpt_hash_common_size + size_amt + size_acc;  // 78 bytes
 
 /**
  * @brief Represents a unique 24-byte MPT issuance ID.
  */
-typedef struct {
+typedef struct
+{
     uint8_t bytes[size_iss];
 } mpt_issuance_id;
 
 /**
  * @brief Represents a 20-byte account ID.
  */
-typedef struct {
+typedef struct
+{
     uint8_t bytes[size_acc];
 } account_id;
 
@@ -74,7 +75,8 @@ typedef struct {
  * @brief Represents a recipient in a Confidential Send transaction.
  * Contains a pubkey and an encrypted amount.
  */
-struct mpt_confidential_recipient {
+struct mpt_confidential_recipient
+{
     uint8_t pubkey[size_pubkey];
     uint8_t encrypted_amount[size_gamal_ciphertext_total];
 };
@@ -82,7 +84,8 @@ struct mpt_confidential_recipient {
 /**
  * @brief Parameters required to generate a Pedersen Linkage Proof.
  */
-struct mpt_pedersen_proof_params {
+struct mpt_pedersen_proof_params
+{
     /**
      * @brief The 64-byte Pedersen commitment.
      */
@@ -91,25 +94,27 @@ struct mpt_pedersen_proof_params {
     /**
      * @brief The actual numeric value being committed.
      */
-    uint64_t amount; 
+    uint64_t amount;
 
     /**
      * @brief The 66-byte buffer containing the encrypted amount.
      */
-    uint8_t encrypted_amount[size_gamal_ciphertext_total]; 
+    uint8_t encrypted_amount[size_gamal_ciphertext_total];
 
     /**
      * @brief The 32-byte secret random value used to blind the Pedersen commitment.
      */
-    uint8_t blinding_factor[size_blinding_factor]; 
+    uint8_t blinding_factor[size_blinding_factor];
 };
 
-secp256k1_context* mpt_secp256k1_context();
+secp256k1_context*
+mpt_secp256k1_context();
 
 /**
  * @brief Context Hash for ConfidentialMPTConvert.
  */
-int mpt_get_convert_context_hash(
+int
+mpt_get_convert_context_hash(
     account_id account,
     uint32_t sequence,
     mpt_issuance_id issuanceID,
@@ -119,7 +124,8 @@ int mpt_get_convert_context_hash(
 /**
  * @brief Context Hash for ConfidentialMPTConvertBack.
  */
-int mpt_get_convert_back_context_hash(
+int
+mpt_get_convert_back_context_hash(
     account_id account,
     uint32_t sequence,
     mpt_issuance_id issuanceID,
@@ -130,7 +136,8 @@ int mpt_get_convert_back_context_hash(
 /**
  * @brief Context Hash for ConfidentialMPTSend.
  */
-int mpt_get_send_context_hash(
+int
+mpt_get_send_context_hash(
     account_id account,
     uint32_t sequence,
     mpt_issuance_id issuanceID,
@@ -141,7 +148,8 @@ int mpt_get_send_context_hash(
 /**
  * @brief Context Hash for ConfidentialMPTClawback.
  */
-int mpt_get_clawback_context_hash(
+int
+mpt_get_clawback_context_hash(
     account_id account,
     uint32_t sequence,
     mpt_issuance_id issuanceID,
@@ -152,12 +160,14 @@ int mpt_get_clawback_context_hash(
 /**
  * @brief Calculates the size of the Multi-Ciphertext Equality Proof.
  */
-std::size_t get_multi_ciphertext_equality_proof_size(std::size_t n_recipients);
+std::size_t
+get_multi_ciphertext_equality_proof_size(std::size_t n_recipients);
 
 /**
  * @brief Calculates the total size for a ConfidentialMPTSend proof.
  */
-std::size_t get_confidential_send_proof_size(std::size_t n_recipients);
+std::size_t
+get_confidential_send_proof_size(std::size_t n_recipients);
 
 /* ============================================================================
  * Key & Ciphertext Utilities
@@ -170,8 +180,9 @@ std::size_t get_confidential_send_proof_size(std::size_t n_recipients);
  * @param out2   [out] Second internal public key (C2).
  * @return true on success, false if parsing fails.
  */
-bool mpt_make_ec_pair(
-    const uint8_t buffer[size_gamal_ciphertext_total],
+bool
+mpt_make_ec_pair(
+    uint8_t const buffer[size_gamal_ciphertext_total],
     secp256k1_pubkey& out1,
     secp256k1_pubkey& out2);
 
@@ -182,9 +193,10 @@ bool mpt_make_ec_pair(
  * @param out   [out] 66-byte buffer to write the points.
  * @return true if both points were valid and successfully parsed, false otherwise.
  */
-bool mpt_serialize_ec_pair(
-    const secp256k1_pubkey& in1,
-    const secp256k1_pubkey& in2,
+bool
+mpt_serialize_ec_pair(
+    secp256k1_pubkey const& in1,
+    secp256k1_pubkey const& in2,
     uint8_t out[size_gamal_ciphertext_total]);
 
 /**
@@ -193,14 +205,16 @@ bool mpt_serialize_ec_pair(
  * @param out_pubkey  [out] A 64-byte buffer for public key.
  * @return 0 on success, -1 on failure.
  */
-int mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub);
+int
+mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub);
 
 /**
  * @brief Generates a 32-byte blinding factor.
  * @param out_factor [out] A 32-byte buffer to store the blinding factor.
  * @return 0 on success, -1 on failure.
  */
-int mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]);
+int
+mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]);
 
 /**
  * @brief Encrypts an uint64 amount using an ElGamal public key.
@@ -210,10 +224,11 @@ int mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]);
  * @param out_ciphertext   [out] A 66-byte buffer to store the resulting ciphertext (C1, C2).
  * @return 0 on success, -1 on failure.
  */
-int mpt_encrypt_amount(
+int
+mpt_encrypt_amount(
     uint64_t amount,
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t blinding_factor[size_blinding_factor],
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const blinding_factor[size_blinding_factor],
     uint8_t out_ciphertext[size_gamal_ciphertext_total]);
 
 /**
@@ -223,9 +238,10 @@ int mpt_encrypt_amount(
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
  * @return 0 on success, -1 on failure.
  */
-int mpt_decrypt_amount(
-    const uint8_t ciphertext[size_gamal_ciphertext_total],
-    const uint8_t privkey[size_privkey],
+int
+mpt_decrypt_amount(
+    uint8_t const ciphertext[size_gamal_ciphertext_total],
+    uint8_t const privkey[size_privkey],
     uint64_t* out_amount);
 
 /* ============================================================================
@@ -235,8 +251,8 @@ int mpt_decrypt_amount(
 /**
  * @brief Generates a Schnorr Proof of Knowledge for a Confidential MPT conversion.
  *
- * This proof is used in 'ConfidentialMPTConvert' transactions to prove the 
- * sender possesses the private key associated with the account, binding it 
+ * This proof is used in 'ConfidentialMPTConvert' transactions to prove the
+ * sender possesses the private key associated with the account, binding it
  * to the specific transaction via the ctx_hash.
  *
  * @param pubkey    [in]  64-byte public key of the account.
@@ -245,21 +261,23 @@ int mpt_decrypt_amount(
  * @param out_proof [out] 65-byte buffer to store the Schnorr proof.
  * @return 0 on success, -1 on failure.
  */
-int mpt_get_convert_proof(
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t privkey[size_privkey],
-    const uint8_t ctx_hash[size_half_sha],
+int
+mpt_get_convert_proof(
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const privkey[size_privkey],
+    uint8_t const ctx_hash[size_half_sha],
     uint8_t out_proof[size_schnorr_proof]);
 
 /**
  * @brief Computes a Pedersen Commitment point for Confidential MPT.
  * @param amount           [in]  The 64-bit unsigned integer value to commit.
- * @param blinding_factor  [in]  A 32-byte secret scalar (rho) used to hide the amount. 
+ * @param blinding_factor  [in]  A 32-byte secret scalar (rho) used to hide the amount.
  * @param out_commitment   [out] A 64-byte buffer to store the commitment
  */
-int mpt_get_pedersen_commitment(
+int
+mpt_get_pedersen_commitment(
     uint64_t amount,
-    const uint8_t blinding_factor[size_blinding_factor],
+    uint8_t const blinding_factor[size_blinding_factor],
     uint8_t out_commitment[size_pedersen_commitment]);
 
 /**
@@ -271,11 +289,12 @@ int mpt_get_pedersen_commitment(
  * @param out                 [out] Buffer of exactly 195 bytes to store the proof.
  * @return 0 on success, -1 on failure.
  */
-int mpt_get_amount_linkage_proof(
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t blinding_factor[size_blinding_factor],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
+int
+mpt_get_amount_linkage_proof(
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const blinding_factor[size_blinding_factor],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
     uint8_t out[size_pedersen_proof]);
 
 /**
@@ -287,11 +306,12 @@ int mpt_get_amount_linkage_proof(
  * @param out                 [out] Buffer of exactly 195 bytes to store the proof.
  * @return 0 on success, -1 on failure.
  */
-int mpt_get_balance_linkage_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
+int
+mpt_get_balance_linkage_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
     uint8_t out[size_pedersen_proof]);
 
 /**
@@ -308,15 +328,16 @@ int mpt_get_balance_linkage_proof(
  * @param out_len           [in/out] In: Size of the buffer. Out: Actual bytes written.
  * @return 0 on success, -1 on failure (e.g., buffer too small or math error).
  */
-int mpt_get_confidential_send_proof(
-    const uint8_t priv[size_privkey],
+int
+mpt_get_confidential_send_proof(
+    uint8_t const priv[size_privkey],
     uint64_t amount,
-    const mpt_confidential_recipient* recipients,
+    mpt_confidential_recipient const* recipients,
     size_t n_recipients,
-    const uint8_t tx_blinding_factor[size_blinding_factor],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* amount_params,
-    const mpt_pedersen_proof_params* balance_params,
+    uint8_t const tx_blinding_factor[size_blinding_factor],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* amount_params,
+    mpt_pedersen_proof_params const* balance_params,
     uint8_t* out_proof,
     size_t* out_len);
 
@@ -329,11 +350,12 @@ int mpt_get_confidential_send_proof(
  * @param out_proof     [out] The 65-byte buffer to be filled with the Pedersen linkage proof.
  * @return 0 on success, -1 on failure (e.g., math error or invalid parameters).
  */
-int mpt_get_convert_back_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
+int
+mpt_get_convert_back_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
     uint8_t out_proof[size_pedersen_proof]);
 
 /**
@@ -346,12 +368,13 @@ int mpt_get_convert_back_proof(
  * @param out_proof         [out] The 64-byte buffer to be filled with the equality proof.
  * @return 0 on success, -1 on failure (e.g., math error or invalid ciphertext).
  */
-int mpt_get_clawback_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const uint64_t amount,
-    const uint8_t encrypted_amount[size_gamal_ciphertext_total],
+int
+mpt_get_clawback_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    uint64_t const amount,
+    uint8_t const encrypted_amount[size_gamal_ciphertext_total],
     uint8_t out_proof[size_equality_proof]);
 
 #ifdef __cplusplus

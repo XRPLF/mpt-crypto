@@ -1,80 +1,88 @@
-#include <utility/mpt_utility.h>
+#include <arpa/inet.h>
+#include <iomanip>
+#include <iostream>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
-#include <string.h>
-#include <span>
-#include <arpa/inet.h>
-#include <iostream>
-#include <iomanip>
-#include <sstream>
 #include <secp256k1_mpt.h>
-
+#include <span>
+#include <sstream>
+#include <string.h>
+#include <utility/mpt_utility.h>
 
 // Platform endianness support for serialization
 #if defined(__APPLE__)
-    #include <libkern/OSByteOrder.h>
-    #define htobe64(x) OSSwapHostToBigInt64(x)
-    #define be64toh(x) OSSwapBigToHostInt64(x)
+#include <libkern/OSByteOrder.h>
+#define htobe64(x) OSSwapHostToBigInt64(x)
+#define be64toh(x) OSSwapBigToHostInt64(x)
 
 #elif defined(__linux__) || defined(__CYGWIN__)
-    #include <endian.h>
-    #ifndef htobe64
-        #if __BYTE_ORDER == __LITTLE_ENDIAN
-            #define htobe64(x) __builtin_bswap64(x)
-            #define be64toh(x) __builtin_bswap64(x)
-        #else
-            #define htobe64(x) (x)
-            #define be64toh(x) (x)
-        #endif
-    #endif
+#include <endian.h>
+#ifndef htobe64
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define htobe64(x) __builtin_bswap64(x)
+#define be64toh(x) __builtin_bswap64(x)
+#else
+#define htobe64(x) (x)
+#define be64toh(x) (x)
+#endif
+#endif
 
 #elif defined(_WIN32)
-    #include <stdlib.h>
-    #define htobe64(x) _byteswap_uint64(x)
-    #define be64toh(x) _byteswap_uint64(x)
+#include <stdlib.h>
+#define htobe64(x) _byteswap_uint64(x)
+#define be64toh(x) _byteswap_uint64(x)
 
 #elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-    #include <sys/endian.h>
+#include <sys/endian.h>
 
 #else
-    #if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-        #define htobe64(x) __builtin_bswap64(x)
-        #define be64toh(x) __builtin_bswap64(x)
-    #else
-        #define htobe64(x) (x)
-        #define be64toh(x) (x)
-    #endif
+#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define htobe64(x) __builtin_bswap64(x)
+#define be64toh(x) __builtin_bswap64(x)
+#else
+#define htobe64(x) (x)
+#define be64toh(x) (x)
+#endif
 #endif
 
 /**
  * Context for secp256k1 operations.\
  * Initialized once and reused across all operations to optimize performance
  */
-secp256k1_context* mpt_secp256k1_context() {
-    struct ContextHolder {
+secp256k1_context*
+mpt_secp256k1_context()
+{
+    struct ContextHolder
+    {
         secp256k1_context* ctx;
 
-        ContextHolder() {
+        ContextHolder()
+        {
             ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-            
-            if (ctx) {
+
+            if (ctx)
+            {
                 unsigned char seed[size_blinding_factor];
-                
-                if (RAND_bytes(seed, size_blinding_factor) != 1) {
+
+                if (RAND_bytes(seed, size_blinding_factor) != 1)
+                {
                     secp256k1_context_destroy(ctx);
-                    ctx = nullptr; 
-                    return; 
+                    ctx = nullptr;
+                    return;
                 }
 
-                if (secp256k1_context_randomize(ctx, seed) != 1) {
+                if (secp256k1_context_randomize(ctx, seed) != 1)
+                {
                     secp256k1_context_destroy(ctx);
                     ctx = nullptr;
                 }
             }
         }
 
-        ~ContextHolder() {
-            if (ctx) secp256k1_context_destroy(ctx);
+        ~ContextHolder()
+        {
+            if (ctx)
+                secp256k1_context_destroy(ctx);
         }
     };
 
@@ -86,89 +94,108 @@ secp256k1_context* mpt_secp256k1_context() {
  * Lightweight serializer.
  * Replicates the behavior of rippled's Serializer without the overhead.
  */
-struct Serializer {
+struct Serializer
+{
     uint8_t* buffer;
     size_t offset = 0;
 
-    Serializer(uint8_t* buf) : buffer(buf) {}
+    Serializer(uint8_t* buf) : buffer(buf)
+    {
+    }
 
-    void add16(uint16_t val) {
+    void
+    add16(uint16_t val)
+    {
         uint16_t n = htons(val);
         memcpy(buffer + offset, &n, 2);
         offset += 2;
     }
 
-    void add32(uint32_t val) {
+    void
+    add32(uint32_t val)
+    {
         uint32_t n = htonl(val);
         memcpy(buffer + offset, &n, 4);
         offset += 4;
     }
 
-    void add64(uint64_t val) {
+    void
+    add64(uint64_t val)
+    {
         uint64_t n = htobe64(val);
         memcpy(buffer + offset, &n, 8);
         offset += 8;
     }
 
-    void addRaw(const uint8_t* data, size_t len) {
+    void
+    addRaw(uint8_t const* data, size_t len)
+    {
         memcpy(buffer + offset, data, len);
         offset += len;
     }
 };
 
-void sha512_half(const uint8_t* data, size_t len, uint8_t* out) {
+void
+sha512_half(uint8_t const* data, size_t len, uint8_t* out)
+{
     uint8_t full_hash[SHA512_DIGEST_LENGTH];
     SHA512(data, len, full_hash);
-    memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2); 
+    memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2);
 }
 
-void mpt_add_common_zkp_fields(Serializer& s, uint16_t txType, account_id acc, uint32_t seq, mpt_issuance_id iss) {
+void
+mpt_add_common_zkp_fields(
+    Serializer& s,
+    uint16_t txType,
+    account_id acc,
+    uint32_t seq,
+    mpt_issuance_id iss)
+{
     s.add16(txType);
     s.addRaw(acc.bytes, size_acc);
     s.add32(seq);
     s.addRaw(iss.bytes, size_iss);
 }
 
-std::size_t get_multi_ciphertext_equality_proof_size(std::size_t n_recipients)
+std::size_t
+get_multi_ciphertext_equality_proof_size(std::size_t n_recipients)
 {
     return secp256k1_mpt_prove_same_plaintext_multi_size(n_recipients);
 }
 
-std::size_t get_confidential_send_proof_size(std::size_t n_recipients)
+std::size_t
+get_confidential_send_proof_size(std::size_t n_recipients)
 {
     return get_multi_ciphertext_equality_proof_size(n_recipients) + (size_pedersen_proof * 2);
 }
 
-bool mpt_make_ec_pair(
-    const uint8_t buffer[size_gamal_ciphertext_total],
+bool
+mpt_make_ec_pair(
+    uint8_t const buffer[size_gamal_ciphertext_total],
     secp256k1_pubkey& out1,
     secp256k1_pubkey& out2)
 {
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
-    int ret1 = secp256k1_ec_pubkey_parse(
-        ctx, 
-        &out1, 
-        buffer, 
-        size_gamal_ciphertext);
+    int ret1 = secp256k1_ec_pubkey_parse(ctx, &out1, buffer, size_gamal_ciphertext);
 
     int ret2 = secp256k1_ec_pubkey_parse(
-        ctx, 
-        &out2, 
-        buffer + size_gamal_ciphertext, 
-        size_gamal_ciphertext);
+        ctx, &out2, buffer + size_gamal_ciphertext, size_gamal_ciphertext);
 
     return (ret1 == 1 && ret2 == 1);
 }
 
-bool mpt_serialize_ec_pair(
-    const secp256k1_pubkey& in1,
-    const secp256k1_pubkey& in2,
+bool
+mpt_serialize_ec_pair(
+    secp256k1_pubkey const& in1,
+    secp256k1_pubkey const& in2,
     uint8_t out[size_gamal_ciphertext_total])
 {
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     size_t len = size_gamal_ciphertext;
 
@@ -176,7 +203,8 @@ bool mpt_serialize_ec_pair(
         return false;
 
     len = size_gamal_ciphertext;
-    if (secp256k1_ec_pubkey_serialize(ctx, out + size_gamal_ciphertext, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
+    if (secp256k1_ec_pubkey_serialize(
+            ctx, out + size_gamal_ciphertext, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     return true;
@@ -185,7 +213,14 @@ bool mpt_serialize_ec_pair(
 // --- PUBLIC API IMPLEMENTATION ---
 extern "C" {
 
-int mpt_get_convert_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint8_t out_hash[size_half_sha]) {
+int
+mpt_get_convert_context_hash(
+    account_id acc,
+    uint32_t seq,
+    mpt_issuance_id iss,
+    uint64_t amt,
+    uint8_t out_hash[size_half_sha])
+{
     uint8_t buf[mpt_convert_hash_size];
     Serializer s(buf);
 
@@ -196,7 +231,15 @@ int mpt_get_convert_context_hash(account_id acc, uint32_t seq, mpt_issuance_id i
     return 0;
 }
 
-int mpt_get_convert_back_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, uint32_t ver, uint8_t out_hash[size_half_sha]) {
+int
+mpt_get_convert_back_context_hash(
+    account_id acc,
+    uint32_t seq,
+    mpt_issuance_id iss,
+    uint64_t amt,
+    uint32_t ver,
+    uint8_t out_hash[size_half_sha])
+{
     uint8_t buf[mpt_convert_back_hash_size];
     Serializer s(buf);
 
@@ -208,7 +251,15 @@ int mpt_get_convert_back_context_hash(account_id acc, uint32_t seq, mpt_issuance
     return 0;
 }
 
-int mpt_get_send_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, account_id dest, uint32_t ver, uint8_t out_hash[size_half_sha]) {
+int
+mpt_get_send_context_hash(
+    account_id acc,
+    uint32_t seq,
+    mpt_issuance_id iss,
+    account_id dest,
+    uint32_t ver,
+    uint8_t out_hash[size_half_sha])
+{
     uint8_t buf[mpt_send_hash_size];
     Serializer s(buf);
 
@@ -220,7 +271,15 @@ int mpt_get_send_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss,
     return 0;
 }
 
-int mpt_get_clawback_context_hash(account_id acc, uint32_t seq, mpt_issuance_id iss, uint64_t amt, account_id holder, uint8_t out_hash[size_half_sha]) {
+int
+mpt_get_clawback_context_hash(
+    account_id acc,
+    uint32_t seq,
+    mpt_issuance_id iss,
+    uint64_t amt,
+    account_id holder,
+    uint8_t out_hash[size_half_sha])
+{
     uint8_t buf[mpt_clawback_hash_size];
     Serializer s(buf);
 
@@ -232,169 +291,157 @@ int mpt_get_clawback_context_hash(account_id acc, uint32_t seq, mpt_issuance_id 
     return 0;
 }
 
-int mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub) {
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
-        
-    secp256k1_pubkey pub;
-    if (secp256k1_elgamal_generate_keypair(ctx, out_priv, &pub) != 1) {
+int
+mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub)
+{
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
         return -1;
-    }
+
+    secp256k1_pubkey pub;
+    if (secp256k1_elgamal_generate_keypair(ctx, out_priv, &pub) != 1)
+        return -1;
 
     std::memcpy(out_pub, pub.data, size_pubkey);
 
     return 0;
 }
 
-int mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor]) {
-    if (!out_factor) return -1;
-    
-    if (RAND_bytes(out_factor, size_blinding_factor) != 1) {
+int
+mpt_generate_blinding_factor(uint8_t out_factor[size_blinding_factor])
+{
+    if (!out_factor)
         return -1;
-    }
+
+    if (RAND_bytes(out_factor, size_blinding_factor) != 1)
+        return -1;
+
     return 0;
 }
 
-int mpt_encrypt_amount(
+int
+mpt_encrypt_amount(
     uint64_t amount,
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t blinding_factor[size_blinding_factor],
-    uint8_t out_ciphertext[size_gamal_ciphertext_total]) 
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const blinding_factor[size_blinding_factor],
+    uint8_t out_ciphertext[size_gamal_ciphertext_total])
 {
-    if (!pubkey || !blinding_factor || !out_ciphertext) return -1;
+    if (!pubkey || !blinding_factor || !out_ciphertext)
+        return -1;
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey c1, c2, pk;
     std::memcpy(pk.data, pubkey, size_pubkey);
 
-    if (!secp256k1_elgamal_encrypt(
-            ctx, 
-            &c1, 
-            &c2, 
-            &pk, 
-            amount, 
-            blinding_factor)) 
-    {
+    if (!secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pk, amount, blinding_factor))
         return -1;
-    }
 
     if (!mpt_serialize_ec_pair(c1, c2, out_ciphertext))
-    {
         return -1;
-    }
 
     return 0;
 }
 
-int mpt_decrypt_amount(
-    const uint8_t in_ciphertext[size_gamal_ciphertext_total],
-    const uint8_t privkey[size_privkey],
-    uint64_t* out_amount) 
+int
+mpt_decrypt_amount(
+    uint8_t const in_ciphertext[size_gamal_ciphertext_total],
+    uint8_t const privkey[size_privkey],
+    uint64_t* out_amount)
 {
-    if (!in_ciphertext || !privkey || !out_amount) return -1;
+    if (!in_ciphertext || !privkey || !out_amount)
+        return -1;
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey c1, c2;
 
     if (!mpt_make_ec_pair(in_ciphertext, c1, c2))
         return -1;
 
-    if (secp256k1_elgamal_decrypt(
-            ctx, 
-            out_amount, 
-            &c1, 
-            &c2, 
-            privkey) != 1)
-    {
+    if (secp256k1_elgamal_decrypt(ctx, out_amount, &c1, &c2, privkey) != 1)
         return -1;
-    }
 
     return 0;
 }
 
-int mpt_get_convert_proof(
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t privkey[size_privkey],
-    const uint8_t ctx_hash[size_half_sha],
-    uint8_t out_proof[size_schnorr_proof]) 
+int
+mpt_get_convert_proof(
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const privkey[size_privkey],
+    uint8_t const ctx_hash[size_half_sha],
+    uint8_t out_proof[size_schnorr_proof])
 {
     if (!pubkey || !privkey || !ctx_hash || !out_proof)
         return -1;
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey pk;
     std::memcpy(pk.data, pubkey, size_pubkey);
 
-    if (secp256k1_mpt_pok_sk_prove(
-            ctx,
-            out_proof,
-            &pk,
-            privkey,
-            ctx_hash) != 1) 
-    {
+    if (secp256k1_mpt_pok_sk_prove(ctx, out_proof, &pk, privkey, ctx_hash) != 1)
         return -1;
-    }
 
     return 0;
 }
 
-int mpt_get_pedersen_commitment(
+int
+mpt_get_pedersen_commitment(
     uint64_t amount,
-    const uint8_t blinding_factor[size_blinding_factor],
-    uint8_t out_commitment[size_pedersen_commitment]) 
+    uint8_t const blinding_factor[size_blinding_factor],
+    uint8_t out_commitment[size_pedersen_commitment])
 {
-    if (!blinding_factor || !out_commitment) {
+    if (!blinding_factor || !out_commitment)
         return -1;
-    }
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     // todo: zero amount
-    if (amount == 0) {
+    if (amount == 0)
+    {
         std::memset(out_commitment, 0, size_pedersen_commitment);
         return 0;
     }
 
     secp256k1_pubkey commitment;
-    if (secp256k1_mpt_pedersen_commit(
-            ctx,
-            &commitment,
-            amount,
-            blinding_factor) != 1) 
-    {
+    if (secp256k1_mpt_pedersen_commit(ctx, &commitment, amount, blinding_factor) != 1)
         return -1;
-    }
 
     std::memcpy(out_commitment, commitment.data, size_pedersen_commitment);
 
     return 0;
 }
 
-int mpt_get_amount_linkage_proof(
-    const uint8_t pubkey[size_pubkey],
-    const uint8_t blinding_factor[size_blinding_factor],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
+int
+mpt_get_amount_linkage_proof(
+    uint8_t const pubkey[size_pubkey],
+    uint8_t const blinding_factor[size_blinding_factor],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
     uint8_t out[size_pedersen_proof])
 {
     if (!pubkey || !blinding_factor || !context_hash || !out)
         return -1;
-    
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey c1, c2;
     if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, size_gamal_ciphertext))
-        return -1; 
+        return -1;
 
-    if (!secp256k1_ec_pubkey_parse(ctx, &c2, params->encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
+    if (!secp256k1_ec_pubkey_parse(
+            ctx, &c2, params->encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
         return -1;
 
     secp256k1_pubkey pk, pcm;
@@ -419,24 +466,27 @@ int mpt_get_amount_linkage_proof(
     return 0;
 }
 
-int mpt_get_balance_linkage_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
+int
+mpt_get_balance_linkage_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
     uint8_t out[size_pedersen_proof])
 {
     if (!pub || !priv || !context_hash || !out)
         return -1;
-    
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey c1, c2;
     if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, size_gamal_ciphertext))
         return -1;
 
-    if (!secp256k1_ec_pubkey_parse(ctx, &c2, params->encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
+    if (!secp256k1_ec_pubkey_parse(
+            ctx, &c2, params->encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
         return -1;
 
     secp256k1_pubkey pk, pcm;
@@ -446,12 +496,12 @@ int mpt_get_balance_linkage_proof(
     if (secp256k1_elgamal_pedersen_link_prove(
             ctx,
             out,
-            &pk, 
-            &c2,           
-            &c1,                    
-            &pcm,                  
-            params->amount,          
-            priv,                  
+            &pk,
+            &c2,
+            &c1,
+            &pcm,
+            params->amount,
+            priv,
             params->blinding_factor,
             context_hash) != 1)
     {
@@ -461,23 +511,26 @@ int mpt_get_balance_linkage_proof(
     return 0;
 }
 
-int mpt_get_confidential_send_proof(
-    const uint8_t priv[size_privkey],
+int
+mpt_get_confidential_send_proof(
+    uint8_t const priv[size_privkey],
     uint64_t amount,
-    const mpt_confidential_recipient* recipients,
+    mpt_confidential_recipient const* recipients,
     size_t n_recipients,
-    const uint8_t tx_blinding_factor[size_blinding_factor],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* amount_params,
-    const mpt_pedersen_proof_params* balance_params,
+    uint8_t const tx_blinding_factor[size_blinding_factor],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* amount_params,
+    mpt_pedersen_proof_params const* balance_params,
     uint8_t* out_proof,
     size_t* out_len)
 {
-    if (!priv || !recipients || !out_proof || !out_len) return -1;
+    if (!priv || !recipients || !out_proof || !out_len)
+        return -1;
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
-    
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
     std::vector<secp256k1_pubkey> r(n_recipients);
     std::vector<secp256k1_pubkey> s(n_recipients);
     std::vector<secp256k1_pubkey> pk(n_recipients);
@@ -487,12 +540,13 @@ int mpt_get_confidential_send_proof(
 
     for (size_t i = 0; i < n_recipients; ++i)
     {
-        const auto& rec = recipients[i];
+        auto const& rec = recipients[i];
 
         if (!secp256k1_ec_pubkey_parse(ctx, &r[i], rec.encrypted_amount, size_gamal_ciphertext))
             return -1;
 
-        if (!secp256k1_ec_pubkey_parse(ctx, &s[i], rec.encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
+        if (!secp256k1_ec_pubkey_parse(
+                ctx, &s[i], rec.encrypted_amount + size_gamal_ciphertext, size_gamal_ciphertext))
             return -1;
 
         std::memcpy(pk[i].data, rec.pubkey, size_pubkey);
@@ -500,40 +554,39 @@ int mpt_get_confidential_send_proof(
     }
 
     size_t size_equality = secp256k1_mpt_prove_same_plaintext_multi_size(n_recipients);
-    
     size_t totalRequired = size_equality + size_pedersen_proof * 2;
 
-    if (*out_len < totalRequired) {
-        return -1; 
-    }
+    if (*out_len < totalRequired)
+        return -1;
 
     // Get the multi-ciphertext equality proof
     if (secp256k1_mpt_prove_same_plaintext_multi(
-            ctx, out_proof, &size_equality, amount,
-            n_recipients, r.data(), s.data(), pk.data(),
-            sr.data(), context_hash) != 1) {
+            ctx,
+            out_proof,
+            &size_equality,
+            amount,
+            n_recipients,
+            r.data(),
+            s.data(),
+            pk.data(),
+            sr.data(),
+            context_hash) != 1)
+    {
         return -1;
     }
 
     // Amount Linkage Proof
     uint8_t* amt_ptr = out_proof + size_equality;
     if (mpt_get_amount_linkage_proof(
-            pk[0].data, 
-            tx_blinding_factor, 
-            context_hash, 
-            amount_params, 
-            amt_ptr) != 0) {
+            pk[0].data, tx_blinding_factor, context_hash, amount_params, amt_ptr) != 0)
+    {
         return -1;
     }
 
     // Balance Linkage Proof
     uint8_t* bal_ptr = amt_ptr + size_pedersen_proof;
-    if (mpt_get_balance_linkage_proof(
-            priv, 
-            pk[0].data, 
-            context_hash, 
-            balance_params, 
-            bal_ptr) != 0) {
+    if (mpt_get_balance_linkage_proof(priv, pk[0].data, context_hash, balance_params, bal_ptr) != 0)
+    {
         return -1;
     }
 
@@ -543,37 +596,34 @@ int mpt_get_confidential_send_proof(
     return 0;
 }
 
-int mpt_get_convert_back_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const mpt_pedersen_proof_params* params,
-    uint8_t out_proof[size_pedersen_proof]) 
+int
+mpt_get_convert_back_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    mpt_pedersen_proof_params const* params,
+    uint8_t out_proof[size_pedersen_proof])
 {
-    return mpt_get_balance_linkage_proof(
-        priv, 
-        pub, 
-        context_hash, 
-        params, 
-        out_proof
-    );
+    return mpt_get_balance_linkage_proof(priv, pub, context_hash, params, out_proof);
 
     // todo: add range proof
 }
 
-int mpt_get_clawback_proof(
-    const uint8_t priv[size_privkey],
-    const uint8_t pub[size_pubkey],
-    const uint8_t context_hash[size_half_sha],
-    const uint64_t amount,
-    const uint8_t encrypted_amount[size_gamal_ciphertext_total],
-    uint8_t out_proof[size_equality_proof]) 
+int
+mpt_get_clawback_proof(
+    uint8_t const priv[size_privkey],
+    uint8_t const pub[size_pubkey],
+    uint8_t const context_hash[size_half_sha],
+    uint64_t const amount,
+    uint8_t const encrypted_amount[size_gamal_ciphertext_total],
+    uint8_t out_proof[size_equality_proof])
 {
     if (!priv || !pub || !context_hash || !encrypted_amount || !out_proof)
         return -1;
 
-    const secp256k1_context* ctx = mpt_secp256k1_context();
-    if (!ctx) return -1;
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
 
     secp256k1_pubkey pk;
     std::memcpy(pk.data, pub, size_pubkey);
@@ -582,16 +632,8 @@ int mpt_get_clawback_proof(
     if (!mpt_make_ec_pair(encrypted_amount, c1, c2))
         return -1;
 
-
     if (secp256k1_equality_plaintext_prove(
-            ctx,
-            out_proof,
-            &pk,
-            &c2,
-            &c1,
-            amount,
-            priv,
-            context_hash) != 1) 
+            ctx, out_proof, &pk, &c2, &c1, amount, priv, context_hash) != 1)
     {
         return -1;
     }
