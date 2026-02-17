@@ -18,42 +18,35 @@ extern "C" {
 #define ttCONFIDENTIAL_MPT_CLAWBACK 89
 
 // General crypto primitive sizes
-static constexpr std::size_t size_half_sha = 32;
-static constexpr std::size_t size_pubkey = 64;
-static constexpr std::size_t size_privkey = 32;
-static constexpr std::size_t size_blinding_factor = 32;
+#define size_half_sha 32
+#define size_pubkey 64
+#define size_privkey 32
+#define size_blinding_factor 32
 
 // Gamal & Pedersen primitive sizes
-static constexpr std::size_t size_gamal_ciphertext = 33;
-static constexpr std::size_t size_gamal_ciphertext_total = 66;
-static constexpr std::size_t size_pedersen_commitment = 64;
+#define size_gamal_ciphertext 33
+#define size_gamal_ciphertext_total 66
+#define size_pedersen_commitment 64
 
 // Proof Sizes
-static constexpr std::size_t size_schnorr_proof = 65;
-static constexpr std::size_t size_equality_proof = 98;
-static constexpr std::size_t size_pedersen_proof = 195;
+#define size_schnorr_proof 65
+#define size_equality_proof 98
+#define size_pedersen_proof 195
 
 // Field sizes in bytes for context hash
-static constexpr std::size_t size_type = 2;
-static constexpr std::size_t size_acc = 20;
-static constexpr std::size_t size_seq = 4;
-static constexpr std::size_t size_iss = 24;
-static constexpr std::size_t size_amt = 8;
-static constexpr std::size_t size_ver = 4;
+#define size_type 2
+#define size_acc 20
+#define size_seq 4
+#define size_iss 24
+#define size_amt 8
+#define size_ver 4
 
-static constexpr std::size_t mpt_hash_common_size =
-    size_type + size_acc + size_seq + size_iss;  // 50 bytes
-
-static constexpr std::size_t mpt_convert_hash_size = mpt_hash_common_size + size_amt;  // 58 bytes
-
-static constexpr std::size_t mpt_send_hash_size =
-    mpt_hash_common_size + size_acc + size_ver;  // 74 bytes
-
-static constexpr std::size_t mpt_convert_back_hash_size =
-    mpt_hash_common_size + size_amt + size_ver;  // 62 bytes
-
-static constexpr std::size_t mpt_clawback_hash_size =
-    mpt_hash_common_size + size_amt + size_acc;  // 78 bytes
+// Context hash sizes
+#define size_common_hash (size_type + size_acc + size_seq + size_iss)    // 50 bytes
+#define size_convert_hash (size_common_hash + size_amt)                  // 58 bytes
+#define size_send_hash (size_common_hash + size_acc + size_ver)          // 74 bytes
+#define size_convert_back_hash (size_common_hash + size_amt + size_ver)  // 62 bytes
+#define size_clawback_hash (size_common_hash + size_amt + size_acc)      // 78 bytes
 
 /**
  * @brief Represents a unique 24-byte MPT issuance ID.
@@ -160,14 +153,14 @@ mpt_get_clawback_context_hash(
 /**
  * @brief Calculates the size of the Multi-Ciphertext Equality Proof.
  */
-std::size_t
-get_multi_ciphertext_equality_proof_size(std::size_t n_recipients);
+size_t
+get_multi_ciphertext_equality_proof_size(size_t n_recipients);
 
 /**
  * @brief Calculates the total size for a ConfidentialMPTSend proof.
  */
-std::size_t
-get_confidential_send_proof_size(std::size_t n_recipients);
+size_t
+get_confidential_send_proof_size(size_t n_recipients);
 
 /* ============================================================================
  * Key & Ciphertext Utilities

@@ -157,14 +157,15 @@ mpt_add_common_zkp_fields(
     s.addRaw(iss.bytes, size_iss);
 }
 
-std::size_t
-get_multi_ciphertext_equality_proof_size(std::size_t n_recipients)
+extern "C" {
+size_t
+get_multi_ciphertext_equality_proof_size(size_t n_recipients)
 {
     return secp256k1_mpt_prove_same_plaintext_multi_size(n_recipients);
 }
 
-std::size_t
-get_confidential_send_proof_size(std::size_t n_recipients)
+size_t
+get_confidential_send_proof_size(size_t n_recipients)
 {
     return get_multi_ciphertext_equality_proof_size(n_recipients) + (size_pedersen_proof * 2);
 }
@@ -210,9 +211,6 @@ mpt_serialize_ec_pair(
     return true;
 }
 
-// --- PUBLIC API IMPLEMENTATION ---
-extern "C" {
-
 int
 mpt_get_convert_context_hash(
     account_id acc,
@@ -221,7 +219,7 @@ mpt_get_convert_context_hash(
     uint64_t amt,
     uint8_t out_hash[size_half_sha])
 {
-    uint8_t buf[mpt_convert_hash_size];
+    uint8_t buf[size_convert_hash];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, seq, iss);
@@ -240,7 +238,7 @@ mpt_get_convert_back_context_hash(
     uint32_t ver,
     uint8_t out_hash[size_half_sha])
 {
-    uint8_t buf[mpt_convert_back_hash_size];
+    uint8_t buf[size_convert_back_hash];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, seq, iss);
@@ -260,7 +258,7 @@ mpt_get_send_context_hash(
     uint32_t ver,
     uint8_t out_hash[size_half_sha])
 {
-    uint8_t buf[mpt_send_hash_size];
+    uint8_t buf[size_send_hash];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, seq, iss);
@@ -280,7 +278,7 @@ mpt_get_clawback_context_hash(
     account_id holder,
     uint8_t out_hash[size_half_sha])
 {
-    uint8_t buf[mpt_clawback_hash_size];
+    uint8_t buf[size_clawback_hash];
     Serializer s(buf);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, seq, iss);
