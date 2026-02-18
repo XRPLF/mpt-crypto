@@ -1,6 +1,6 @@
 #include "test_utils.h"
 
-#include <cassert>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <secp256k1_mpt.h>
