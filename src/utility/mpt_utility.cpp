@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <cstring>
 #include <iomanip>
 #include <iostream>
 #include <openssl/rand.h>
