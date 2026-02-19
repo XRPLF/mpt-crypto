@@ -1220,20 +1220,49 @@ int secp256k1_bulletproof_prove_agg(
     {
         secp256k1_pubkey tG, tH, tB;
         const secp256k1_pubkey* pts[3];
+        int n_pts = 0;
 
-        if (!secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, al, n)) goto cleanup;
-        if (!secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, ar, n)) goto cleanup;
+        /* A Calculation */
+        /* 1. alpha * Base (Always exists) */
         tB = *pk_base;
         if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, alpha)) goto cleanup;
-        pts[0] = &tB; pts[1] = &tG; pts[2] = &tH;
-        if (!secp256k1_ec_pubkey_combine(ctx, &A, pts, 3)) goto cleanup;
+        pts[n_pts++] = &tB;
 
-        if (!secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, sl, n)) goto cleanup;
-        if (!secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, sr, n)) goto cleanup;
+        /* 2. <al, G> (Only add if al is non-zero) */
+        /* Note: ipa_msm returns 0 if result is infinity (all scalars 0). This is valid for value=0. */
+        if (secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, al, n)) {
+            pts[n_pts++] = &tG;
+        }
+
+        /* 3. <ar, H> (Only add if ar is non-zero) */
+        if (secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, ar, n)) {
+            pts[n_pts++] = &tH;
+        }
+
+        /* Combine valid points for A */
+        if (!secp256k1_ec_pubkey_combine(ctx, &A, pts, n_pts)) goto cleanup;
+
+
+        /* S Calculation (Follows same logic for consistency) */
+        n_pts = 0;
+
+        /* 1. rho * Base */
         tB = *pk_base;
         if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, rho)) goto cleanup;
-        pts[0] = &tB; pts[1] = &tG; pts[2] = &tH;
-        if (!secp256k1_ec_pubkey_combine(ctx, &S, pts, 3)) goto cleanup;
+        pts[n_pts++] = &tB;
+
+        /* 2. <sl, G> */
+        if (secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, sl, n)) {
+            pts[n_pts++] = &tG;
+        }
+
+        /* 3. <sr, H> */
+        if (secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, sr, n)) {
+            pts[n_pts++] = &tH;
+        }
+
+        /* Combine valid points for S */
+        if (!secp256k1_ec_pubkey_combine(ctx, &S, pts, n_pts)) goto cleanup;
     }
 
     /* ---- 6. Fiat–Shamir y,z ---- */
