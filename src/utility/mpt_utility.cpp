@@ -1,13 +1,8 @@
 #include <arpa/inet.h>
 #include <cstring>
-#include <iomanip>
-#include <iostream>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <secp256k1_mpt.h>
-#include <span>
-#include <sstream>
-#include <string.h>
 #include <utility/mpt_utility.h>
 
 // Platform endianness support for serialization
@@ -98,15 +93,25 @@ mpt_secp256k1_context()
 struct Serializer
 {
     uint8_t* buffer;
+    size_t capacity;
     size_t offset = 0;
+    bool overflow = false;
 
-    Serializer(uint8_t* buf) : buffer(buf)
+    Serializer(uint8_t* buf, size_t cap) : buffer(buf), capacity(cap)
     {
     }
+
+    // User should check isValid() after serialization to ensure no overflow occurred
+    bool isValid() const { return !overflow; }
 
     void
     add16(uint16_t val)
     {
+        if (overflow || offset + 2 > capacity) {
+            overflow = true;
+            return;
+        }
+
         uint16_t n = htons(val);
         memcpy(buffer + offset, &n, 2);
         offset += 2;
@@ -115,6 +120,11 @@ struct Serializer
     void
     add32(uint32_t val)
     {
+        if (overflow || offset + 4 > capacity) {
+            overflow = true;
+            return;
+        }
+
         uint32_t n = htonl(val);
         memcpy(buffer + offset, &n, 4);
         offset += 4;
@@ -123,6 +133,11 @@ struct Serializer
     void
     add64(uint64_t val)
     {
+        if (overflow || offset + 8 > capacity) {
+            overflow = true;
+            return;
+        }
+
         uint64_t n = htobe64(val);
         memcpy(buffer + offset, &n, 8);
         offset += 8;
@@ -131,6 +146,11 @@ struct Serializer
     void
     addRaw(uint8_t const* data, size_t len)
     {
+        if (overflow || offset + len > capacity) {
+            overflow = true;
+            return;
+        }
+
         memcpy(buffer + offset, data, len);
         offset += len;
     }
@@ -173,18 +193,18 @@ get_confidential_send_proof_size(size_t n_recipients)
 
 bool
 mpt_make_ec_pair(
-    uint8_t const buffer[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const buffer[kMPT_ELGAMAL_TOTAL_SIZE],
     secp256k1_pubkey& out1,
     secp256k1_pubkey& out2)
 {
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
-        return -1;
+        return false;
 
-    int ret1 = secp256k1_ec_pubkey_parse(ctx, &out1, buffer, kMPT_GAMAL_CIPHER_SIZE);
+    int ret1 = secp256k1_ec_pubkey_parse(ctx, &out1, buffer, kMPT_ELGAMAL_CIPHER_SIZE);
 
     int ret2 = secp256k1_ec_pubkey_parse(
-        ctx, &out2, buffer + kMPT_GAMAL_CIPHER_SIZE, kMPT_GAMAL_CIPHER_SIZE);
+        ctx, &out2, buffer + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE);
 
     return (ret1 == 1 && ret2 == 1);
 }
@@ -193,20 +213,20 @@ bool
 mpt_serialize_ec_pair(
     secp256k1_pubkey const& in1,
     secp256k1_pubkey const& in2,
-    uint8_t out[kMPT_GAMAL_TOTAL_SIZE])
+    uint8_t out[kMPT_ELGAMAL_TOTAL_SIZE])
 {
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
-        return -1;
+        return false;
 
-    size_t len = kMPT_GAMAL_CIPHER_SIZE;
+    size_t len = kMPT_ELGAMAL_CIPHER_SIZE;
 
     if (secp256k1_ec_pubkey_serialize(ctx, out, &len, &in1, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
-    len = kMPT_GAMAL_CIPHER_SIZE;
+    len = kMPT_ELGAMAL_CIPHER_SIZE;
     if (secp256k1_ec_pubkey_serialize(
-            ctx, out + kMPT_GAMAL_CIPHER_SIZE, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
+            ctx, out + kMPT_ELGAMAL_CIPHER_SIZE, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     return true;
@@ -221,10 +241,13 @@ mpt_get_convert_context_hash(
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
     uint8_t buf[kMPT_CONVERT_HASH_SIZE];
-    Serializer s(buf);
+    Serializer s(buf, kMPT_CONVERT_HASH_SIZE);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, seq, iss);
     s.add64(amt);
+
+    if (!s.isValid())
+        return -1;
 
     sha512_half(buf, s.offset, out_hash);
     return 0;
@@ -240,11 +263,14 @@ mpt_get_convert_back_context_hash(
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
     uint8_t buf[kMPT_CONVERT_BACK_HASH_SIZE];
-    Serializer s(buf);
+    Serializer s(buf, kMPT_CONVERT_BACK_HASH_SIZE);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, seq, iss);
     s.add64(amt);
     s.add32(ver);
+
+    if (!s.isValid())
+        return -1;
 
     sha512_half(buf, s.offset, out_hash);
     return 0;
@@ -260,11 +286,14 @@ mpt_get_send_context_hash(
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
     uint8_t buf[kMPT_SEND_HASH_SIZE];
-    Serializer s(buf);
+    Serializer s(buf, kMPT_SEND_HASH_SIZE);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, seq, iss);
     s.addRaw(dest.bytes, kMPT_ACCOUNT_ID_SIZE);
     s.add32(ver);
+
+    if (!s.isValid())
+        return -1;
 
     sha512_half(buf, s.offset, out_hash);
     return 0;
@@ -280,28 +309,31 @@ mpt_get_clawback_context_hash(
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
     uint8_t buf[kMPT_CLAWBACK_HASH_SIZE];
-    Serializer s(buf);
+    Serializer s(buf, kMPT_CLAWBACK_HASH_SIZE);
 
     mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, seq, iss);
     s.add64(amt);
     s.addRaw(holder.bytes, kMPT_ACCOUNT_ID_SIZE);
+
+    if (!s.isValid())
+        return -1;
 
     sha512_half(buf, s.offset, out_hash);
     return 0;
 }
 
 int
-mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub)
+mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey)
 {
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return -1;
 
     secp256k1_pubkey pub;
-    if (secp256k1_elgamal_generate_keypair(ctx, out_priv, &pub) != 1)
+    if (secp256k1_elgamal_generate_keypair(ctx, out_privkey, &pub) != 1)
         return -1;
 
-    std::memcpy(out_pub, pub.data, kMPT_PUBKEY_SIZE);
+    std::memcpy(out_pubkey, pub.data, kMPT_PUBKEY_SIZE);
 
     return 0;
 }
@@ -323,7 +355,7 @@ mpt_encrypt_amount(
     uint64_t amount,
     uint8_t const pubkey[kMPT_PUBKEY_SIZE],
     uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
-    uint8_t out_ciphertext[kMPT_GAMAL_TOTAL_SIZE])
+    uint8_t out_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE])
 {
     if (!pubkey || !blinding_factor || !out_ciphertext)
         return -1;
@@ -346,7 +378,7 @@ mpt_encrypt_amount(
 
 int
 mpt_decrypt_amount(
-    uint8_t const in_ciphertext[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
     uint64_t* out_amount)
 {
@@ -428,7 +460,7 @@ mpt_get_amount_linkage_proof(
     mpt_pedersen_proof_params const* params,
     uint8_t out[kMPT_PEDERSEN_LINK_SIZE])
 {
-    if (!pubkey || !blinding_factor || !context_hash || !out)
+    if (!pubkey || !blinding_factor || !context_hash || !params || !out)
         return -1;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
@@ -436,11 +468,11 @@ mpt_get_amount_linkage_proof(
         return -1;
 
     secp256k1_pubkey c1, c2;
-    if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_GAMAL_CIPHER_SIZE))
+    if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
     if (!secp256k1_ec_pubkey_parse(
-            ctx, &c2, params->encrypted_amount + kMPT_GAMAL_CIPHER_SIZE, kMPT_GAMAL_CIPHER_SIZE))
+            ctx, &c2, params->encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
     secp256k1_pubkey pk, pcm;
@@ -473,7 +505,7 @@ mpt_get_balance_linkage_proof(
     mpt_pedersen_proof_params const* params,
     uint8_t out[kMPT_PEDERSEN_LINK_SIZE])
 {
-    if (!pub || !priv || !context_hash || !out)
+    if (!pub || !priv || !context_hash || !params || !out)
         return -1;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
@@ -481,11 +513,11 @@ mpt_get_balance_linkage_proof(
         return -1;
 
     secp256k1_pubkey c1, c2;
-    if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_GAMAL_CIPHER_SIZE))
+    if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
     if (!secp256k1_ec_pubkey_parse(
-            ctx, &c2, params->encrypted_amount + kMPT_GAMAL_CIPHER_SIZE, kMPT_GAMAL_CIPHER_SIZE))
+            ctx, &c2, params->encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
     secp256k1_pubkey pk, pcm;
@@ -523,7 +555,7 @@ mpt_get_confidential_send_proof(
     uint8_t* out_proof,
     size_t* out_len)
 {
-    if (!priv || !recipients || !out_proof || !out_len)
+    if (!priv || !recipients || !tx_blinding_factor || !context_hash || !amount_params || !balance_params || !out_proof || !out_len)
         return -1;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
@@ -541,11 +573,11 @@ mpt_get_confidential_send_proof(
     {
         auto const& rec = recipients[i];
 
-        if (!secp256k1_ec_pubkey_parse(ctx, &r[i], rec.encrypted_amount, kMPT_GAMAL_CIPHER_SIZE))
+        if (!secp256k1_ec_pubkey_parse(ctx, &r[i], rec.encrypted_amount, kMPT_ELGAMAL_CIPHER_SIZE))
             return -1;
 
         if (!secp256k1_ec_pubkey_parse(
-                ctx, &s[i], rec.encrypted_amount + kMPT_GAMAL_CIPHER_SIZE, kMPT_GAMAL_CIPHER_SIZE))
+                ctx, &s[i], rec.encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
             return -1;
 
         std::memcpy(pk[i].data, rec.pubkey, kMPT_PUBKEY_SIZE);
@@ -614,7 +646,7 @@ mpt_get_clawback_proof(
     uint8_t const pub[kMPT_PUBKEY_SIZE],
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
     uint64_t const amount,
-    uint8_t const encrypted_amount[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const encrypted_amount[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t out_proof[kMPT_EQUALITY_PROOF_SIZE])
 {
     if (!priv || !pub || !context_hash || !encrypted_amount || !out_proof)

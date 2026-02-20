@@ -24,8 +24,8 @@ extern "C" {
 #define kMPT_BLINDING_FACTOR_SIZE 32
 
 // Gamal & Pedersen primitive sizes in bytes
-#define kMPT_GAMAL_CIPHER_SIZE 33
-#define kMPT_GAMAL_TOTAL_SIZE 66
+#define kMPT_ELGAMAL_CIPHER_SIZE 33
+#define kMPT_ELGAMAL_TOTAL_SIZE 66
 #define kMPT_PEDERSEN_COMMIT_SIZE 64
 
 // Proof sizes in bytes
@@ -76,7 +76,7 @@ typedef struct
 struct mpt_confidential_recipient
 {
     uint8_t pubkey[kMPT_PUBKEY_SIZE];
-    uint8_t encrypted_amount[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t encrypted_amount[kMPT_ELGAMAL_TOTAL_SIZE];
 };
 
 /**
@@ -97,7 +97,7 @@ struct mpt_pedersen_proof_params
     /**
      * @brief The 66-byte buffer containing the encrypted amount.
      */
-    uint8_t encrypted_amount[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t encrypted_amount[kMPT_ELGAMAL_TOTAL_SIZE];
 
     /**
      * @brief The 32-byte secret random value used to blind the Pedersen commitment.
@@ -180,22 +180,22 @@ get_confidential_send_proof_size(size_t n_recipients);
  */
 bool
 mpt_make_ec_pair(
-    uint8_t const buffer[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const buffer[kMPT_ELGAMAL_TOTAL_SIZE],
     secp256k1_pubkey& out1,
     secp256k1_pubkey& out2);
 
 /**
- * @brief Parses a 66-byte buffer into two internal secp256k1 public keys.
+ * @brief Serializes two internal secp256k1 public keys into a 66-byte buffer.
  * @param in1   [in] Internal format of the first point (C1).
  * @param in2   [in] Internal format of the second point (C2).
- * @param out   [out] 66-byte buffer to write the points.
- * @return true if both points were valid and successfully parsed, false otherwise.
+ * @param out   [out] 66-byte buffer to write the serialized points.
+ * @return true if both points were valid and successfully serialized, false otherwise.
  */
 bool
 mpt_serialize_ec_pair(
     secp256k1_pubkey const& in1,
     secp256k1_pubkey const& in2,
-    uint8_t out[kMPT_GAMAL_TOTAL_SIZE]);
+    uint8_t out[kMPT_ELGAMAL_TOTAL_SIZE]);
 
 /**
  * @brief Generates a new Secp256k1 ElGamal keypair.
@@ -204,7 +204,7 @@ mpt_serialize_ec_pair(
  * @return 0 on success, -1 on failure.
  */
 int
-mpt_generate_keypair(uint8_t* out_priv, uint8_t* out_pub);
+mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey);
 
 /**
  * @brief Generates a 32-byte blinding factor.
@@ -227,7 +227,7 @@ mpt_encrypt_amount(
     uint64_t amount,
     uint8_t const pubkey[kMPT_PUBKEY_SIZE],
     uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
-    uint8_t out_ciphertext[kMPT_GAMAL_TOTAL_SIZE]);
+    uint8_t out_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE]);
 
 /**
  * @brief Decrypts an MPT amount from a ciphertext pair.
@@ -238,7 +238,7 @@ mpt_encrypt_amount(
  */
 int
 mpt_decrypt_amount(
-    uint8_t const ciphertext[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
     uint64_t* out_amount);
 
@@ -372,7 +372,7 @@ mpt_get_clawback_proof(
     uint8_t const pub[kMPT_PUBKEY_SIZE],
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
     uint64_t const amount,
-    uint8_t const encrypted_amount[kMPT_GAMAL_TOTAL_SIZE],
+    uint8_t const encrypted_amount[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t out_proof[kMPT_EQUALITY_PROOF_SIZE]);
 
 #ifdef __cplusplus

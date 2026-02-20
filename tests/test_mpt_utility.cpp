@@ -14,7 +14,7 @@ test_encryption_decryption()
     uint8_t priv[kMPT_PRIVKEY_SIZE];
     uint8_t pub[kMPT_PUBKEY_SIZE];
     uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t ciphertext[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
     EXPECT(mpt_generate_keypair(priv, pub) == 0);
 
     std::vector<uint64_t> test_amounts = {
@@ -49,7 +49,7 @@ test_mpt_confidential_convert()
     uint8_t priv[kMPT_PRIVKEY_SIZE];
     uint8_t pub[kMPT_PUBKEY_SIZE];
     uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t ciphertext[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
     uint8_t tx_hash[kMPT_HALF_SHA_SIZE];
     uint8_t proof[kMPT_SCHNORR_PROOF_SIZE];
 
@@ -63,10 +63,10 @@ test_mpt_confidential_convert()
     secp256k1_context const* ctx = mpt_secp256k1_context();
 
     secp256k1_pubkey c1, c2, pk;
-    EXPECT(secp256k1_ec_pubkey_parse(ctx, &c1, ciphertext, kMPT_GAMAL_CIPHER_SIZE) == 1);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &c1, ciphertext, kMPT_ELGAMAL_CIPHER_SIZE) == 1);
     EXPECT(
         secp256k1_ec_pubkey_parse(
-            ctx, &c2, ciphertext + kMPT_GAMAL_CIPHER_SIZE, kMPT_GAMAL_CIPHER_SIZE) == 1);
+            ctx, &c2, ciphertext + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE) == 1);
 
     std::memcpy(pk.data, pub, kMPT_PUBKEY_SIZE);
     EXPECT(secp256k1_elgamal_verify_encryption(ctx, &c1, &c2, &pk, convert_amount, bf) == 1);
@@ -84,7 +84,7 @@ test_mpt_confidential_send()
     mpt_issuance_id issuance;
     std::memset(issuance.bytes, 0xBB, kMPT_ISSUANCE_ID_SIZE);
 
-    // Mock transaction detiails
+    // Mock transaction details
     uint32_t seq = 54321;
     uint64_t amount_to_send = 100;
     uint64_t prev_balance = 2000;
@@ -103,9 +103,9 @@ test_mpt_confidential_send()
     uint8_t shared_bf[kMPT_BLINDING_FACTOR_SIZE];
     EXPECT(mpt_generate_blinding_factor(shared_bf) == 0);
 
-    uint8_t sender_ct[kMPT_GAMAL_TOTAL_SIZE];
-    uint8_t dest_ct[kMPT_GAMAL_TOTAL_SIZE];
-    uint8_t issuer_ct[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t sender_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t dest_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t issuer_ct[kMPT_ELGAMAL_TOTAL_SIZE];
 
     EXPECT(mpt_encrypt_amount(amount_to_send, sender_pub, shared_bf, sender_ct) == 0);
     EXPECT(mpt_encrypt_amount(amount_to_send, dest_pub, shared_bf, dest_ct) == 0);
@@ -116,7 +116,7 @@ test_mpt_confidential_send()
     auto add_recipient = [&](uint8_t* p, uint8_t* c) {
         mpt_confidential_recipient r;
         std::memcpy(r.pubkey, p, kMPT_PUBKEY_SIZE);
-        std::memcpy(r.encrypted_amount, c, kMPT_GAMAL_TOTAL_SIZE);
+        std::memcpy(r.encrypted_amount, c, kMPT_ELGAMAL_TOTAL_SIZE);
         recipients.push_back(r);
     };
     add_recipient(sender_pub, sender_ct);
@@ -145,7 +145,7 @@ test_mpt_confidential_send()
     amt_params.amount = amount_to_send;
     std::memcpy(amt_params.blinding_factor, amount_bf, kMPT_BLINDING_FACTOR_SIZE);
     std::memcpy(amt_params.pedersen_commitment, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
-    std::memcpy(amt_params.encrypted_amount, sender_ct, kMPT_GAMAL_TOTAL_SIZE);
+    std::memcpy(amt_params.encrypted_amount, sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     mpt_pedersen_proof_params bal_params;
     bal_params.amount = prev_balance;
@@ -153,10 +153,10 @@ test_mpt_confidential_send()
     std::memcpy(bal_params.pedersen_commitment, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
 
     uint8_t prev_bal_bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t prev_bal_ct[kMPT_GAMAL_TOTAL_SIZE];
-    mpt_generate_blinding_factor(prev_bal_bf);
-    mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct);
-    std::memcpy(bal_params.encrypted_amount, prev_bal_ct, kMPT_GAMAL_TOTAL_SIZE);
+    uint8_t prev_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_blinding_factor(prev_bal_bf) == 0);
+    EXPECT(mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct) == 0);
+    std::memcpy(bal_params.encrypted_amount, prev_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     // Generate the confidential send proof
     size_t proof_len = get_confidential_send_proof_size(recipients.size());
@@ -261,7 +261,7 @@ test_mpt_convert_back()
     // Mock spending confidential balance.
     // This is the ElGamal ciphertext currently stored on-chain.
     uint8_t bal_bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t spending_bal_ct[kMPT_GAMAL_TOTAL_SIZE];
+    uint8_t spending_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
     EXPECT(mpt_generate_blinding_factor(bal_bf) == 0);
     EXPECT(mpt_encrypt_amount(current_balance, pub, bal_bf, spending_bal_ct) == 0);
 
@@ -282,7 +282,7 @@ test_mpt_convert_back()
     pc_params.amount = current_balance;
     std::memcpy(pc_params.blinding_factor, pcm_bf, kMPT_BLINDING_FACTOR_SIZE);
     std::memcpy(pc_params.pedersen_commitment, pcm_comm, kMPT_PEDERSEN_COMMIT_SIZE);
-    std::memcpy(pc_params.encrypted_amount, spending_bal_ct, kMPT_GAMAL_TOTAL_SIZE);
+    std::memcpy(pc_params.encrypted_amount, spending_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     // Generate proof
     uint8_t proof[kMPT_PEDERSEN_LINK_SIZE];
@@ -332,8 +332,8 @@ test_mpt_clawback()
 
     // Mock holder's "sfIssuerEncryptedBalance"
     uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t issuer_encrypted_bal[kMPT_GAMAL_TOTAL_SIZE];
-    mpt_generate_blinding_factor(bf);
+    uint8_t issuer_encrypted_bal[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_blinding_factor(bf) == 0);
     EXPECT(mpt_encrypt_amount(claw_amount, issuer_pub, bf, issuer_encrypted_bal) == 0);
 
     // Generate proof
