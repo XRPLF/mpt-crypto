@@ -1092,6 +1092,40 @@ int secp256k1_bulletproof_create_commitment(
     return 1;
 }
 
+/* Helper to calculate commitment terms like A and S */
+static int calculate_commitment_term(
+        const secp256k1_context* ctx,
+        secp256k1_pubkey* out,
+        const secp256k1_pubkey* pk_base,
+        const unsigned char* base_scalar,
+        const unsigned char* vec_l,
+        const unsigned char* vec_r,
+        const secp256k1_pubkey* G_vec,
+        const secp256k1_pubkey* H_vec,
+        size_t n
+) {
+    secp256k1_pubkey tG, tH, tB;
+    const secp256k1_pubkey* pts[3];
+    int n_pts = 0;
+
+    /* 1. base_scalar * Base */
+    tB = *pk_base;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, base_scalar)) return 0;
+    pts[n_pts++] = &tB;
+
+    /* 2. <vec_l, G> */
+    if (secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, vec_l, n)) {
+        pts[n_pts++] = &tG;
+    }
+
+    /* 3. <vec_r, H> */
+    if (secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, vec_r, n)) {
+        pts[n_pts++] = &tH;
+    }
+
+    return secp256k1_ec_pubkey_combine(ctx, out, pts, n_pts);
+}
+
 /**
  * Generates an aggregated Bulletproof for m values.
  *
@@ -1217,53 +1251,8 @@ int secp256k1_bulletproof_prove_agg(
      * A = alpha*Base + <al,G> + <ar,H>
      * S = rho*Base   + <sl,G> + <sr,H>
      */
-    {
-        secp256k1_pubkey tG, tH, tB;
-        const secp256k1_pubkey* pts[3];
-        int n_pts = 0;
-
-        /* A Calculation */
-        /* 1. alpha * Base (Always exists) */
-        tB = *pk_base;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, alpha)) goto cleanup;
-        pts[n_pts++] = &tB;
-
-        /* 2. <al, G> (Only add if al is non-zero) */
-        /* Note: ipa_msm returns 0 if result is infinity (all scalars 0). This is valid for value=0. */
-        if (secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, al, n)) {
-            pts[n_pts++] = &tG;
-        }
-
-        /* 3. <ar, H> (Only add if ar is non-zero) */
-        if (secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, ar, n)) {
-            pts[n_pts++] = &tH;
-        }
-
-        /* Combine valid points for A */
-        if (!secp256k1_ec_pubkey_combine(ctx, &A, pts, n_pts)) goto cleanup;
-
-
-        /* S Calculation (Follows same logic for consistency) */
-        n_pts = 0;
-
-        /* 1. rho * Base */
-        tB = *pk_base;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, rho)) goto cleanup;
-        pts[n_pts++] = &tB;
-
-        /* 2. <sl, G> */
-        if (secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, sl, n)) {
-            pts[n_pts++] = &tG;
-        }
-
-        /* 3. <sr, H> */
-        if (secp256k1_bulletproof_ipa_msm(ctx, &tH, H_vec, sr, n)) {
-            pts[n_pts++] = &tH;
-        }
-
-        /* Combine valid points for S */
-        if (!secp256k1_ec_pubkey_combine(ctx, &S, pts, n_pts)) goto cleanup;
-    }
+        if (!calculate_commitment_term(ctx, &A, pk_base, alpha, al, ar, G_vec, H_vec, n)) goto cleanup;
+        if (!calculate_commitment_term(ctx, &S, pk_base, rho, sl, sr, G_vec, H_vec, n)) goto cleanup;
 
     /* ---- 6. Fiat–Shamir y,z ---- */
     {
