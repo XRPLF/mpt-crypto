@@ -1122,7 +1122,7 @@ static int calculate_commitment_term(
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, base_scalar)) return 0;
     pts[n_pts++] = &tB;
 
-   /* 2. <vec_l, G> */
+    /* 2. <vec_l, G> */
     if (!scalar_vector_all_zero(vec_l, n)) {
         if (!secp256k1_bulletproof_ipa_msm(ctx, &tG, G_vec, vec_l, n))
             return 0; /* REAL FAILURE */
