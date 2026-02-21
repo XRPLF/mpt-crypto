@@ -333,7 +333,9 @@ mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey)
     if (secp256k1_elgamal_generate_keypair(ctx, out_privkey, &pub) != 1)
         return -1;
 
-    std::memcpy(out_pubkey, pub.data, kMPT_PUBKEY_SIZE);
+    size_t output_len = kMPT_PUBKEY_SIZE;
+    if (secp256k1_ec_pubkey_serialize(ctx, out_pubkey, &output_len, &pub, SECP256K1_EC_COMPRESSED) != 1)
+        return -1;
 
     return 0;
 }
@@ -365,7 +367,8 @@ mpt_encrypt_amount(
         return -1;
 
     secp256k1_pubkey c1, c2, pk;
-    std::memcpy(pk.data, pubkey, kMPT_PUBKEY_SIZE);
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
 
     if (!secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pk, amount, blinding_factor))
         return -1;
@@ -415,7 +418,8 @@ mpt_get_convert_proof(
         return -1;
 
     secp256k1_pubkey pk;
-    std::memcpy(pk.data, pubkey, kMPT_PUBKEY_SIZE);
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
 
     if (secp256k1_mpt_pok_sk_prove(ctx, out_proof, &pk, privkey, ctx_hash) != 1)
         return -1;
@@ -447,7 +451,9 @@ mpt_get_pedersen_commitment(
     if (secp256k1_mpt_pedersen_commit(ctx, &commitment, amount, blinding_factor) != 1)
         return -1;
 
-    std::memcpy(out_commitment, commitment.data, kMPT_PEDERSEN_COMMIT_SIZE);
+    size_t output_len = kMPT_PEDERSEN_COMMIT_SIZE;
+    if (secp256k1_ec_pubkey_serialize(ctx, out_commitment, &output_len, &commitment, SECP256K1_EC_COMPRESSED) != 1)
+        return -1;
 
     return 0;
 }
@@ -467,7 +473,7 @@ mpt_get_amount_linkage_proof(
     if (!ctx)
         return -1;
 
-    secp256k1_pubkey c1, c2;
+    secp256k1_pubkey c1, c2, pk, pcm;
     if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
@@ -475,9 +481,11 @@ mpt_get_amount_linkage_proof(
             ctx, &c2, params->encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
-    secp256k1_pubkey pk, pcm;
-    std::memcpy(pk.data, pubkey, kMPT_PUBKEY_SIZE);
-    std::memcpy(pcm.data, params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE);
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pcm, params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
 
     if (secp256k1_elgamal_pedersen_link_prove(
             ctx,
@@ -512,7 +520,7 @@ mpt_get_balance_linkage_proof(
     if (!ctx)
         return -1;
 
-    secp256k1_pubkey c1, c2;
+    secp256k1_pubkey c1, c2, pk, pcm;
     if (!secp256k1_ec_pubkey_parse(ctx, &c1, params->encrypted_amount, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
@@ -520,9 +528,11 @@ mpt_get_balance_linkage_proof(
             ctx, &c2, params->encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
         return -1;
 
-    secp256k1_pubkey pk, pcm;
-    std::memcpy(pk.data, pub, kMPT_PUBKEY_SIZE);
-    std::memcpy(pcm.data, params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE);
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pcm, params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
 
     if (secp256k1_elgamal_pedersen_link_prove(
             ctx,
@@ -580,7 +590,9 @@ mpt_get_confidential_send_proof(
                 ctx, &s[i], rec.encrypted_amount + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE))
             return -1;
 
-        std::memcpy(pk[i].data, rec.pubkey, kMPT_PUBKEY_SIZE);
+        if (secp256k1_ec_pubkey_parse(ctx, &pk[i], rec.pubkey, kMPT_PUBKEY_SIZE) != 1)
+            return -1;
+
         sr.insert(sr.end(), tx_blinding_factor, tx_blinding_factor + kMPT_BLINDING_FACTOR_SIZE);
     }
 
@@ -609,14 +621,14 @@ mpt_get_confidential_send_proof(
     // Amount Linkage Proof
     uint8_t* amt_ptr = out_proof + size_equality;
     if (mpt_get_amount_linkage_proof(
-            pk[0].data, tx_blinding_factor, context_hash, amount_params, amt_ptr) != 0)
+            recipients[0].pubkey, tx_blinding_factor, context_hash, amount_params, amt_ptr) != 0)
     {
         return -1;
     }
 
     // Balance Linkage Proof
     uint8_t* bal_ptr = amt_ptr + kMPT_PEDERSEN_LINK_SIZE;
-    if (mpt_get_balance_linkage_proof(priv, pk[0].data, context_hash, balance_params, bal_ptr) != 0)
+    if (mpt_get_balance_linkage_proof(priv, recipients[0].pubkey, context_hash, balance_params, bal_ptr) != 0)
     {
         return -1;
     }
@@ -657,7 +669,8 @@ mpt_get_clawback_proof(
         return -1;
 
     secp256k1_pubkey pk;
-    std::memcpy(pk.data, pub, kMPT_PUBKEY_SIZE);
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
 
     secp256k1_pubkey c1, c2;
     if (!mpt_make_ec_pair(encrypted_amount, c1, c2))

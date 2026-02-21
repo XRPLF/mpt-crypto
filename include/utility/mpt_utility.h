@@ -19,14 +19,14 @@ extern "C" {
 
 // General crypto primitive sizes in bytes
 #define kMPT_HALF_SHA_SIZE 32
-#define kMPT_PUBKEY_SIZE 64
+#define kMPT_PUBKEY_SIZE 33
 #define kMPT_PRIVKEY_SIZE 32
 #define kMPT_BLINDING_FACTOR_SIZE 32
 
 // Gamal & Pedersen primitive sizes in bytes
 #define kMPT_ELGAMAL_CIPHER_SIZE 33
 #define kMPT_ELGAMAL_TOTAL_SIZE 66
-#define kMPT_PEDERSEN_COMMIT_SIZE 64
+#define kMPT_PEDERSEN_COMMIT_SIZE 33
 
 // Proof sizes in bytes
 #define kMPT_SCHNORR_PROOF_SIZE 65

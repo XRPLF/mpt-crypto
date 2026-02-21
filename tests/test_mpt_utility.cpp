@@ -68,7 +68,7 @@ test_mpt_confidential_convert()
         secp256k1_ec_pubkey_parse(
             ctx, &c2, ciphertext + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE) == 1);
 
-    std::memcpy(pk.data, pub, kMPT_PUBKEY_SIZE);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) == 1);
     EXPECT(secp256k1_elgamal_verify_encryption(ctx, &c1, &c2, &pk, convert_amount, bf) == 1);
     EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk, tx_hash) == 1);
 }
@@ -192,7 +192,7 @@ test_mpt_confidential_send()
     for (size_t i = 0; i < n_recipients; ++i)
     {
         EXPECT(mpt_make_ec_pair(recipients[i].encrypted_amount, r_list[i], s_list[i]));
-        std::memcpy(pk_list[i].data, recipients[i].pubkey, 64);
+        EXPECT(secp256k1_ec_pubkey_parse(ctx, &pk_list[i], recipients[i].pubkey, kMPT_PUBKEY_SIZE) == 1);
     }
 
     EXPECT(
@@ -212,8 +212,8 @@ test_mpt_confidential_send()
     secp256k1_pubkey pk, amt_pcm;
     secp256k1_pubkey amt_c1, amt_c2;
 
-    std::memcpy(pk.data, sender_pub, kMPT_PUBKEY_SIZE);
-    std::memcpy(amt_pcm.data, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &pk, sender_pub, kMPT_PUBKEY_SIZE) == 1);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &amt_pcm, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE) == 1);
 
     EXPECT(mpt_make_ec_pair(sender_ct, amt_c1, amt_c2));
     EXPECT(
@@ -227,7 +227,7 @@ test_mpt_confidential_send()
     secp256k1_pubkey bal_pcm;
     secp256k1_pubkey bal_c1, bal_c2;
 
-    std::memcpy(bal_pcm.data, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &bal_pcm, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE) == 1);
     EXPECT(mpt_make_ec_pair(prev_bal_ct, bal_c1, bal_c2));
 
     EXPECT(
@@ -296,8 +296,8 @@ test_mpt_convert_back()
     secp256k1_pubkey c1, c2, pk, pcm;
 
     EXPECT(mpt_make_ec_pair(pc_params.encrypted_amount, c1, c2));
-    std::memcpy(pk.data, pub, kMPT_PUBKEY_SIZE);
-    std::memcpy(pcm.data, pcm_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) == 1);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &pcm, pcm_comm, kMPT_PEDERSEN_COMMIT_SIZE) == 1);
 
     int verify_result =
         secp256k1_elgamal_pedersen_link_verify(ctx, proof, &pk, &c2, &c1, &pcm, context_hash);
@@ -348,7 +348,7 @@ test_mpt_clawback()
     secp256k1_pubkey c1, c2, pk;
 
     EXPECT(mpt_make_ec_pair(issuer_encrypted_bal, c1, c2));
-    std::memcpy(pk.data, issuer_pub, kMPT_PUBKEY_SIZE);
+    EXPECT(secp256k1_ec_pubkey_parse(ctx, &pk, issuer_pub, kMPT_PUBKEY_SIZE) == 1);
 
     int verify_result =
         secp256k1_equality_plaintext_verify(ctx, proof, &pk, &c2, &c1, claw_amount, context_hash);
