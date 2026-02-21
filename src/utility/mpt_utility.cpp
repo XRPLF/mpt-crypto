@@ -346,8 +346,14 @@ mpt_generate_blinding_factor(uint8_t out_factor[kMPT_BLINDING_FACTOR_SIZE])
     if (!out_factor)
         return -1;
 
-    if (RAND_bytes(out_factor, kMPT_BLINDING_FACTOR_SIZE) != 1)
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
         return -1;
+
+    do {
+        if (RAND_bytes(out_factor, kMPT_BLINDING_FACTOR_SIZE) != 1)
+            return -1;
+    } while (secp256k1_ec_seckey_verify(ctx, out_factor) != 1);
 
     return 0;
 }
