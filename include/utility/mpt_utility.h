@@ -1,10 +1,9 @@
 #ifndef MPT_UTILITY_H
 #define MPT_UTILITY_H
 
-#include <cstddef>
 #include <secp256k1.h>
+#include <stddef.h>
 #include <stdint.h>
-#include <vector>
 
 #ifdef __cplusplus
 extern "C" {

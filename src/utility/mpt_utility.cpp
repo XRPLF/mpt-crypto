@@ -4,6 +4,7 @@
 #include <openssl/sha.h>
 #include <secp256k1_mpt.h>
 #include <utility/mpt_utility.h>
+#include <vector>
 
 // Platform endianness support for serialization
 #if defined(__APPLE__)
