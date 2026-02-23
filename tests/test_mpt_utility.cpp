@@ -1,12 +1,18 @@
 #include "test_utils.h"
 
-#include <cstring>
-#include <iomanip>
+#include <algorithm>
 #include <iostream>
+#include <vector>
 #include <secp256k1_mpt.h>
-#include <sstream>
-#include <string>
 #include <utility/mpt_utility.h>
+
+// helper to create mock accounts and issuance IDs
+template <typename T>
+T create_mock_id(uint8_t fill) {
+    T mock;
+    std::fill(std::begin(mock.bytes), std::end(mock.bytes), fill);
+    return mock;
+}
 
 void
 test_encryption_decryption()
@@ -39,10 +45,9 @@ test_encryption_decryption()
 void
 test_mpt_confidential_convert()
 {
-    account_id acc;
-    std::memset(acc.bytes, 0xAA, kMPT_ACCOUNT_ID_SIZE);
-    mpt_issuance_id issuance;
-    std::memset(issuance.bytes, 0xBB, kMPT_ISSUANCE_ID_SIZE);
+    // Setup mock account, issuance and transaction details
+    account_id acc = create_mock_id<account_id>(0xAA);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xBB);
     uint32_t seq = 12345;
     uint64_t convert_amount = 750;
 
@@ -76,15 +81,10 @@ test_mpt_confidential_convert()
 void
 test_mpt_confidential_send()
 {
-    // Mock accounts and mpt issuance
-    account_id sender_acc, dest_acc;
-    std::memset(sender_acc.bytes, 0x11, kMPT_ACCOUNT_ID_SIZE);
-    std::memset(dest_acc.bytes, 0x22, kMPT_ACCOUNT_ID_SIZE);
-
-    mpt_issuance_id issuance;
-    std::memset(issuance.bytes, 0xBB, kMPT_ISSUANCE_ID_SIZE);
-
-    // Mock transaction details
+    // Setup mock account, issuance and transaction details
+    account_id sender_acc = create_mock_id<account_id>(0x11);
+    account_id dest_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xBB);
     uint32_t seq = 54321;
     uint64_t amount_to_send = 100;
     uint64_t prev_balance = 2000;
@@ -115,8 +115,8 @@ test_mpt_confidential_send()
     std::vector<mpt_confidential_recipient> recipients;
     auto add_recipient = [&](uint8_t* p, uint8_t* c) {
         mpt_confidential_recipient r;
-        std::memcpy(r.pubkey, p, kMPT_PUBKEY_SIZE);
-        std::memcpy(r.encrypted_amount, c, kMPT_ELGAMAL_TOTAL_SIZE);
+        std::copy(p, p + kMPT_PUBKEY_SIZE, r.pubkey);
+        std::copy(c, c + kMPT_ELGAMAL_TOTAL_SIZE, r.encrypted_amount);
         recipients.push_back(r);
     };
     add_recipient(sender_pub, sender_ct);
@@ -143,20 +143,20 @@ test_mpt_confidential_send()
     // Prepare pedersen proof params for both amount and balance linkage proofs
     mpt_pedersen_proof_params amt_params;
     amt_params.amount = amount_to_send;
-    std::memcpy(amt_params.blinding_factor, amount_bf, kMPT_BLINDING_FACTOR_SIZE);
-    std::memcpy(amt_params.pedersen_commitment, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
-    std::memcpy(amt_params.encrypted_amount, sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+    std::copy(amount_bf, amount_bf + kMPT_BLINDING_FACTOR_SIZE, amt_params.blinding_factor);
+    std::copy(amount_comm, amount_comm + kMPT_PEDERSEN_COMMIT_SIZE, amt_params.pedersen_commitment);
+    std::copy(sender_ct, sender_ct + kMPT_ELGAMAL_TOTAL_SIZE, amt_params.encrypted_amount);
 
     mpt_pedersen_proof_params bal_params;
     bal_params.amount = prev_balance;
-    std::memcpy(bal_params.blinding_factor, balance_bf, kMPT_BLINDING_FACTOR_SIZE);
-    std::memcpy(bal_params.pedersen_commitment, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::copy(balance_bf, balance_bf + kMPT_BLINDING_FACTOR_SIZE, bal_params.blinding_factor);
+    std::copy(balance_comm, balance_comm + kMPT_PEDERSEN_COMMIT_SIZE, bal_params.pedersen_commitment);
 
     uint8_t prev_bal_bf[kMPT_BLINDING_FACTOR_SIZE];
     uint8_t prev_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
     EXPECT(mpt_generate_blinding_factor(prev_bal_bf) == 0);
     EXPECT(mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct) == 0);
-    std::memcpy(bal_params.encrypted_amount, prev_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+    std::copy(prev_bal_ct, prev_bal_ct + kMPT_ELGAMAL_TOTAL_SIZE, bal_params.encrypted_amount);
 
     // Generate the confidential send proof
     size_t proof_len = get_confidential_send_proof_size(recipients.size());
@@ -244,12 +244,8 @@ void
 test_mpt_convert_back()
 {
     // Setup mock account, issuance and transaction details
-    account_id acc;
-    std::memset(acc.bytes, 0x55, kMPT_ACCOUNT_ID_SIZE);
-
-    mpt_issuance_id issuance;
-    std::memset(issuance.bytes, 0xEE, kMPT_ISSUANCE_ID_SIZE);
-
+    account_id acc = create_mock_id<account_id>(0x55);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xEE);
     uint32_t seq = 98765;
     uint64_t current_balance = 5000;
     uint64_t amount_to_convert_back = 1000;
@@ -280,9 +276,9 @@ test_mpt_convert_back()
     // Prepare pedersen proof params
     mpt_pedersen_proof_params pc_params;
     pc_params.amount = current_balance;
-    std::memcpy(pc_params.blinding_factor, pcm_bf, kMPT_BLINDING_FACTOR_SIZE);
-    std::memcpy(pc_params.pedersen_commitment, pcm_comm, kMPT_PEDERSEN_COMMIT_SIZE);
-    std::memcpy(pc_params.encrypted_amount, spending_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+    std::copy(pcm_bf, pcm_bf + kMPT_BLINDING_FACTOR_SIZE, pc_params.blinding_factor);
+    std::copy(pcm_comm, pcm_comm + kMPT_PEDERSEN_COMMIT_SIZE, pc_params.pedersen_commitment);
+    std::copy(spending_bal_ct, spending_bal_ct + kMPT_ELGAMAL_TOTAL_SIZE, pc_params.encrypted_amount);
 
     // Generate proof
     uint8_t proof[kMPT_PEDERSEN_LINK_SIZE];
@@ -309,14 +305,9 @@ void
 test_mpt_clawback()
 {
     // Setup mock account, issuance and transaction details
-    account_id issuer_acc;
-    std::memset(issuer_acc.bytes, 0x11, kMPT_ACCOUNT_ID_SIZE);
-
-    account_id holder_acc;
-    std::memset(holder_acc.bytes, 0x22, kMPT_ACCOUNT_ID_SIZE);
-
-    mpt_issuance_id issuance;
-    std::memset(issuance.bytes, 0xCC, kMPT_ISSUANCE_ID_SIZE);
+    account_id issuer_acc = create_mock_id<account_id>(0x11);
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xCC);
 
     uint32_t seq = 200;
     uint64_t claw_amount = 500;
