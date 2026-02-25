@@ -42,6 +42,55 @@
 #endif
 #endif
 
+
+/**
+ * @internal
+ * Private helper to generate aggregated bulletproofs
+ */
+static int
+mpt_get_bulletproof_agg(
+    uint64_t const* values,
+    uint8_t const* const* blinding_ptrs,
+    size_t m,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t* out_proof,
+    size_t* out_len)
+{
+    if ((m != 1 && m != 2) || !values || !blinding_ptrs || !out_proof || !out_len)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+
+    uint8_t blindings_flat[64];
+    for (size_t i = 0; i < m; ++i) {
+        if (!blinding_ptrs[i]) return -1;
+        std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
+    }
+
+    secp256k1_pubkey pk_base;
+    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+        return -1;
+
+    if (secp256k1_bulletproof_prove_agg(
+            ctx,
+            out_proof,
+            out_len,
+            values,
+            blindings_flat,
+            m,
+            &pk_base,
+            context_hash) != 1)
+    {
+        return -1;
+    }
+
+    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+    if (*out_len != expected)
+        return -1;
+
+    return 0;
+}
+
 /**
  * Context for secp256k1 operations.
  * Initialized once and reused across all operations to optimize performance
@@ -189,7 +238,7 @@ get_multi_ciphertext_equality_proof_size(size_t n_recipients)
 size_t
 get_confidential_send_proof_size(size_t n_recipients)
 {
-    return get_multi_ciphertext_equality_proof_size(n_recipients) + (kMPT_PEDERSEN_LINK_SIZE * 2);
+    return get_multi_ciphertext_equality_proof_size(n_recipients) + (kMPT_PEDERSEN_LINK_SIZE * 2) + kMPT_DOUBLE_BULLETPROOF_SIZE;
 }
 
 bool
@@ -640,9 +689,26 @@ mpt_get_confidential_send_proof(
         return -1;
     }
 
-    *out_len = totalRequired;
+    uint8_t* bp_ptr = bal_ptr + kMPT_PEDERSEN_LINK_SIZE;
 
-    // todo: add range proof
+    // Values to prove: [amount being sent, remaining balance] for range proof
+    uint64_t const remaining_balance = balance_params->amount - amount;
+    uint64_t bp_values[2] = { amount, remaining_balance };
+
+    // Blinding factors: [rho_amount, rho_balance - rho_amount]
+    uint8_t rho_rem[32];
+    uint8_t neg_rho_m[32];
+    secp256k1_mpt_scalar_negate(neg_rho_m, amount_params->blinding_factor);
+    secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_rho_m);
+
+    uint8_t const* bp_blinding_ptrs[2] = { amount_params->blinding_factor, rho_rem };
+    size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
+
+    if (mpt_get_bulletproof_agg(bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
+        return -1;
+
+    *out_len = size_equality + (kMPT_PEDERSEN_LINK_SIZE * 2) + actual_bp_len;
+
     return 0;
 }
 
@@ -651,12 +717,27 @@ mpt_get_convert_back_proof(
     uint8_t const priv[kMPT_PRIVKEY_SIZE],
     uint8_t const pub[kMPT_PUBKEY_SIZE],
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint64_t const amount,
     mpt_pedersen_proof_params const* params,
-    uint8_t out_proof[kMPT_PEDERSEN_LINK_SIZE])
+    uint8_t out_proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE])
 {
-    return mpt_get_balance_linkage_proof(priv, pub, context_hash, params, out_proof);
+    int ret = mpt_get_balance_linkage_proof(priv, pub, context_hash, params, out_proof);
+    if (ret != 0)
+        return ret;
 
-    // todo: add range proof
+    uint64_t const remaining_balance = params->amount - amount;
+    uint8_t* bulletproof_ptr = out_proof + kMPT_PEDERSEN_LINK_SIZE;
+    size_t proof_len = kMPT_SINGLE_BULLETPROOF_SIZE;
+
+    uint8_t const* blinding_ptrs[1] = { params->blinding_factor };
+
+    return mpt_get_bulletproof_agg(
+        &remaining_balance,
+        blinding_ptrs,
+        1,
+        context_hash,
+        bulletproof_ptr,
+        &proof_len);
 }
 
 int

@@ -31,6 +31,8 @@ extern "C" {
 #define kMPT_SCHNORR_PROOF_SIZE 65
 #define kMPT_EQUALITY_PROOF_SIZE 98
 #define kMPT_PEDERSEN_LINK_SIZE 195
+#define kMPT_SINGLE_BULLETPROOF_SIZE 688
+#define kMPT_DOUBLE_BULLETPROOF_SIZE 754
 
 // Field sizes in bytes for context hash
 #define kMPT_TYPE_SIZE 2
@@ -199,7 +201,7 @@ mpt_serialize_ec_pair(
 /**
  * @brief Generates a new Secp256k1 ElGamal keypair.
  * @param out_privkey [out] A 32-byte buffer for private key.
- * @param out_pubkey  [out] A 64-byte buffer for public key.
+ * @param out_pubkey  [out] A 33-byte buffer for public key.
  * @return 0 on success, -1 on failure.
  */
 int
@@ -216,7 +218,7 @@ mpt_generate_blinding_factor(uint8_t out_factor[kMPT_BLINDING_FACTOR_SIZE]);
 /**
  * @brief Encrypts an uint64 amount using an ElGamal public key.
  * @param amount           [in]  The integer value to encrypt.
- * @param pubkey           [in]  The 64-byte public key.
+ * @param pubkey           [in]  The 33-byte public key.
  * @param blinding_factor  [in]  The 32-byte random blinding factor (scalar r).
  * @param out_ciphertext   [out] A 66-byte buffer to store the resulting ciphertext (C1, C2).
  * @return 0 on success, -1 on failure.
@@ -252,7 +254,7 @@ mpt_decrypt_amount(
  * sender possesses the private key associated with the account, binding it
  * to the specific transaction via the ctx_hash.
  *
- * @param pubkey    [in]  64-byte public key of the account.
+ * @param pubkey    [in]  33-byte public key of the account.
  * @param privkey   [in]  32-byte private key of the account.
  * @param ctx_hash  [in]  32-byte hash of the transaction (challenge).
  * @param out_proof [out] 65-byte buffer to store the Schnorr proof.
@@ -269,7 +271,7 @@ mpt_get_convert_proof(
  * @brief Computes a Pedersen Commitment point for Confidential MPT.
  * @param amount           [in]  The 64-bit unsigned integer value to commit.
  * @param blinding_factor  [in]  A 32-byte secret scalar (rho) used to hide the amount.
- * @param out_commitment   [out] A 64-byte buffer to store the commitment
+ * @param out_commitment   [out] A 33-byte buffer to store the commitment
  */
 int
 mpt_get_pedersen_commitment(
@@ -279,7 +281,7 @@ mpt_get_pedersen_commitment(
 
 /**
  * @brief Generates a ZK linkage proof between an ElGamal ciphertext and a Pedersen commitment.
- * @param pubkey              [in] 64-byte internal format of the sender's public key.
+ * @param pubkey              [in] 33-byte public key of the sender.
  * @param blinding_factor     [in] 32-byte blinding factor used for the ElGamal encryption.
  * @param context_hash        [in] 32-byte hash of the transaction context.
  * @param params              [in] Struct containing commitment, amount, and ciphertext.
@@ -297,7 +299,7 @@ mpt_get_amount_linkage_proof(
 /**
  * @brief Generates a ZK linkage proof for the sender's balance.
  * @param priv                [in] 32-byte private key of the sender.
- * @param pub                 [in] 64-byte internal format of the sender's public key.
+ * @param pub                 [in] 33-byte public key of the sender.
  * @param context_hash        [in] 32-byte hash of the transaction context.
  * @param params              [in] Struct containing commitment, amount, and ciphertext.
  * @param out                 [out] Buffer of exactly 195 bytes to store the proof.
@@ -341,10 +343,11 @@ mpt_get_confidential_send_proof(
 /**
  * @brief Generates proof for ConfidentialMPTConvertBack.
  * @param priv          [in] The holder's 32-byte private key.
- * @param pub           [in] The holder's 64-byte public key (internal format).
+ * @param pub           [in] The holder's 33-byte public key.
  * @param context_hash  [in] The 32-byte context hash binding the proof to the transaction.
+ * @param amount        [in] The amount to convert back.
  * @param params        [in] Pedersen commitment parameters.
- * @param out_proof     [out] The 65-byte buffer to be filled with the Pedersen linkage proof.
+ * @param out_proof     [out] The 883-byte buffer to be filled with the Pedersen linkage proof and range proof.
  * @return 0 on success, -1 on failure (e.g., math error or invalid parameters).
  */
 int
@@ -352,17 +355,18 @@ mpt_get_convert_back_proof(
     uint8_t const priv[kMPT_PRIVKEY_SIZE],
     uint8_t const pub[kMPT_PUBKEY_SIZE],
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint64_t const amount,
     mpt_pedersen_proof_params const* params,
-    uint8_t out_proof[kMPT_PEDERSEN_LINK_SIZE]);
+    uint8_t out_proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE]);
 
 /**
  * @brief Generates proof for ConfidentialMPTClawback.
  * @param priv              [in] The issuer's 32-byte private key.
- * @param pub               [in] The issuer's 64-byte public key.
+ * @param pub               [in] The issuer's 33-byte public key.
  * @param context_hash      [in] The 32-byte context hash binding the proof to the transaction.
  * @param amount            [in] The plaintext amount to be clawed back.
  * @param encrypted_amount  [in] The 66-byte sfIssuerEncryptedBalance blob from the ledger.
- * @param out_proof         [out] The 64-byte buffer to be filled with the equality proof.
+ * @param out_proof         [out] The 98-byte buffer to be filled with the equality proof.
  * @return 0 on success, -1 on failure (e.g., math error or invalid ciphertext).
  */
 int
