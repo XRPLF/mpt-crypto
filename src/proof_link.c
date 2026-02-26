@@ -80,23 +80,29 @@ static void build_link_challenge_hash(
     const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
     const secp256k1_pubkey *T3, const unsigned char *context_id)
 {
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
   const char *domain = "MPT_ELGAMAL_PEDERSEN_LINK";
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, domain, strlen(domain));
+  if (!mdctx)
+    return;
 
-  /* Helper Macro */
+  EVP_MD_CTX_reset(mdctx);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
+
 #define SER_AND_HASH(pk_ptr)                                                   \
   do                                                                           \
   {                                                                            \
     len = 33;                                                                  \
     secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                      \
                                   SECP256K1_EC_COMPRESSED);                    \
-    SHA256_Update(&sha, buf, 33);                                              \
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+      goto cleanup;                                                            \
   } while (0)
 
   SER_AND_HASH(c1);
@@ -111,11 +117,16 @@ static void build_link_challenge_hash(
 
   if (context_id)
   {
-    SHA256_Update(&sha, context_id, 32);
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
   }
 
-  SHA256_Final(h, &sha);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Prover Implementation --- */

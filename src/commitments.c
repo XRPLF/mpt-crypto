@@ -29,7 +29,7 @@
  */
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h> // For OPENSSL_cleanse
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <string.h>
 
 /* --- Internal Helpers --- */
@@ -48,6 +48,7 @@
  * @param index     Vector index (enforced Big-Endian).
  * @return 1 on success, 0 on failure.
  */
+// C
 int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
                                      secp256k1_pubkey *out,
                                      const unsigned char *label,
@@ -61,39 +62,49 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
       (unsigned char)(index >> 24), (unsigned char)(index >> 16),
       (unsigned char)(index >> 8), (unsigned char)(index & 0xFF)};
 
-  /* Try-and-increment loop */
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  if (!mdctx)
+    return 0;
+
   while (ctr < 0xFFFFFFFFu)
   {
     unsigned char ctr_be[4] = {
         (unsigned char)(ctr >> 24), (unsigned char)(ctr >> 16),
         (unsigned char)(ctr >> 8), (unsigned char)(ctr & 0xFF)};
 
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, "MPT_BULLETPROOF_V1_NUMS", 23); // Domain Sep
-    SHA256_Update(&sha, "secp256k1", 9);                // Curve Label
+    EVP_MD_CTX_reset(mdctx);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
+    EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_V1_NUMS", 23); // Domain Sep
+    EVP_DigestUpdate(mdctx, "secp256k1", 9);                // Curve Label
 
     if (label && label_len > 0)
+      EVP_DigestUpdate(mdctx, label, label_len);
+
+    EVP_DigestUpdate(mdctx, idx_be, 4);
+    EVP_DigestUpdate(mdctx, ctr_be, 4);
+
+    if (EVP_DigestFinal_ex(mdctx, hash, NULL) != 1)
     {
-      SHA256_Update(&sha, label, label_len);
+      EVP_MD_CTX_free(mdctx);
+      return 0;
     }
 
-    SHA256_Update(&sha, idx_be, 4);
-    SHA256_Update(&sha, ctr_be, 4);
-    SHA256_Final(hash, &sha);
-
-    /* Construct compressed point candidate */
     compressed[0] =
-        0x02; /* Force even Y (standard convention for unique points) */
+        0x02; // Force even Y (standard convention for unique points)
     memcpy(&compressed[1], hash, 32);
 
-    /* Check validity on curve */
     if (secp256k1_ec_pubkey_parse(ctx, out, compressed, 33) == 1)
     {
+      EVP_MD_CTX_free(mdctx);
       return 1;
     }
     ctr++;
   }
+  EVP_MD_CTX_free(mdctx);
   return 0; // Extremely unlikely to reach here
 }
 

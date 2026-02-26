@@ -50,7 +50,7 @@
  */
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -76,6 +76,7 @@ static int generate_random_scalar(const secp256k1_context *ctx,
 /*
  * Hash( Domain || {R_i, S_i, Pk_i} || Tm || {TrG_i, TrP_i} || TxID )
  */
+// C
 static void
 compute_challenge_multi(const secp256k1_context *ctx, unsigned char *e_out,
                         size_t n, const secp256k1_pubkey *R,
@@ -83,61 +84,67 @@ compute_challenge_multi(const secp256k1_context *ctx, unsigned char *e_out,
                         const secp256k1_pubkey *Tm, const secp256k1_pubkey *TrG,
                         const secp256k1_pubkey *TrP, const unsigned char *tx_id)
 {
-  SHA256_CTX sha;
-  unsigned char buf[33];
-  unsigned char h[32];
-  size_t len;
-  size_t i;
-  const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    unsigned char buf[33];
+    unsigned char h[32];
+    size_t len;
+    size_t i;
+    const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, domain, strlen(domain));
+    if (!mdctx) return;
 
-  /* 1. Public Inputs */
-  for (i = 0; i < n; ++i)
-  {
+    EVP_MD_CTX_reset(mdctx);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
+    if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1) goto cleanup;
+
+    /* 1. Public Inputs */
+    for (i = 0; i < n; ++i)
+    {
+        len = 33;
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &R[i],
+                                      SECP256K1_EC_COMPRESSED);
+        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+
+        len = 33;
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &S[i],
+                                      SECP256K1_EC_COMPRESSED);
+        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+
+        len = 33;
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk[i],
+                                      SECP256K1_EC_COMPRESSED);
+        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+    }
+
+    /* 2. Commitments */
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &R[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tm, SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
 
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &S[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    for (i = 0; i < n; ++i)
+    {
+        len = 33;
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrG[i],
+                                      SECP256K1_EC_COMPRESSED);
+        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
 
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
-  }
+        len = 33;
+        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrP[i],
+                                      SECP256K1_EC_COMPRESSED);
+        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+    }
 
-  /* 2. Commitments */
-  len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tm, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+    /* 3. Context */
+    if (tx_id)
+    {
+        if (EVP_DigestUpdate(mdctx, tx_id, 32) != 1) goto cleanup;
+    }
 
-  for (i = 0; i < n; ++i)
-  {
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrG[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1) goto cleanup;
+    secp256k1_mpt_scalar_reduce32(e_out, h);
 
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrP[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
-  }
-
-  /* 3. Context */
-  if (tx_id)
-  {
-    SHA256_Update(&sha, tx_id, 32);
-  }
-
-  SHA256_Final(h, &sha);
-  secp256k1_mpt_scalar_reduce32(e_out, h);
+    cleanup:
+    EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Public API --- */

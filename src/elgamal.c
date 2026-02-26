@@ -36,8 +36,8 @@
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.2.2] ElGamal Encryption
  */
 #include "secp256k1_mpt.h"
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -250,36 +250,47 @@ int generate_canonical_encrypted_zero(
   unsigned char hash_input[51]; // 7 ("EncZero") + 20 + 24
   const char *domain = "EncZero";
   int ret;
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
 
-  // Build static buffer part
+  if (!mdctx)
+    return 0;
+
   memcpy(hash_input, domain, 7);
   memcpy(hash_input + 7, account_id, 20);
   memcpy(hash_input + 27, mpt_issuance_id, 24);
 
-  /* Rejection sampling loop to ensure scalar is valid */
   do
   {
-    SHA256(hash_input, 51, deterministic_scalar);
+    EVP_MD_CTX_reset(mdctx);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
+    if (EVP_DigestUpdate(mdctx, hash_input, 51) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
+    if (EVP_DigestFinal_ex(mdctx, deterministic_scalar, NULL) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
 
-    // If invalid, re-hash the hash (standard chain method for determinism)
-    // Or simply fail if strict canonical behavior is required.
-    // Assuming rejection sampling is the intended design for safety:
     if (secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
       break;
 
-    // Update input for next iteration to get new hash
-    // (Note: The original code just looped SHA256 on same input which is
-    // static, so it would loop forever if the first hash was invalid. Fixed
-    // here by re-hashing the output if needed, though highly unlikely to fail).
     memcpy(hash_input, deterministic_scalar, 32);
 
   } while (1);
 
+  EVP_MD_CTX_free(mdctx);
+
   ret = secp256k1_elgamal_encrypt(ctx, enc_zero_c1, enc_zero_c2, pubkey, 0,
                                   deterministic_scalar);
 
-  OPENSSL_cleanse(deterministic_scalar, 32); // Secure cleanup
+  OPENSSL_cleanse(deterministic_scalar, 32);
   return ret;
 }
 

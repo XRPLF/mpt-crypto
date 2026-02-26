@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <openssl/evp.h>
 
 #define N_BITS 64
 /* log2(64) = 6 rounds */
@@ -219,19 +220,42 @@ int main(void)
   secp256k1_bulletproof_ipa_dot(ctx, dot, a_vec, b_vec, N_BITS);
 
   /* 4. Transcript & Binding Challenge */
-  unsigned char ipa_transcript_id[32];
-  SHA256((unsigned char *)"IPA_TEST", 8, ipa_transcript_id);
+    // tests/test_ipa.c
+    unsigned char ipa_transcript_id[32];
+    unsigned char ux[32];
 
-  unsigned char ux[32];
-  {
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, ipa_transcript_id, 32);
-    SHA256_Update(&sha, dot, 32);
-    SHA256_Final(ux, &sha);
-    /* Reduce is handled in real code, here just check verify */
-    secp256k1_mpt_scalar_reduce32(ux, ux);
-  }
+    {
+        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+        int ok = 0;
+        unsigned int md_len = 0;
+
+        if (!mdctx)
+            goto test_cleanup;
+
+        /* ipa_transcript_id = SHA256("IPA_TEST") */
+        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto test_cleanup;
+        if (EVP_DigestUpdate(mdctx, "IPA_TEST", 8) != 1) goto test_cleanup;
+        if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1) goto test_cleanup;
+
+        /* ux = SHA256(ipa_transcript_id || dot) */
+        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto test_cleanup;
+        if (EVP_DigestUpdate(mdctx, ipa_transcript_id, 32) != 1) goto test_cleanup;
+        if (EVP_DigestUpdate(mdctx, dot, 32) != 1) goto test_cleanup;
+        if (EVP_DigestFinal_ex(mdctx, ux, &md_len) != 1) goto test_cleanup;
+        if (md_len != 32) goto test_cleanup;
+
+        secp256k1_mpt_scalar_reduce32(ux, ux);
+
+        ok = 1;
+
+        test_cleanup:
+        EVP_MD_CTX_free(mdctx);
+
+        if (!ok) {
+            fprintf(stderr, "[IPA TEST] Transcript construction failed\n");
+            return 1;   /* exit test immediately */
+        }
+    }
 
   /* 5. Build Initial Commitment P = <a,G> + <b,H> + <a,b>*ux*U */
   secp256k1_pubkey P, tmp;

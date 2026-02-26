@@ -52,7 +52,7 @@
  */
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -80,59 +80,63 @@ static int generate_random_scalar(const secp256k1_context *ctx,
  * Builds the challenge hash input.
  */
 static void build_same_plaintext_hash_input(
-    const secp256k1_context *ctx, unsigned char *e_out,
-    const secp256k1_pubkey *R1, const secp256k1_pubkey *S1,
-    const secp256k1_pubkey *P1, const secp256k1_pubkey *R2,
-    const secp256k1_pubkey *S2, const secp256k1_pubkey *P2,
-    const secp256k1_pubkey *T_m, const secp256k1_pubkey *T_r1_G,
-    const secp256k1_pubkey *T_r1_P1, const secp256k1_pubkey *T_r2_G,
-    const secp256k1_pubkey *T_r2_P2, const unsigned char *tx_context_id)
+        const secp256k1_context *ctx, unsigned char *e_out,
+        const secp256k1_pubkey *R1, const secp256k1_pubkey *S1,
+        const secp256k1_pubkey *P1, const secp256k1_pubkey *R2,
+        const secp256k1_pubkey *S2, const secp256k1_pubkey *P2,
+        const secp256k1_pubkey *T_m, const secp256k1_pubkey *T_r1_G,
+        const secp256k1_pubkey *T_r1_P1, const secp256k1_pubkey *T_r2_G,
+        const secp256k1_pubkey *T_r2_P2, const unsigned char *tx_context_id)
 {
-  SHA256_CTX sha;
-  unsigned char buf[33];
-  unsigned char h[32];
-  size_t len;
-  const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    unsigned char buf[33];
+    unsigned char h[32];
+    size_t len;
+    const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, domain, strlen(domain));
+    if (!mdctx) return;
 
-  /* Helper macro to serialize and update */
+    EVP_MD_CTX_reset(mdctx);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
+    if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1) goto cleanup;
+
 #define SER_AND_HASH(pk)                                                       \
   do                                                                           \
   {                                                                            \
     len = 33;                                                                  \
     secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk,                          \
                                   SECP256K1_EC_COMPRESSED);                    \
-    SHA256_Update(&sha, buf, 33);                                              \
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;                   \
   } while (0)
 
-  // 6 Public Inputs
-  SER_AND_HASH(R1);
-  SER_AND_HASH(S1);
-  SER_AND_HASH(P1);
-  SER_AND_HASH(R2);
-  SER_AND_HASH(S2);
-  SER_AND_HASH(P2);
+    // 6 Public Inputs
+    SER_AND_HASH(R1);
+    SER_AND_HASH(S1);
+    SER_AND_HASH(P1);
+    SER_AND_HASH(R2);
+    SER_AND_HASH(S2);
+    SER_AND_HASH(P2);
 
-  // 5 Commitments
-  SER_AND_HASH(T_m);
-  SER_AND_HASH(T_r1_G);
-  SER_AND_HASH(T_r1_P1);
-  SER_AND_HASH(T_r2_G);
-  SER_AND_HASH(T_r2_P2);
+    // 5 Commitments
+    SER_AND_HASH(T_m);
+    SER_AND_HASH(T_r1_G);
+    SER_AND_HASH(T_r1_P1);
+    SER_AND_HASH(T_r2_G);
+    SER_AND_HASH(T_r2_P2);
 
 #undef SER_AND_HASH
 
-  if (tx_context_id)
-  {
-    SHA256_Update(&sha, tx_context_id, 32);
-  }
+    if (tx_context_id)
+    {
+        if (EVP_DigestUpdate(mdctx, tx_context_id, 32) != 1) goto cleanup;
+    }
 
-  SHA256_Final(h, &sha);
-  secp256k1_mpt_scalar_reduce32(e_out, h);
+    if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1) goto cleanup;
+    secp256k1_mpt_scalar_reduce32(e_out, h);
+
+    cleanup:
+    EVP_MD_CTX_free(mdctx);
 }
-
 /* --- Public API --- */
 
 int secp256k1_mpt_prove_same_plaintext(
