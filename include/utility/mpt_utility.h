@@ -34,25 +34,14 @@ extern "C" {
 #define kMPT_SINGLE_BULLETPROOF_SIZE 688
 #define kMPT_DOUBLE_BULLETPROOF_SIZE 754
 
-// Field sizes in bytes for context hash
-#define kMPT_TYPE_SIZE 2
-#define kMPT_ACCOUNT_ID_SIZE 20
-#define kMPT_SEQUENCE_SIZE 4
-#define kMPT_ISSUANCE_ID_SIZE 24
-#define kMPT_AMOUNT_SIZE 8
-#define kMPT_VERSION_SIZE 4
+// Context hash size
+#define kMPT_ZKP_CONTEXT_HASH_SIZE 74
 
-// Context hash sizes
-#define kMPT_COMMON_HASH_SIZE                                     \
-    (kMPT_TYPE_SIZE + kMPT_ACCOUNT_ID_SIZE + kMPT_SEQUENCE_SIZE + \
-     kMPT_ISSUANCE_ID_SIZE)                                                // 50 bytes
-#define kMPT_CONVERT_HASH_SIZE (kMPT_COMMON_HASH_SIZE + kMPT_AMOUNT_SIZE)  // 58 bytes
-#define kMPT_SEND_HASH_SIZE \
-    (kMPT_COMMON_HASH_SIZE + kMPT_ACCOUNT_ID_SIZE + kMPT_VERSION_SIZE)  // 74 bytes
-#define kMPT_CONVERT_BACK_HASH_SIZE \
-    (kMPT_COMMON_HASH_SIZE + kMPT_AMOUNT_SIZE + kMPT_VERSION_SIZE)  // 62 bytes
-#define kMPT_CLAWBACK_HASH_SIZE \
-    (kMPT_COMMON_HASH_SIZE + kMPT_AMOUNT_SIZE + kMPT_ACCOUNT_ID_SIZE)  // 78 bytes
+// Account ID size in bytes
+#define kMPT_ACCOUNT_ID_SIZE 20
+
+// MPTokenIssuance ID size in bytes
+#define kMPT_ISSUANCE_ID_SIZE 24
 
 /**
  * @brief Represents a unique 24-byte MPT issuance ID.
@@ -112,49 +101,30 @@ mpt_secp256k1_context();
 /**
  * @brief Context Hash for ConfidentialMPTConvert.
  */
-int
-mpt_get_convert_context_hash(
-    account_id account,
-    uint32_t sequence,
-    mpt_issuance_id issuanceID,
-    uint64_t amount,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
+int mpt_get_convert_context_hash(account_id account, mpt_issuance_id iss,
+                                 uint32_t sequence,
+                                 uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
 
 /**
  * @brief Context Hash for ConfidentialMPTConvertBack.
  */
-int
-mpt_get_convert_back_context_hash(
-    account_id account,
-    uint32_t sequence,
-    mpt_issuance_id issuanceID,
-    uint64_t amount,
-    uint32_t version,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
+int mpt_get_convert_back_context_hash(account_id acc, mpt_issuance_id iss,
+                                      uint32_t seq, uint32_t ver,
+                                      uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
 
 /**
  * @brief Context Hash for ConfidentialMPTSend.
  */
-int
-mpt_get_send_context_hash(
-    account_id account,
-    uint32_t sequence,
-    mpt_issuance_id issuanceID,
-    account_id destination,
-    uint32_t version,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
+int mpt_get_send_context_hash(account_id acc, mpt_issuance_id iss, uint32_t seq,
+                              account_id dest, uint32_t ver,
+                              uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
 
 /**
  * @brief Context Hash for ConfidentialMPTClawback.
  */
-int
-mpt_get_clawback_context_hash(
-    account_id account,
-    uint32_t sequence,
-    mpt_issuance_id issuanceID,
-    uint64_t amount,
-    account_id holder,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
+int mpt_get_clawback_context_hash(account_id acc, mpt_issuance_id iss,
+                                  uint32_t seq, account_id holder,
+                                  uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
 
 /**
  * @brief Calculates the size of the Multi-Ciphertext Equality Proof.

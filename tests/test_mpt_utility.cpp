@@ -64,7 +64,7 @@ test_mpt_confidential_convert()
     EXPECT(mpt_encrypt_amount(convert_amount, pub, bf, ciphertext) == 0);
 
     // Generate context hash and ZKProof
-    EXPECT(mpt_get_convert_context_hash(acc, seq, issuance, convert_amount, tx_hash) == 0);
+    EXPECT(mpt_get_convert_context_hash(acc, issuance, seq, tx_hash) == 0);
     EXPECT(mpt_get_convert_proof(pub, priv, tx_hash, proof) == 0);
 
     // Vefify the ZKProof for convert
@@ -129,9 +129,8 @@ test_mpt_confidential_send()
 
     // Generate context hash for the transaction
     uint8_t send_ctx_hash[kMPT_HALF_SHA_SIZE];
-    EXPECT(
-        mpt_get_send_context_hash(sender_acc, seq, issuance, dest_acc, version, send_ctx_hash) ==
-        0);
+    EXPECT(mpt_get_send_context_hash(sender_acc, issuance, seq, dest_acc,
+                                     version, send_ctx_hash) == 0);
 
     // Prepare pedersen proof params for both amount and balance linkage proofs
     mpt_pedersen_proof_params amt_params;
@@ -192,9 +191,8 @@ test_mpt_convert_back()
 
     // Generate context hash
     uint8_t context_hash[kMPT_HALF_SHA_SIZE];
-    EXPECT(
-        mpt_get_convert_back_context_hash(
-            acc, seq, issuance, amount_to_convert_back, version, context_hash) == 0);
+    EXPECT(mpt_get_convert_back_context_hash(acc, issuance, seq, version,
+                                             context_hash) == 0);
 
     // Generate pedersen commitments for current balance
     uint8_t pcm_bf[kMPT_BLINDING_FACTOR_SIZE];
@@ -239,9 +237,8 @@ test_mpt_clawback()
 
     // Generate context hash
     uint8_t context_hash[kMPT_HALF_SHA_SIZE];
-    EXPECT(
-        mpt_get_clawback_context_hash(
-            issuer_acc, seq, issuance, claw_amount, holder_acc, context_hash) == 0);
+    EXPECT(mpt_get_clawback_context_hash(issuer_acc, issuance, seq, holder_acc,
+                                         context_hash) == 0);
 
     // Mock holder's "sfIssuerEncryptedBalance"
     uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];

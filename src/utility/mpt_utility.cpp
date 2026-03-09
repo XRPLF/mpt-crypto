@@ -160,40 +160,40 @@ struct Serializer
     void
     add16(uint16_t val)
     {
-        if (overflow || offset + 2 > capacity) {
-            overflow = true;
-            return;
-        }
+      if (overflow || offset + sizeof(val) > capacity) {
+        overflow = true;
+        return;
+      }
 
         uint16_t n = htons(val);
-        memcpy(buffer + offset, &n, 2);
-        offset += 2;
+        memcpy(buffer + offset, &n, sizeof(val));
+        offset += sizeof(val);
     }
 
     void
     add32(uint32_t val)
     {
-        if (overflow || offset + 4 > capacity) {
-            overflow = true;
-            return;
-        }
+      if (overflow || offset + sizeof(val) > capacity) {
+        overflow = true;
+        return;
+      }
 
         uint32_t n = htonl(val);
-        memcpy(buffer + offset, &n, 4);
-        offset += 4;
+        memcpy(buffer + offset, &n, sizeof(val));
+        offset += sizeof(val);
     }
 
     void
     add64(uint64_t val)
     {
-        if (overflow || offset + 8 > capacity) {
-            overflow = true;
-            return;
-        }
+      if (overflow || offset + sizeof(val) > capacity) {
+        overflow = true;
+        return;
+      }
 
         uint64_t n = htobe64(val);
-        memcpy(buffer + offset, &n, 8);
-        offset += 8;
+        memcpy(buffer + offset, &n, sizeof(val));
+        offset += sizeof(val);
     }
 
     void
@@ -217,18 +217,12 @@ sha512_half(uint8_t const* data, size_t len, uint8_t* out)
     memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2);
 }
 
-void
-mpt_add_common_zkp_fields(
-    Serializer& s,
-    uint16_t txType,
-    account_id acc,
-    uint32_t seq,
-    mpt_issuance_id iss)
-{
-    s.add16(txType);
-    s.addRaw(acc.bytes, kMPT_ACCOUNT_ID_SIZE);
-    s.add32(seq);
-    s.addRaw(iss.bytes, kMPT_ISSUANCE_ID_SIZE);
+void mpt_add_common_zkp_fields(Serializer &s, uint16_t txType, account_id acc,
+                               mpt_issuance_id iss, uint32_t seq) {
+  s.add16(txType);
+  s.addRaw(acc.bytes, sizeof(acc.bytes));
+  s.addRaw(iss.bytes, sizeof(iss.bytes));
+  s.add32(seq);
 }
 
 extern "C" {
@@ -285,94 +279,72 @@ mpt_serialize_ec_pair(
     return true;
 }
 
-int
-mpt_get_convert_context_hash(
-    account_id acc,
-    uint32_t seq,
-    mpt_issuance_id iss,
-    uint64_t amt,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
-{
-    uint8_t buf[kMPT_CONVERT_HASH_SIZE];
-    Serializer s(buf, kMPT_CONVERT_HASH_SIZE);
+int mpt_get_convert_context_hash(account_id acc, mpt_issuance_id iss,
+                                 uint32_t seq,
+                                 uint8_t out_hash[kMPT_HALF_SHA_SIZE]) {
+  uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+  Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, seq, iss);
-    s.add64(amt);
+  mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, iss, seq);
+  s.addRaw(acc.bytes, sizeof(acc.bytes));
+  s.add32(0);
 
-    if (!s.isValid())
-        return -1;
+  if (!s.isValid())
+    return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+  sha512_half(buf, s.offset, out_hash);
+  return 0;
 }
 
-int
-mpt_get_convert_back_context_hash(
-    account_id acc,
-    uint32_t seq,
-    mpt_issuance_id iss,
-    uint64_t amt,
-    uint32_t ver,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
-{
-    uint8_t buf[kMPT_CONVERT_BACK_HASH_SIZE];
-    Serializer s(buf, kMPT_CONVERT_BACK_HASH_SIZE);
+int mpt_get_convert_back_context_hash(account_id acc, mpt_issuance_id iss,
+                                      uint32_t seq, uint32_t ver,
+                                      uint8_t out_hash[kMPT_HALF_SHA_SIZE]) {
+  uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+  Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, seq, iss);
-    s.add64(amt);
-    s.add32(ver);
+  mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, iss, seq);
+  s.addRaw(acc.bytes, sizeof(acc.bytes));
+  s.add32(ver);
 
-    if (!s.isValid())
-        return -1;
+  if (!s.isValid())
+    return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+  sha512_half(buf, s.offset, out_hash);
+  return 0;
 }
 
-int
-mpt_get_send_context_hash(
-    account_id acc,
-    uint32_t seq,
-    mpt_issuance_id iss,
-    account_id dest,
-    uint32_t ver,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
-{
-    uint8_t buf[kMPT_SEND_HASH_SIZE];
-    Serializer s(buf, kMPT_SEND_HASH_SIZE);
+int mpt_get_send_context_hash(account_id acc, mpt_issuance_id iss, uint32_t seq,
+                              account_id dest, uint32_t ver,
+                              uint8_t out_hash[kMPT_HALF_SHA_SIZE]) {
+  uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+  Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, seq, iss);
-    s.addRaw(dest.bytes, kMPT_ACCOUNT_ID_SIZE);
-    s.add32(ver);
+  mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, iss, seq);
+  s.addRaw(dest.bytes, sizeof(dest.bytes));
+  s.add32(ver);
 
-    if (!s.isValid())
-        return -1;
+  if (!s.isValid())
+    return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+  sha512_half(buf, s.offset, out_hash);
+  return 0;
 }
 
-int
-mpt_get_clawback_context_hash(
-    account_id acc,
-    uint32_t seq,
-    mpt_issuance_id iss,
-    uint64_t amt,
-    account_id holder,
-    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
-{
-    uint8_t buf[kMPT_CLAWBACK_HASH_SIZE];
-    Serializer s(buf, kMPT_CLAWBACK_HASH_SIZE);
+int mpt_get_clawback_context_hash(account_id acc, mpt_issuance_id iss,
+                                  uint32_t seq, account_id holder,
+                                  uint8_t out_hash[kMPT_HALF_SHA_SIZE]) {
+  uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+  Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, seq, iss);
-    s.add64(amt);
-    s.addRaw(holder.bytes, kMPT_ACCOUNT_ID_SIZE);
+  mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, iss, seq);
+  s.addRaw(holder.bytes, sizeof(holder.bytes));
+  s.add32(0);
 
-    if (!s.isValid())
-        return -1;
+  if (!s.isValid())
+    return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+  sha512_half(buf, s.offset, out_hash);
+  return 0;
 }
 
 int
