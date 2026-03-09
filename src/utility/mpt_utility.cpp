@@ -1,50 +1,30 @@
-#include <arpa/inet.h>
 #include <cstring>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <secp256k1_mpt.h>
 #include <utility/mpt_utility.h>
 #include <vector>
-
-
 #include <iostream>
 
 // Platform endianness support for serialization
-#if defined(__APPLE__)
-#include <libkern/OSByteOrder.h>
-#define htobe64(x) OSSwapHostToBigInt64(x)
-#define be64toh(x) OSSwapBigToHostInt64(x)
+#if defined(_WIN32) || defined(_WIN64)
+    #include <stdlib.h>
+    #define MPT_HTOBE16(x) _byteswap_ushort(static_cast<uint16_t>(x))
+    #define MPT_HTOBE32(x) _byteswap_ulong(static_cast<uint32_t>(x))
+    #define MPT_HTOBE64(x) _byteswap_uint64(static_cast<uint64_t>(x))
 
-#elif defined(__linux__) || defined(__CYGWIN__)
-#include <endian.h>
-#ifndef htobe64
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define htobe64(x) __builtin_bswap64(x)
-#define be64toh(x) __builtin_bswap64(x)
-#else
-#define htobe64(x) (x)
-#define be64toh(x) (x)
-#endif
-#endif
-
-#elif defined(_WIN32)
-#include <stdlib.h>
-#define htobe64(x) _byteswap_uint64(x)
-#define be64toh(x) _byteswap_uint64(x)
-
-#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
-#include <sys/endian.h>
+#elif defined(__APPLE__)
+    #include <libkern/OSByteOrder.h>
+    #define MPT_HTOBE16(x) OSSwapHostToBigInt16(x)
+    #define MPT_HTOBE32(x) OSSwapHostToBigInt32(x)
+    #define MPT_HTOBE64(x) OSSwapHostToBigInt64(x)
 
 #else
-#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-#define htobe64(x) __builtin_bswap64(x)
-#define be64toh(x) __builtin_bswap64(x)
-#else
-#define htobe64(x) (x)
-#define be64toh(x) (x)
+    #include <endian.h>
+    #define MPT_HTOBE16(x) htobe16(x)
+    #define MPT_HTOBE32(x) htobe32(x)
+    #define MPT_HTOBE64(x) htobe64(x)
 #endif
-#endif
-
 
 /**
  * @internal
@@ -165,7 +145,7 @@ struct Serializer
         return;
       }
 
-        uint16_t n = htons(val);
+        uint16_t n = MPT_HTOBE16(val);
         memcpy(buffer + offset, &n, sizeof(val));
         offset += sizeof(val);
     }
@@ -178,7 +158,7 @@ struct Serializer
         return;
       }
 
-        uint32_t n = htonl(val);
+        uint32_t n = MPT_HTOBE32(val);
         memcpy(buffer + offset, &n, sizeof(val));
         offset += sizeof(val);
     }
@@ -191,7 +171,7 @@ struct Serializer
         return;
       }
 
-        uint64_t n = htobe64(val);
+        uint64_t n = MPT_HTOBE64(val);
         memcpy(buffer + offset, &n, sizeof(val));
         offset += sizeof(val);
     }
