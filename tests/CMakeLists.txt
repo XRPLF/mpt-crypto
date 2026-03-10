@@ -81,7 +81,5 @@ add_mpt_test(
 add_mpt_test(
     test_mpt_utility
     test_mpt_utility.cpp
-    mpt-crypto
-    secp256k1
-    OpenSSL::Crypto
+    DEPENDENCIES mpt-crypto secp256k1 OpenSSL::Crypto
 )
