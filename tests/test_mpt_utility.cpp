@@ -3,7 +3,7 @@
 #include "test_utils.h"
 #include <secp256k1_mpt.h>
 
-#include <algorithm>
+#include <cstring>
 #include <iostream>
 #include <vector>
 
@@ -97,7 +97,7 @@ test_mpt_confidential_send()
     EXPECT(mpt_generate_keypair(dest_priv, dest_pub) == 0);
     EXPECT(mpt_generate_keypair(issuer_priv, issuer_pub) == 0);
 
-    // Encrypt for all recipients (using same shared blinding factor for link proof)
+    // Encrypt for all participants (using same shared blinding factor for link proof)
     uint8_t shared_bf[kMPT_BLINDING_FACTOR_SIZE];
     EXPECT(mpt_generate_blinding_factor(shared_bf) == 0);
 
@@ -109,17 +109,17 @@ test_mpt_confidential_send()
     EXPECT(mpt_encrypt_amount(amount_to_send, dest_pub, shared_bf, dest_ct) == 0);
     EXPECT(mpt_encrypt_amount(amount_to_send, issuer_pub, shared_bf, issuer_ct) == 0);
 
-    // Prepare recipients that is expected by the confidential send proof function
-    std::vector<mpt_confidential_participant> recipients;
-    auto add_recipient = [&](uint8_t* p, uint8_t* c) {
+    // Prepare participants that is expected by the confidential send proof function
+    std::vector<mpt_confidential_participant> participants;
+    auto add_participant = [&](uint8_t* p, uint8_t* c) {
         mpt_confidential_participant r;
-        std::copy(p, p + kMPT_PUBKEY_SIZE, r.pubkey);
-        std::copy(c, c + kMPT_ELGAMAL_TOTAL_SIZE, r.ciphertext);
-        recipients.push_back(r);
+        std::memcpy(r.pubkey, p, kMPT_PUBKEY_SIZE);
+        std::memcpy(r.ciphertext, c, kMPT_ELGAMAL_TOTAL_SIZE);
+        participants.push_back(r);
     };
-    add_recipient(sender_pub, sender_ct);
-    add_recipient(dest_pub, dest_ct);
-    add_recipient(issuer_pub, issuer_ct);
+    add_participant(sender_pub, sender_ct);
+    add_participant(dest_pub, dest_ct);
+    add_participant(issuer_pub, issuer_ct);
 
     // Generate pedersen commitments for amount and balance
     uint8_t amount_bf[kMPT_BLINDING_FACTOR_SIZE];
@@ -141,30 +141,29 @@ test_mpt_confidential_send()
     // Prepare pedersen proof params for both amount and balance linkage proofs
     mpt_pedersen_proof_params amt_params;
     amt_params.amount = amount_to_send;
-    std::copy(amount_bf, amount_bf + kMPT_BLINDING_FACTOR_SIZE, amt_params.blinding_factor);
-    std::copy(amount_comm, amount_comm + kMPT_PEDERSEN_COMMIT_SIZE, amt_params.pedersen_commitment);
-    std::copy(sender_ct, sender_ct + kMPT_ELGAMAL_TOTAL_SIZE, amt_params.ciphertext);
+    std::memcpy(amt_params.blinding_factor, amount_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(amt_params.pedersen_commitment, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::memcpy(amt_params.ciphertext, sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     mpt_pedersen_proof_params bal_params;
     bal_params.amount = prev_balance;
-    std::copy(balance_bf, balance_bf + kMPT_BLINDING_FACTOR_SIZE, bal_params.blinding_factor);
-    std::copy(
-        balance_comm, balance_comm + kMPT_PEDERSEN_COMMIT_SIZE, bal_params.pedersen_commitment);
+    std::memcpy(bal_params.blinding_factor, balance_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(bal_params.pedersen_commitment, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
 
     uint8_t prev_bal_bf[kMPT_BLINDING_FACTOR_SIZE];
     uint8_t prev_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
     EXPECT(mpt_generate_blinding_factor(prev_bal_bf) == 0);
     EXPECT(mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct) == 0);
-    std::copy(prev_bal_ct, prev_bal_ct + kMPT_ELGAMAL_TOTAL_SIZE, bal_params.ciphertext);
+    std::memcpy(bal_params.ciphertext, prev_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     // Generate the confidential send proof
-    size_t proof_len = get_confidential_send_proof_size(recipients.size());
+    size_t proof_len = get_confidential_send_proof_size(participants.size());
     std::vector<uint8_t> proof(proof_len);
     EXPECT(
         mpt_get_confidential_send_proof(
             sender_priv,
             amount_to_send,
-            recipients.data(),
+            participants.data(),
             3,
             shared_bf,
             send_ctx_hash,
@@ -178,8 +177,8 @@ test_mpt_confidential_send()
         mpt_verify_send_proof(
             proof.data(),
             proof_len,
-            recipients.data(),
-            static_cast<uint8_t>(recipients.size()),
+            participants.data(),
+            static_cast<uint8_t>(participants.size()),
             bal_params.ciphertext,
             amt_params.pedersen_commitment,
             bal_params.pedersen_commitment,
@@ -220,9 +219,9 @@ test_mpt_convert_back()
     // Prepare pedersen proof params
     mpt_pedersen_proof_params pc_params;
     pc_params.amount = current_balance;
-    std::copy(pcm_bf, pcm_bf + kMPT_BLINDING_FACTOR_SIZE, pc_params.blinding_factor);
-    std::copy(pcm_comm, pcm_comm + kMPT_PEDERSEN_COMMIT_SIZE, pc_params.pedersen_commitment);
-    std::copy(spending_bal_ct, spending_bal_ct + kMPT_ELGAMAL_TOTAL_SIZE, pc_params.ciphertext);
+    std::memcpy(pc_params.blinding_factor, pcm_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(pc_params.pedersen_commitment, pcm_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::memcpy(pc_params.ciphertext, spending_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     // Generate convert back proof
     uint8_t proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE];
