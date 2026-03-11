@@ -6,6 +6,7 @@ find_package(OpenSSL REQUIRED)
 find_package(secp256k1 REQUIRED)
 
 # --- Define The Library ---
+
 add_library(
     mpt-crypto
     src/bulletproof_aggregated.c
@@ -18,6 +19,7 @@ add_library(
     src/proof_same_plaintext.c
     src/proof_same_plaintext_multi.c
     src/proof_same_plaintext_multi_shared_r.c
+    src/utility/mpt_utility.cpp
 )
 
 # --- Set Include Directories ---
