@@ -28,49 +28,7 @@
 #define MPT_HTOBE64(x) htobe64(x)
 #endif
 
-/**
- * @internal
- * Private helper to generate aggregated bulletproofs
- */
-static int
-mpt_get_bulletproof_agg(
-    uint64_t const* values,
-    uint8_t const* const* blinding_ptrs,
-    size_t m,
-    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
-    uint8_t* out_proof,
-    size_t* out_len)
-{
-    if ((m != 1 && m != 2) || !values || !blinding_ptrs || !out_proof || !out_len)
-        return -1;
-
-    secp256k1_context const* ctx = mpt_secp256k1_context();
-
-    uint8_t blindings_flat[64];
-    for (size_t i = 0; i < m; ++i)
-    {
-        if (!blinding_ptrs[i])
-            return -1;
-        std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
-    }
-
-    secp256k1_pubkey pk_base;
-    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
-        return -1;
-
-    if (secp256k1_bulletproof_prove_agg(
-            ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
-    {
-        return -1;
-    }
-
-    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
-    if (*out_len != expected)
-        return -1;
-
-    return 0;
-}
-
+extern "C" {
 /**
  * Context for secp256k1 operations.
  * Initialized once and reused across all operations to optimize performance
@@ -114,6 +72,50 @@ mpt_secp256k1_context()
 
     static ContextHolder holder;
     return holder.ctx;
+}
+}  // extern "C"
+
+/**
+ * @internal
+ * Private helper to generate aggregated bulletproofs
+ */
+static int
+mpt_get_bulletproof_agg(
+    uint64_t const* values,
+    uint8_t const* const* blinding_ptrs,
+    size_t m,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t* out_proof,
+    size_t* out_len)
+{
+    if ((m != 1 && m != 2) || !values || !blinding_ptrs || !out_proof || !out_len)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+
+    uint8_t blindings_flat[64];
+    for (size_t i = 0; i < m; ++i)
+    {
+        if (!blinding_ptrs[i])
+            return -1;
+        std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
+    }
+
+    secp256k1_pubkey pk_base;
+    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+        return -1;
+
+    if (secp256k1_bulletproof_prove_agg(
+            ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
+    {
+        return -1;
+    }
+
+    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+    if (*out_len != expected)
+        return -1;
+
+    return 0;
 }
 
 /**
@@ -227,39 +229,45 @@ get_confidential_send_proof_size(size_t n_recipients)
 bool
 mpt_make_ec_pair(
     uint8_t const buffer[kMPT_ELGAMAL_TOTAL_SIZE],
-    secp256k1_pubkey& out1,
-    secp256k1_pubkey& out2)
+    secp256k1_pubkey* out1,
+    secp256k1_pubkey* out2)
 {
+    if (!out1 || !out2)
+        return false;
+
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return false;
 
-    int ret1 = secp256k1_ec_pubkey_parse(ctx, &out1, buffer, kMPT_ELGAMAL_CIPHER_SIZE);
+    int ret1 = secp256k1_ec_pubkey_parse(ctx, out1, buffer, kMPT_ELGAMAL_CIPHER_SIZE);
 
     int ret2 = secp256k1_ec_pubkey_parse(
-        ctx, &out2, buffer + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE);
+        ctx, out2, buffer + kMPT_ELGAMAL_CIPHER_SIZE, kMPT_ELGAMAL_CIPHER_SIZE);
 
     return (ret1 == 1 && ret2 == 1);
 }
 
 bool
 mpt_serialize_ec_pair(
-    secp256k1_pubkey const& in1,
-    secp256k1_pubkey const& in2,
+    secp256k1_pubkey const* in1,
+    secp256k1_pubkey const* in2,
     uint8_t out[kMPT_ELGAMAL_TOTAL_SIZE])
 {
+    if (!in1 || !in2 || !out)
+        return false;
+
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return false;
 
     size_t len = kMPT_ELGAMAL_CIPHER_SIZE;
 
-    if (secp256k1_ec_pubkey_serialize(ctx, out, &len, &in1, SECP256K1_EC_COMPRESSED) != 1)
+    if (secp256k1_ec_pubkey_serialize(ctx, out, &len, in1, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     len = kMPT_ELGAMAL_CIPHER_SIZE;
     if (secp256k1_ec_pubkey_serialize(
-            ctx, out + kMPT_ELGAMAL_CIPHER_SIZE, &len, &in2, SECP256K1_EC_COMPRESSED) != 1)
+            ctx, out + kMPT_ELGAMAL_CIPHER_SIZE, &len, in2, SECP256K1_EC_COMPRESSED) != 1)
         return false;
 
     return true;
@@ -412,7 +420,7 @@ mpt_encrypt_amount(
     if (!secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pk, amount, blinding_factor))
         return -1;
 
-    if (!mpt_serialize_ec_pair(c1, c2, out_ciphertext))
+    if (!mpt_serialize_ec_pair(&c1, &c2, out_ciphertext))
         return -1;
 
     return 0;
@@ -432,8 +440,7 @@ mpt_decrypt_amount(
         return -1;
 
     secp256k1_pubkey c1, c2;
-
-    if (!mpt_make_ec_pair(in_ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(in_ciphertext, &c1, &c2))
         return -1;
 
     if (secp256k1_elgamal_decrypt(ctx, out_amount, &c1, &c2, privkey) != 1)
@@ -478,13 +485,6 @@ mpt_get_pedersen_commitment(
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return -1;
-
-    // todo: zero amount
-    if (amount == 0)
-    {
-        std::memset(out_commitment, 0, kMPT_PEDERSEN_COMMIT_SIZE);
-        return 0;
-    }
 
     secp256k1_pubkey commitment;
     if (secp256k1_mpt_pedersen_commit(ctx, &commitment, amount, blinding_factor) != 1)
@@ -653,7 +653,8 @@ mpt_get_confidential_send_proof(
     }
 
     size_t size_equality = secp256k1_mpt_proof_equality_shared_r_size(n_recipients);
-    size_t totalRequired = size_equality + kMPT_PEDERSEN_LINK_SIZE * 2;
+    size_t totalRequired =
+        size_equality + kMPT_PEDERSEN_LINK_SIZE * 2 + kMPT_DOUBLE_BULLETPROOF_SIZE;
 
     if (*out_len < totalRequired)
         return -1;
@@ -692,6 +693,9 @@ mpt_get_confidential_send_proof(
     uint8_t* bp_ptr = bal_ptr + kMPT_PEDERSEN_LINK_SIZE;
 
     // Values to prove: [amount being sent, remaining balance] for range proof
+    if (amount > balance_params->amount)
+        return -1;  // prevent underflow
+
     uint64_t const remaining_balance = balance_params->amount - amount;
     uint64_t bp_values[2] = {amount, remaining_balance};
 
@@ -726,6 +730,9 @@ mpt_get_convert_back_proof(
     if (ret != 0)
         return ret;
 
+    if (amount > params->amount)
+        return -1;
+
     uint64_t const remaining_balance = params->amount - amount;
     uint8_t* bulletproof_ptr = out_proof + kMPT_PEDERSEN_LINK_SIZE;
     size_t proof_len = kMPT_SINGLE_BULLETPROOF_SIZE;
@@ -757,7 +764,7 @@ mpt_get_clawback_proof(
         return -1;
 
     secp256k1_pubkey c1, c2;
-    if (!mpt_make_ec_pair(ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(ciphertext, &c1, &c2))
         return -1;
 
     if (secp256k1_equality_plaintext_prove(
@@ -781,7 +788,7 @@ mpt_internal_verify_single(
     if (secp256k1_ec_pubkey_parse(ctx, &pk, recipient->pubkey, kMPT_PUBKEY_SIZE) != 1)
         return 1;
 
-    if (!mpt_make_ec_pair(recipient->ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(recipient->ciphertext, &c1, &c2))
         return 1;
 
     if (secp256k1_elgamal_verify_encryption(ctx, &c1, &c2, &pk, amount, bf) != 1)
@@ -862,7 +869,7 @@ mpt_verify_balance_linkage(
         return -1;
 
     secp256k1_pubkey pk, c1, c2, pcm;
-    if (!mpt_make_ec_pair(ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(ciphertext, &c1, &c2))
         return -1;
 
     if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
@@ -887,6 +894,13 @@ mpt_compute_convert_back_remainder(
 {
     if (!commitment_in || !remainder)
         return -1;
+
+    // Subtracting zero leaves the commitment unchanged
+    if (amount == 0)
+    {
+        std::memcpy(remainder, commitment_in, kMPT_PEDERSEN_COMMIT_SIZE);
+        return 0;
+    }
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
@@ -1087,7 +1101,7 @@ mpt_verify_amount_linkage(
         return -1;
 
     secp256k1_pubkey pk, c1, c2, pcm;
-    if (!mpt_make_ec_pair(ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(ciphertext, &c1, &c2))
         return -1;
 
     if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
@@ -1172,7 +1186,7 @@ mpt_verify_send_proof(
     if (!ctx)
         return -1;
 
-    size_t const eq_len = secp256k1_mpt_prove_same_plaintext_multi_size(n_participants);
+    size_t const eq_len = secp256k1_mpt_proof_equality_shared_r_size(n_participants);
     size_t current_offset = 0;
 
     // Verify the length of the proof
@@ -1245,7 +1259,7 @@ mpt_verify_clawback_proof(
         return -1;
 
     secp256k1_pubkey c1, c2;
-    if (!mpt_make_ec_pair(ciphertext, c1, c2))
+    if (!mpt_make_ec_pair(ciphertext, &c1, &c2))
         return -1;
 
     secp256k1_pubkey pk;

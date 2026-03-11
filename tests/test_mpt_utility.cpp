@@ -72,7 +72,7 @@ test_mpt_confidential_convert()
     EXPECT(mpt_get_convert_context_hash(acc, issuance, seq, tx_hash) == 0);
     EXPECT(mpt_get_convert_proof(pub, priv, tx_hash, proof) == 0);
 
-    // Vefify the ZKProof for convert
+    // Verify the ZKProof for convert
     EXPECT(mpt_verify_convert_proof(proof, pub, tx_hash) == 0);
 }
 
@@ -160,8 +160,6 @@ test_mpt_confidential_send()
     // Generate the confidential send proof
     size_t proof_len = get_confidential_send_proof_size(recipients.size());
     std::vector<uint8_t> proof(proof_len);
-
-    // Verify the confidential send proof
     EXPECT(
         mpt_get_confidential_send_proof(
             sender_priv,
@@ -174,6 +172,18 @@ test_mpt_confidential_send()
             &bal_params,
             proof.data(),
             &proof_len) == 0);
+
+    // Verify the confidential send proof
+    EXPECT(
+        mpt_verify_send_proof(
+            proof.data(),
+            proof_len,
+            recipients.data(),
+            static_cast<uint8_t>(recipients.size()),
+            bal_params.ciphertext,
+            amt_params.pedersen_commitment,
+            bal_params.pedersen_commitment,
+            send_ctx_hash) == 0);
 }
 
 void
@@ -220,7 +230,7 @@ test_mpt_convert_back()
         mpt_get_convert_back_proof(
             priv, pub, context_hash, amount_to_convert_back, &pc_params, proof) == 0);
 
-    // Vefify the ZKProof for convert back
+    // Verify the ZKProof for convert back
     EXPECT(
         mpt_verify_convert_back_proof(
             proof, pub, spending_bal_ct, pcm_comm, amount_to_convert_back, context_hash) == 0);

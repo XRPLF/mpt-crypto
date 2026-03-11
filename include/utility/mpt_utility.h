@@ -2,6 +2,7 @@
 #define MPT_UTILITY_H
 
 #include <secp256k1.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -53,17 +54,21 @@ typedef struct
 
 /**
  * @brief Represents a 20-byte account ID.
+ *
+ * - bytes: Raw 20-byte array containing the AccountID.
  */
-typedef struct
+typedef struct account_id
 {
     uint8_t bytes[kMPT_ACCOUNT_ID_SIZE];
 } account_id;
 
 /**
- * @brief Represents a recipient in a Confidential Send transaction.
- * Contains a pubkey and an encrypted amount.
+ * @brief Represents a participant in a Confidential Send transaction.
+ *
+ * - pubkey: The 33-byte compressed secp256k1 public key.
+ * - ciphertext: The 66-byte ElGamal encrypted amount.
  */
-typedef struct
+typedef struct mpt_confidential_participant
 {
     uint8_t pubkey[kMPT_PUBKEY_SIZE];
     uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
@@ -71,30 +76,23 @@ typedef struct
 
 /**
  * @brief Parameters required to generate a Pedersen Linkage Proof.
+ *
+ * - pedersen_commitment: The 64-byte Pedersen commitment.
+ * - amount: The actual numeric value being committed.
+ * - ciphertext: The 66-byte buffer containing the encrypted amount.
+ * - blinding_factor: The 32-byte secret value used to blind the commitment.
  */
-struct mpt_pedersen_proof_params
+typedef struct mpt_pedersen_proof_params
 {
-    /**
-     * @brief The 64-byte Pedersen commitment.
-     */
     uint8_t pedersen_commitment[kMPT_PEDERSEN_COMMIT_SIZE];
-
-    /**
-     * @brief The actual numeric value being committed.
-     */
     uint64_t amount;
-
-    /**
-     * @brief The 66-byte buffer containing the encrypted amount.
-     */
     uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
-
-    /**
-     * @brief The 32-byte secret random value used to blind the Pedersen commitment.
-     */
     uint8_t blinding_factor[kMPT_BLINDING_FACTOR_SIZE];
-};
+} mpt_pedersen_proof_params;
 
+/**
+ * @brief Returns a globally shared secp256k1 context.
+ */
 secp256k1_context*
 mpt_secp256k1_context();
 
@@ -162,8 +160,8 @@ get_confidential_send_proof_size(size_t n_recipients);
 bool
 mpt_make_ec_pair(
     uint8_t const buffer[kMPT_ELGAMAL_TOTAL_SIZE],
-    secp256k1_pubkey& out1,
-    secp256k1_pubkey& out2);
+    secp256k1_pubkey* out1,
+    secp256k1_pubkey* out2);
 
 /**
  * @brief Serializes two internal secp256k1 public keys into a 66-byte buffer.
@@ -174,8 +172,8 @@ mpt_make_ec_pair(
  */
 bool
 mpt_serialize_ec_pair(
-    secp256k1_pubkey const& in1,
-    secp256k1_pubkey const& in2,
+    secp256k1_pubkey const* in1,
+    secp256k1_pubkey const* in2,
     uint8_t out[kMPT_ELGAMAL_TOTAL_SIZE]);
 
 /**
