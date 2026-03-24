@@ -122,66 +122,156 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 }
 
 /* --- Decryption --- */
-
-int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
-                              const secp256k1_pubkey *c1,
-                              const secp256k1_pubkey *c2,
-                              const unsigned char *privkey)
-{
-  secp256k1_pubkey S, M_target, current_M, G_point, next_M;
-  const secp256k1_pubkey *pts[2];
-  uint64_t i;
-  unsigned char one[32] = {0};
-  one[31] = 1;
-
-  /* 1. Recover Shared Secret: S = privkey * C1 */
-  S = *c1;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey))
-    return 0;
-
-  /* 2. Check for Amount = 0 (C2 == S) */
-  /* This is much faster than doing point subtraction first */
-  if (pubkey_equal(ctx, c2, &S))
-  {
-    *amount = 0;
-    return 1;
-  }
-
-  /* 3. Prepare Target: M_target = C2 - S */
-  /* M_target = C2 + (-S) */
-  if (!secp256k1_ec_pubkey_negate(ctx, &S))
-    return 0;
-  pts[0] = c2;
-  pts[1] = &S;
-  if (!secp256k1_ec_pubkey_combine(ctx, &M_target, pts, 2))
-    return 0;
-
-  /* 4. Brute Force Search (1 to 1,000,000) */
-  /* Optimization: Use point comparison, no serialization inside loop */
-
-  if (!secp256k1_ec_pubkey_create(ctx, &G_point, one))
-    return 0;          // G
-  current_M = G_point; // Start at 1*G
-
-  for (i = 1; i <= 1000000; ++i)
-  {
-    // Fast comparison
-    if (pubkey_equal(ctx, &current_M, &M_target))
-    {
-      *amount = i;
-      return 1;
+static int secp256k1_solve_dlp_small_range_ct(
+        const secp256k1_context* ctx,
+        uint64_t* out_amount,
+        uint64_t* out_is_found,
+        const unsigned char* target_ser,
+        uint64_t max_range
+) {
+    if (max_range == 0) {
+        *out_amount = 0;
+        *out_is_found = 0;
+        return 1;
     }
 
-    // Increment: current_M = current_M + G
-    pts[0] = &current_M;
-    pts[1] = &G_point;
-    if (!secp256k1_ec_pubkey_combine(ctx, &next_M, pts, 2))
-      return 0;
-    current_M = next_M;
-  }
+    secp256k1_pubkey current_M, G_point, next_M;
+    const secp256k1_pubkey* pts[2];
+    unsigned char one[32] = {0}; one[31] = 1;
+    unsigned char current_M_ser[33];
+    size_t ser_len;
 
-  return 0; // Amount not found in range
+    uint64_t found_amount = 0;
+    uint64_t is_found = 0;
+
+    if (!secp256k1_ec_pubkey_create(ctx, &G_point, one)) {
+        OPENSSL_cleanse(one, 32);
+        return 0;
+    }
+    current_M = G_point;
+
+    for (uint64_t i = 1; i <= max_range; ++i) {
+        ser_len = 33;
+        if (!secp256k1_ec_pubkey_serialize(ctx, current_M_ser, &ser_len, &current_M, SECP256K1_EC_COMPRESSED)) {
+            memset(current_M_ser, 0, 33);
+        }
+
+        /* Accumulate differences using an explicit 8-bit accumulator */
+        unsigned char match_diff = 0;
+        for (int j = 0; j < 33; j++) {
+            match_diff |= current_M_ser[j] ^ target_ser[j];
+        }
+
+        /* Expand to 64-bit before the idiom to make width explicit.
+         * Nonzero detection: if diff64 != 0, saturate bit 63. */
+        uint64_t diff64 = (uint64_t)match_diff;
+        uint64_t match = 1 ^ (((diff64 | (~diff64 + 1)) >> 63) & 1);
+
+        /* Constant-time assignment mask.
+         * NOTE: When match == 0, (match - 1) wraps via unsigned underflow to
+         * 0xFFFFFFFFFFFFFFFF. Inverting that gives 0x0000000000000000.
+         * When match == 1, (match - 1) is 0, inverted to 0xFFFFFFFFFFFFFFFF.
+         * This creates a safe, branchless mask. DO NOT MODIFY. */
+        uint64_t mask = ~(match - 1);
+        found_amount ^= (found_amount ^ i) & mask;
+        is_found |= match;
+
+        /* Increment for next loop */
+        pts[0] = &current_M; pts[1] = &G_point;
+        int combine_ok = secp256k1_ec_pubkey_combine(ctx, &next_M, pts, 2);
+
+        /* On failure, freeze current_M in place. Loop must always run to max_range. */
+        if (combine_ok) {
+            current_M = next_M;
+        }
+    }
+
+    *out_amount = found_amount;
+    *out_is_found = is_found;
+
+    /* Scrub sensitive local intermediate data */
+    OPENSSL_cleanse(current_M_ser, 33);
+    OPENSSL_cleanse(one, 32);
+
+    return 1;
 }
+
+int secp256k1_elgamal_decrypt(
+        const secp256k1_context* ctx,
+        uint64_t* amount,
+        const secp256k1_pubkey* c1,
+        const secp256k1_pubkey* c2,
+        const unsigned char* privkey
+) {
+    if (!ctx || !amount || !c1 || !c2 || !privkey) return 0;
+
+    secp256k1_pubkey S, M_target_sum, neg_S;
+    const secp256k1_pubkey* pts[2];
+    unsigned char c2_ser[33], S_ser[33], M_target_ser[33];
+    size_t ser_len;
+
+    /* 1. Recover Shared Secret: S = privkey * c1 */
+    S = *c1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey)) return 0;
+
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, c2_ser, &ser_len, c2, SECP256K1_EC_COMPRESSED)) return 0;
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S, SECP256K1_EC_COMPRESSED)) return 0;
+
+    /* 2. Inline Constant-Time Check for Amount = 0 (c2 == S) */
+    unsigned char zero_diff_u8 = 0;
+    for (int j = 0; j < 33; j++) {
+        zero_diff_u8 |= c2_ser[j] ^ S_ser[j];
+    }
+    uint64_t zero_diff64 = (uint64_t)zero_diff_u8;
+    uint64_t match_zero = 1 ^ (((zero_diff64 | (~zero_diff64 + 1)) >> 63) & 1);
+
+    /* 3. Point Subtraction: M_target_sum = c2 - S */
+    neg_S = S;
+    if (!secp256k1_ec_pubkey_negate(ctx, &neg_S)) {
+        OPENSSL_cleanse(S_ser, 33);
+        OPENSSL_cleanse(c2_ser, 33);
+        return 0;
+    }
+
+    pts[0] = c2;
+    pts[1] = &neg_S;
+
+    if (secp256k1_ec_pubkey_combine(ctx, &M_target_sum, pts, 2)) {
+        ser_len = 33;
+        if (!secp256k1_ec_pubkey_serialize(ctx, M_target_ser, &ser_len, &M_target_sum, SECP256K1_EC_COMPRESSED)) {
+            memset(M_target_ser, 0, 33);
+        }
+    } else {
+        memset(M_target_ser, 0, 33); /* Fails safely if point at infinity */
+    }
+
+    /* 4. Call the Modular DLP Solver */
+    uint64_t loop_amount = 0;
+    uint64_t match_loop = 0;
+
+    if (!secp256k1_solve_dlp_small_range_ct(ctx, &loop_amount, &match_loop, M_target_ser, 1000000)) {
+        OPENSSL_cleanse(S_ser, 33);
+        OPENSSL_cleanse(c2_ser, 33);
+        OPENSSL_cleanse(M_target_ser, 33);
+        return 0;
+    }
+
+    /* 5. Constant-Time Resolution */
+    uint64_t is_found = match_zero | match_loop;
+    uint64_t zero_mask = ~(match_zero - 1);
+    *amount = (0 & zero_mask) | (loop_amount & ~zero_mask);
+
+    /* 6. Scrub sensitive intermediate data */
+    OPENSSL_cleanse(S_ser, 33);
+    OPENSSL_cleanse(c2_ser, 33);
+    OPENSSL_cleanse(M_target_ser, 33);
+
+    /* Note: return value distinguishes success/failure but not the amount itself. */
+    return (int)is_found;
+}
+
 
 /* --- Homomorphic Operations --- */
 

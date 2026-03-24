@@ -31,6 +31,16 @@ secp256k1_elgamal_encrypt(
 
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
+ * Due to the use of a linear discrete logarithm search, this function can
+ * only successfully recover plaintext amounts between 0 and 1,000,000 (inclusive).
+ * If the ciphertext encrypts a value greater than 1,000,000, the search will
+ * exhaust its range and the function will safely return 0 (failure).
+ * Architectural Note:
+ * On-chain validators and verifiers never need to perform decryption; this
+ * function is provided primarily for testing and basic client-side operations.
+ * Off-chain applications (like wallets) requiring decryption of larger balances
+ * should implement more efficient discrete logarithm algorithms, such as
+ * Baby-Step Giant-Step (BSGS) or Pollard's kangaroo method.
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt(
