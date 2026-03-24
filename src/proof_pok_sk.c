@@ -39,8 +39,8 @@
  * of Secret Key
  */
 #include "secp256k1_mpt.h"
-#include <openssl/rand.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,36 +70,43 @@ static void build_pok_challenge(const secp256k1_context *ctx,
                                 const secp256k1_pubkey *T,
                                 const unsigned char *context_id)
 {
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    unsigned char buf[33];
-    unsigned char h[32];
-    size_t len;
-    const char *domain = "MPT_POK_SK_REGISTER";
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  unsigned char buf[33];
+  unsigned char h[32];
+  size_t len;
+  const char *domain = "MPT_POK_SK_REGISTER";
 
-    if (!mdctx) return;
+  if (!mdctx)
+    return;
 
-    EVP_MD_CTX_reset(mdctx);
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1) goto cleanup;
+  EVP_MD_CTX_reset(mdctx);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
 
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED);
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+  len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED);
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
-    len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, T, SECP256K1_EC_COMPRESSED);
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+  len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, buf, &len, T, SECP256K1_EC_COMPRESSED);
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
-    if (context_id)
-    {
-        if (EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto cleanup;
-    }
+  if (context_id)
+  {
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
+  }
 
-    if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1) goto cleanup;
-    secp256k1_mpt_scalar_reduce32(e_out, h);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
+  secp256k1_mpt_scalar_reduce32(e_out, h);
 
-    cleanup:
-    EVP_MD_CTX_free(mdctx);
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Public API --- */

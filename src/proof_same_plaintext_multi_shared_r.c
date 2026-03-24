@@ -50,8 +50,8 @@
  * Plaintexts with Shared Randomness
  */
 #include "secp256k1_mpt.h"
-#include <openssl/rand.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -85,64 +85,77 @@ size_t secp256k1_mpt_proof_equality_shared_r_size(size_t n_recipients)
  * Hash( Domain || C1 || {C2_i, Pk_i} || Tr || {Tm_i} || ContextID )
  */
 static void compute_challenge_equality_shared_r(
-        const secp256k1_context *ctx, unsigned char *e_out, size_t n,
-        const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
-        const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *Tr,
-        const secp256k1_pubkey *Tm_vec, const unsigned char *context_id)
+    const secp256k1_context *ctx, unsigned char *e_out, size_t n,
+    const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
+    const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *Tr,
+    const secp256k1_pubkey *Tm_vec, const unsigned char *context_id)
 {
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    unsigned char buf[33];
-    unsigned char h[32];
-    size_t len;
-    size_t i;
-    const char *domain = "MPT_POK_SAME_PLAINTEXT_SHARED_R";
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  unsigned char buf[33];
+  unsigned char h[32];
+  size_t len;
+  size_t i;
+  const char *domain = "MPT_POK_SAME_PLAINTEXT_SHARED_R";
 
-    if (!mdctx) return;
+  if (!mdctx)
+    return;
 
-    EVP_MD_CTX_reset(mdctx);
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1) goto cleanup;
+  EVP_MD_CTX_reset(mdctx);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
 
-    /* 1. Shared C1 */
+  /* 1. Shared C1 */
+  len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1, SECP256K1_EC_COMPRESSED);
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
+
+  /* 2. Pairs {C2_i, Pk_i} */
+  for (i = 0; i < n; i++)
+  {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1, SECP256K1_EC_COMPRESSED);
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-
-    /* 2. Pairs {C2_i, Pk_i} */
-    for (i = 0; i < n; i++)
-    {
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i], SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i], SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-    }
-
-    /* 3. Commitment Tr */
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr, SECP256K1_EC_COMPRESSED);
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
+  }
 
-    /* 4. Commitments {Tm_i} */
-    for (i = 0; i < n; i++)
-    {
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i], SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-    }
+  /* 3. Commitment Tr */
+  len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr, SECP256K1_EC_COMPRESSED);
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
-    /* 5. Transaction Context */
-    if (context_id)
-    {
-        if (EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto cleanup;
-    }
+  /* 4. Commitments {Tm_i} */
+  for (i = 0; i < n; i++)
+  {
+    len = 33;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
+  }
 
-    if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1) goto cleanup;
-    secp256k1_mpt_scalar_reduce32(e_out, h);
+  /* 5. Transaction Context */
+  if (context_id)
+  {
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
+  }
 
-    cleanup:
-    EVP_MD_CTX_free(mdctx);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
+  secp256k1_mpt_scalar_reduce32(e_out, h);
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Public API --- */

@@ -49,8 +49,8 @@
  * Multiple Ciphertexts
  */
 #include "secp256k1_mpt.h"
-#include <openssl/rand.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -84,67 +84,78 @@ compute_challenge_multi(const secp256k1_context *ctx, unsigned char *e_out,
                         const secp256k1_pubkey *Tm, const secp256k1_pubkey *TrG,
                         const secp256k1_pubkey *TrP, const unsigned char *tx_id)
 {
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    unsigned char buf[33];
-    unsigned char h[32];
-    size_t len;
-    size_t i;
-    const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  unsigned char buf[33];
+  unsigned char h[32];
+  size_t len;
+  size_t i;
+  const char *domain = "MPT_POK_SAME_PLAINTEXT_PROOF";
 
-    if (!mdctx) return;
+  if (!mdctx)
+    return;
 
-    EVP_MD_CTX_reset(mdctx);
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1) goto cleanup;
+  EVP_MD_CTX_reset(mdctx);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
 
-    /* 1. Public Inputs */
-    for (i = 0; i < n; ++i)
-    {
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &R[i],
-                                      SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &S[i],
-                                      SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk[i],
-                                      SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-    }
-
-    /* 2. Commitments */
+  /* 1. Public Inputs */
+  for (i = 0; i < n; ++i)
+  {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tm, SECP256K1_EC_COMPRESSED);
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &R[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
 
-    for (i = 0; i < n; ++i)
-    {
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrG[i],
-                                      SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
+    len = 33;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &S[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
 
-        len = 33;
-        secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrP[i],
-                                      SECP256K1_EC_COMPRESSED);
-        if (EVP_DigestUpdate(mdctx, buf, 33) != 1) goto cleanup;
-    }
+    len = 33;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
+  }
 
-    /* 3. Context */
-    if (tx_id)
-    {
-        if (EVP_DigestUpdate(mdctx, tx_id, 32) != 1) goto cleanup;
-    }
+  /* 2. Commitments */
+  len = 33;
+  secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tm, SECP256K1_EC_COMPRESSED);
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
-    if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1) goto cleanup;
-    secp256k1_mpt_scalar_reduce32(e_out, h);
+  for (i = 0; i < n; ++i)
+  {
+    len = 33;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrG[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
 
-    cleanup:
-    EVP_MD_CTX_free(mdctx);
+    len = 33;
+    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &TrP[i],
+                                  SECP256K1_EC_COMPRESSED);
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
+  }
+
+  /* 3. Context */
+  if (tx_id)
+  {
+    if (EVP_DigestUpdate(mdctx, tx_id, 32) != 1)
+      goto cleanup;
+  }
+
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
+  secp256k1_mpt_scalar_reduce32(e_out, h);
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Public API --- */

@@ -44,9 +44,9 @@
  */
 #include "secp256k1_mpt.h"
 #include <assert.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
-#include <openssl/evp.h>
 #include <secp256k1.h>
 #include <stdlib.h>
 #include <string.h>
@@ -722,34 +722,38 @@ int derive_ipa_binding_challenge(const secp256k1_context *ctx,
                                  const unsigned char *commit_inp_32,
                                  const unsigned char *dot_32)
 {
-    unsigned char hash_input[64];
-    unsigned char hash_output[32];
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    int ok = 0;
+  unsigned char hash_input[64];
+  unsigned char hash_output[32];
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int ok = 0;
 
-    if (!mdctx) return 0;
+  if (!mdctx)
+    return 0;
 
-    /* 1. Build hash input = commit_inp || dot */
-    memcpy(hash_input, commit_inp_32, 32);
-    memcpy(hash_input + 32, dot_32, 32);
+  /* 1. Build hash input = commit_inp || dot */
+  memcpy(hash_input, commit_inp_32, 32);
+  memcpy(hash_input + 32, dot_32, 32);
 
-    /* 2. Hash */
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, hash_input, 64) != 1) goto cleanup;
-    if (EVP_DigestFinal_ex(mdctx, hash_output, NULL) != 1) goto cleanup;
+  /* 2. Hash */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, hash_input, 64) != 1)
+    goto cleanup;
+  if (EVP_DigestFinal_ex(mdctx, hash_output, NULL) != 1)
+    goto cleanup;
 
-    /* 3. Reduce hash to a valid scalar */
-    secp256k1_mpt_scalar_reduce32(ux_out, hash_output);
+  /* 3. Reduce hash to a valid scalar */
+  secp256k1_mpt_scalar_reduce32(ux_out, hash_output);
 
-    /* 4. Verify (Sanity check) */
-    if (secp256k1_ec_seckey_verify(ctx, ux_out) != 1)
-        goto cleanup;
+  /* 4. Verify (Sanity check) */
+  if (secp256k1_ec_seckey_verify(ctx, ux_out) != 1)
+    goto cleanup;
 
-    ok = 1;
+  ok = 1;
 
-    cleanup:
-    EVP_MD_CTX_free(mdctx);
-    return ok;
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  return ok;
 }
 
 /**
@@ -763,39 +767,49 @@ int derive_ipa_round_challenge(const secp256k1_context *ctx,
                                const secp256k1_pubkey *L,
                                const secp256k1_pubkey *R)
 {
-    unsigned char L_ser[33], R_ser[33];
-    size_t len;
-    unsigned char hash[32];
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    int ok = 0;
+  unsigned char L_ser[33], R_ser[33];
+  size_t len;
+  unsigned char hash[32];
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int ok = 0;
 
-    if (!mdctx) return 0;
+  if (!mdctx)
+    return 0;
 
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, L_ser, &len, L, SECP256K1_EC_COMPRESSED) || len != 33)
-        goto cleanup;
+  len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, L_ser, &len, L,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
 
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, R_ser, &len, R, SECP256K1_EC_COMPRESSED) || len != 33)
-        goto cleanup;
+  len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, R_ser, &len, R,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
 
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, last_challenge, 32) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, L_ser, 33) != 1) goto cleanup;
-    if (EVP_DigestUpdate(mdctx, R_ser, 33) != 1) goto cleanup;
-    if (EVP_DigestFinal_ex(mdctx, hash, NULL) != 1) goto cleanup;
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, last_challenge, 32) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, L_ser, 33) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, R_ser, 33) != 1)
+    goto cleanup;
+  if (EVP_DigestFinal_ex(mdctx, hash, NULL) != 1)
+    goto cleanup;
 
-    secp256k1_mpt_scalar_reduce32(hash, hash);
-    memcpy(u_out, hash, 32);
+  secp256k1_mpt_scalar_reduce32(hash, hash);
+  memcpy(u_out, hash, 32);
 
-    if (secp256k1_ec_seckey_verify(ctx, u_out) != 1)
-        goto cleanup;
+  if (secp256k1_ec_seckey_verify(ctx, u_out) != 1)
+    goto cleanup;
 
-    ok = 1;
+  ok = 1;
 
-    cleanup:
-    EVP_MD_CTX_free(mdctx);
-    return ok;
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  return ok;
 }
 
 /**
@@ -1354,73 +1368,165 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     goto cleanup;
 
   /* ---- 6. Fiat–Shamir y,z ---- */
-    // src/bulletproof_aggregated.c
+  // src/bulletproof_aggregated.c
+  {
+    unsigned char A_ser[33], S_ser[33];
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 1;
+
+    if (!mdctx)
+      goto cleanup;
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
     {
-        unsigned char A_ser[33], S_ser[33];
-        size_t len;
-        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-        int fs_ok = 1;
-
-        if (!mdctx) goto cleanup;
-
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A, SECP256K1_EC_COMPRESSED) || len != 33)
-        { fs_ok = 0; goto fs_cleanup; }
-
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S, SECP256K1_EC_COMPRESSED) || len != 33)
-        { fs_ok = 0; goto fs_cleanup; }
-
-        // y = H(domain || context || V* || A || S)
-        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) { fs_ok = 0; goto fs_cleanup; }
-
-        for (size_t i = 0; i < m; i++) {
-            secp256k1_pubkey V_temp;
-            unsigned char V_ser[33];
-            size_t v_len = 33;
-            if (!secp256k1_bulletproof_create_commitment(ctx, &V_temp, values[i], blindings_flat + 32*i, pk_base))
-            { fs_ok = 0; goto fs_cleanup; }
-            if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp, SECP256K1_EC_COMPRESSED) || v_len != 33)
-            { fs_ok = 0; goto fs_cleanup; }
-            if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        }
-
-        if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1) { fs_ok = 0; goto fs_cleanup; }
-        secp256k1_mpt_scalar_reduce32(y, y);
-
-        // z = H(domain || context || V* || A || S || y)
-        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) { fs_ok = 0; goto fs_cleanup; }
-
-        for (size_t i = 0; i < m; i++) {
-            secp256k1_pubkey V_temp;
-            unsigned char V_ser[33];
-            size_t v_len = 33;
-            if (!secp256k1_bulletproof_create_commitment(ctx, &V_temp, values[i], blindings_flat + 32*i, pk_base))
-            { fs_ok = 0; goto fs_cleanup; }
-            if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp, SECP256K1_EC_COMPRESSED) || v_len != 33)
-            { fs_ok = 0; goto fs_cleanup; }
-            if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        }
-
-        if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestUpdate(mdctx, y, 32) != 1) { fs_ok = 0; goto fs_cleanup; }
-        if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1) { fs_ok = 0; goto fs_cleanup; }
-        secp256k1_mpt_scalar_reduce32(z, z);
-
-        memcpy(z_neg, z, 32);
-        secp256k1_mpt_scalar_negate(z_neg, z_neg);
-
-        fs_cleanup:
-        EVP_MD_CTX_free(mdctx);
-        if (!fs_ok) goto cleanup;
+      fs_ok = 0;
+      goto fs_cleanup;
     }
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+
+    // y = H(domain || context || V* || A || S)
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+
+    for (size_t i = 0; i < m; i++)
+    {
+      secp256k1_pubkey V_temp;
+      unsigned char V_ser[33];
+      size_t v_len = 33;
+      if (!secp256k1_bulletproof_create_commitment(
+              ctx, &V_temp, values[i], blindings_flat + 32 * i, pk_base))
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
+                                         SECP256K1_EC_COMPRESSED) ||
+          v_len != 33)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+    }
+
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    secp256k1_mpt_scalar_reduce32(y, y);
+
+    // z = H(domain || context || V* || A || S || y)
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+
+    for (size_t i = 0; i < m; i++)
+    {
+      secp256k1_pubkey V_temp;
+      unsigned char V_ser[33];
+      size_t v_len = 33;
+      if (!secp256k1_bulletproof_create_commitment(
+              ctx, &V_temp, values[i], blindings_flat + 32 * i, pk_base))
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
+                                         SECP256K1_EC_COMPRESSED) ||
+          v_len != 33)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+    }
+
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    secp256k1_mpt_scalar_reduce32(z, z);
+
+    memcpy(z_neg, z, 32);
+    secp256k1_mpt_scalar_negate(z_neg, z_neg);
+
+  fs_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      goto cleanup;
+  }
 
   /* ---- 7. Aggregated polynomial setup ---- */
 
@@ -1554,48 +1660,68 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       goto cleanup;
   }
 
-    /* ---- 9. Challenge x ---- */
-/* x = H(context_id || A || S || y || z || T1 || T2) */
-    {
-        unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-        size_t len;
-        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-        int fs_ok = 0;
+  /* ---- 9. Challenge x ---- */
+  /* x = H(context_id || A || S || y || z || T1 || T2) */
+  {
+    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 0;
 
-        if (!mdctx) goto cleanup;
+    if (!mdctx)
+      goto cleanup;
 
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A, SECP256K1_EC_COMPRESSED) || len != 33)
-            goto fs_x_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S, SECP256K1_EC_COMPRESSED) || len != 33)
-            goto fs_x_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1, SECP256K1_EC_COMPRESSED) || len != 33)
-            goto fs_x_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2, SECP256K1_EC_COMPRESSED) || len != 33)
-            goto fs_x_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
 
-        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto fs_x_cleanup;
-        if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, y, 32) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, z, 32) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1) goto fs_x_cleanup;
-        if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1) goto fs_x_cleanup;
-        if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1) goto fs_x_cleanup;
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_x_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
+      goto fs_x_cleanup;
 
-        secp256k1_mpt_scalar_reduce32(x, x);
-        if (memcmp(x, zero, 32) == 0) goto fs_x_cleanup; /* avoid infinity later */
+    secp256k1_mpt_scalar_reduce32(x, x);
+    if (memcmp(x, zero, 32) == 0)
+      goto fs_x_cleanup; /* avoid infinity later */
 
-        fs_ok = 1;
+    fs_ok = 1;
 
-        fs_x_cleanup:
-        EVP_MD_CTX_free(mdctx);
-        if (!fs_ok) goto cleanup;
-    }
+  fs_x_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      goto cleanup;
+  }
 
   /* ---- 10. Evaluate l(x), r(x), t_hat ---- */
   for (size_t k = 0; k < n; k++)
@@ -1659,51 +1785,71 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
    * Minimal, safe choice: context_id || A||S||T1||T2 || y||z||x || t_hat
    * (All points are serialized compressed 33 bytes.)
    */
-    {
-        unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-        size_t ser_len;
-        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-        int fs_ok = 0;
+  {
+    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    size_t ser_len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 0;
 
-        if (!mdctx) goto cleanup;
+    if (!mdctx)
+      goto cleanup;
 
-        ser_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &ser_len, &A, SECP256K1_EC_COMPRESSED) || ser_len != 33)
-            goto fs_ipa_cleanup;
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &ser_len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
 
-        ser_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S, SECP256K1_EC_COMPRESSED) || ser_len != 33)
-            goto fs_ipa_cleanup;
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
 
-        ser_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &ser_len, &T1, SECP256K1_EC_COMPRESSED) || ser_len != 33)
-            goto fs_ipa_cleanup;
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &ser_len, &T1,
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
 
-        ser_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &ser_len, &T2, SECP256K1_EC_COMPRESSED) || ser_len != 33)
-            goto fs_ipa_cleanup;
+    ser_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &ser_len, &T2,
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
 
-        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto fs_ipa_cleanup;
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_ipa_cleanup;
 
-        if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, y, 32) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, z, 32) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, x, 32) != 1) goto fs_ipa_cleanup;
-        if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1) goto fs_ipa_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto fs_ipa_cleanup;
 
-        if (EVP_DigestFinal_ex(mdctx, ipa_transcript, NULL) != 1)
-            goto fs_ipa_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript, NULL) != 1)
+      goto fs_ipa_cleanup;
 
-        fs_ok = 1;
+    fs_ok = 1;
 
-        fs_ipa_cleanup:
-        EVP_MD_CTX_free(mdctx);
-        if (!fs_ok) goto cleanup;
-    }
+  fs_ipa_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      goto cleanup;
+  }
 
   /* 12b. Derive u_x = H(ipa_transcript || t_hat) reduced to scalar. */
   if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript, t_hat))
@@ -2051,115 +2197,156 @@ int secp256k1_bulletproof_verify_agg(
     U = U_arr[0];
   }
 
-    /* --- Fiat–Shamir: y,z,x --- */
-    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-    size_t slen;
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    int fs_ok = 0;
+  /* --- Fiat–Shamir: y,z,x --- */
+  unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+  size_t slen;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int fs_ok = 0;
 
-    if (!mdctx)
-        goto fail;
+  if (!mdctx)
+    goto fail;
 
-/* Serialize A,S,T1,T2 */
-    slen = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A, SECP256K1_EC_COMPRESSED) || slen != 33)
-        goto fs_fail;
-    slen = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &S, SECP256K1_EC_COMPRESSED) || slen != 33)
-        goto fs_fail;
-    slen = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &T1, SECP256K1_EC_COMPRESSED) || slen != 33)
-        goto fs_fail;
-    slen = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &T2, SECP256K1_EC_COMPRESSED) || slen != 33)
-        goto fs_fail;
+  /* Serialize A,S,T1,T2 */
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &S,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &T1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &T2,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
 
-/* ---------------- y = H(domain || context || C_i || A || S) ---------------- */
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1) goto fs_fail;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto fs_fail;
+  /* ---------------- y = H(domain || context || C_i || A || S) ----------------
+   */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
 
-    for (size_t i = 0; i < m; i++) {
-        unsigned char C_ser[33];
-        size_t c_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                           SECP256K1_EC_COMPRESSED) || c_len != 33)
-            goto fs_fail;
-        if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1) goto fs_fail;
-    }
+  for (size_t i = 0; i < m; i++)
+  {
+    unsigned char C_ser[33];
+    size_t c_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        c_len != 33)
+      goto fs_fail;
+    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+      goto fs_fail;
+  }
 
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1) goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
+    goto fs_fail;
 
-    secp256k1_mpt_scalar_reduce32(y, y);
+  secp256k1_mpt_scalar_reduce32(y, y);
 
-/* ---------------- z = H(domain || context || C_i || A || S || y) ---------------- */
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1) goto fs_fail;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto fs_fail;
+  /* ---------------- z = H(domain || context || C_i || A || S || y)
+   * ---------------- */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
 
-    for (size_t i = 0; i < m; i++) {
-        unsigned char C_ser[33];
-        size_t c_len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                           SECP256K1_EC_COMPRESSED) || c_len != 33)
-            goto fs_fail;
-        if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1) goto fs_fail;
-    }
+  for (size_t i = 0; i < m; i++)
+  {
+    unsigned char C_ser[33];
+    size_t c_len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        c_len != 33)
+      goto fs_fail;
+    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+      goto fs_fail;
+  }
 
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1) goto fs_fail;
-    if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1) goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
+    goto fs_fail;
 
-    secp256k1_mpt_scalar_reduce32(z, z);
+  secp256k1_mpt_scalar_reduce32(z, z);
 
-    if (!secp256k1_ec_seckey_verify(ctx, y) ||
-        !secp256k1_ec_seckey_verify(ctx, z))
-        goto fs_fail;
+  if (!secp256k1_ec_seckey_verify(ctx, y) ||
+      !secp256k1_ec_seckey_verify(ctx, z))
+    goto fs_fail;
 
-/* Powers */
-    unsigned char *y_powers = (unsigned char *)malloc(n * 32);
-    unsigned char *y_inv_powers = (unsigned char *)malloc(n * 32);
-    if (!y_powers || !y_inv_powers) {
-        free(y_powers);
-        free(y_inv_powers);
-        goto fs_fail;
-    }
+  /* Powers */
+  unsigned char *y_powers = (unsigned char *)malloc(n * 32);
+  unsigned char *y_inv_powers = (unsigned char *)malloc(n * 32);
+  if (!y_powers || !y_inv_powers)
+  {
+    free(y_powers);
+    free(y_inv_powers);
+    goto fs_fail;
+  }
 
-    unsigned char y_inv[32];
-    scalar_vector_powers(ctx, (unsigned char (*)[32])y_powers, y, n);
-    secp256k1_mpt_scalar_inverse(y_inv, y);
-    scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
+  unsigned char y_inv[32];
+  scalar_vector_powers(ctx, (unsigned char (*)[32])y_powers, y, n);
+  secp256k1_mpt_scalar_inverse(y_inv, y);
+  scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
 
-/* ---------------- x = H(context || A || S || y || z || T1 || T2) ---------------- */
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto fs_fail;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, z, 32) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1) goto fs_fail;
-    if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1) goto fs_fail;
+  /* ---------------- x = H(context || A || S || y || z || T1 || T2)
+   * ---------------- */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
+    goto fs_fail;
 
-    secp256k1_mpt_scalar_reduce32(x, x);
+  secp256k1_mpt_scalar_reduce32(x, x);
 
-    if (!secp256k1_ec_seckey_verify(ctx, x)) {
-        free(y_powers);
-        y_powers = NULL;
-        free(y_inv_powers);
-        y_inv_powers = NULL;
-        goto fs_fail;
-    }
+  if (!secp256k1_ec_seckey_verify(ctx, x))
+  {
+    free(y_powers);
+    y_powers = NULL;
+    free(y_inv_powers);
+    y_inv_powers = NULL;
+    goto fs_fail;
+  }
 
-    fs_ok = 1;
+  fs_ok = 1;
 
-    fs_fail:
-    EVP_MD_CTX_free(mdctx);
-    if (!fs_ok)
-        goto fail;
+fs_fail:
+  EVP_MD_CTX_free(mdctx);
+  if (!fs_ok)
+    goto fail;
 
   /* z^2 */
   secp256k1_mpt_scalar_mul(z_sq, z, z);
@@ -2381,68 +2568,94 @@ int secp256k1_bulletproof_verify_agg(
    * =========================================================================
    */
 
-    // src/bulletproof_aggregated.c
-    unsigned char ipa_transcript_id[32];
+  // src/bulletproof_aggregated.c
+  unsigned char ipa_transcript_id[32];
+  {
+    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int ok = 0;
+    unsigned int md_len = 0;
+
+    if (!mdctx)
+      goto fail;
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
+
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto ipa_tid_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1)
+      goto ipa_tid_cleanup;
+    if (md_len != 32)
+      goto ipa_tid_cleanup;
+
+    ok = 1;
+
+  ipa_tid_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!ok)
+      goto fail;
+  }
+
+  if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript_id, t_hat))
+    goto fail;
+
+  secp256k1_pubkey P = A;
+
+  /* P += x*S */
+  {
+    secp256k1_pubkey xS = S;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &xS, x))
     {
-        unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-        size_t len;
-        EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-        int ok = 0;
-        unsigned int md_len = 0;
-
-        if (!mdctx) goto fail;
-
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A, SECP256K1_EC_COMPRESSED) || len != 33) goto ipa_tid_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S, SECP256K1_EC_COMPRESSED) || len != 33) goto ipa_tid_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1, SECP256K1_EC_COMPRESSED) || len != 33) goto ipa_tid_cleanup;
-        len = 33;
-        if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2, SECP256K1_EC_COMPRESSED) || len != 33) goto ipa_tid_cleanup;
-
-        if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1) goto ipa_tid_cleanup;
-        if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, y, 32) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, z, 32) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, x, 32) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1) goto ipa_tid_cleanup;
-        if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1) goto ipa_tid_cleanup;
-        if (md_len != 32) goto ipa_tid_cleanup;
-
-        ok = 1;
-
-        ipa_tid_cleanup:
-        EVP_MD_CTX_free(mdctx);
-        if (!ok) goto fail;
+      free(y_block_sum);
+      free(y_powers);
+      free(y_inv_powers);
+      goto fail;
     }
 
-    if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript_id, t_hat))
-        goto fail;
-
-    secp256k1_pubkey P = A;
-
-/* P += x*S */
-    {
-        secp256k1_pubkey xS = S;
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &xS, x))
-        {
-            free(y_block_sum);
-            free(y_powers);
-            free(y_inv_powers);
-            goto fail;
-        }
-
-        secp256k1_pubkey newP;
-        const secp256k1_pubkey *pts[2] = {&P, &xS};
-        if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts, 2))
-            goto fail;
-        P = newP;
-    }
+    secp256k1_pubkey newP;
+    const secp256k1_pubkey *pts[2] = {&P, &xS};
+    if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts, 2))
+      goto fail;
+    P = newP;
+  }
 
   /* P += sum_{k=0}^{n-1} [ (-z)*G_k + ( z*y^k + z^(block+2)*z^2*2^i ) *
    * (y^{-k}*H_k) ] */
