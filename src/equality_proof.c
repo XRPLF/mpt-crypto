@@ -41,44 +41,13 @@
  * Ciphertext-Amount Consistency Protocol
  */
 
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
-#include <openssl/rand.h>
-#include <stdlib.h>
 #include <string.h>
 
-/* --- Internal Helpers --- */
-
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
-
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar)
-{
-  do
-  {
-    if (RAND_bytes(scalar, 32) != 1)
-      return 0;
-  } while (!secp256k1_ec_seckey_verify(ctx, scalar));
-  return 1;
-}
-
-static int compute_amount_point(const secp256k1_context *ctx,
-                                secp256k1_pubkey *mG, uint64_t amount)
-{
-  unsigned char amount_scalar[32] = {0};
-  /* Convert amount to 32-byte BIG-ENDIAN scalar */
-  for (int i = 0; i < 8; ++i)
-  {
-    amount_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
-  }
-  return secp256k1_ec_pubkey_create(ctx, mG, amount_scalar);
-}
+/* compute_amount_point is provided by mpt_internal.h */
 
 /**
  * Streaming Hash Builder (Avoids large stack buffers)
