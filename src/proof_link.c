@@ -99,8 +99,10 @@ static void build_link_challenge_hash(
   do                                                                           \
   {                                                                            \
     len = 33;                                                                  \
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                      \
-                                  SECP256K1_EC_COMPRESSED);                    \
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
+                                       SECP256K1_EC_COMPRESSED) ||             \
+        len != 33)                                                             \
+      goto cleanup;                                                            \
     if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
       goto cleanup;                                                            \
   } while (0)
@@ -226,17 +228,20 @@ int secp256k1_elgamal_pedersen_link_prove(
   unsigned char *ptr = proof;
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T1,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T2,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T3,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
 

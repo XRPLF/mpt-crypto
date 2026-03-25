@@ -86,12 +86,19 @@ static void build_pok_challenge(const secp256k1_context *ctx,
     goto cleanup;
 
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED);
+
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
   if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
     goto cleanup;
 
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, T, SECP256K1_EC_COMPRESSED);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, T,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
   if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
     goto cleanup;
 
@@ -146,7 +153,8 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
   unsigned char *ptr = proof_out;
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
   memcpy(ptr, s, 32);

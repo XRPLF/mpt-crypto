@@ -184,48 +184,65 @@ int secp256k1_bulletproof_add_point_to_accumulator(const secp256k1_context *ctx,
   *acc = temp_sum;
   return 1;
 }
+
+static int scalar_is_zero(const unsigned char s[32])
+{
+    unsigned char b = 0;
+    for (int i = 0; i < 32; i++)
+    {
+        b |= s[i];
+    }
+    return (b == 0) ? 1 : 0;
+}
+
+
 /**
- * Computes Multiscalar Multiplication (MSM): R = sum(s[i] * P[i]).
- * ctx       The context.
- * r_out     Output point (the sum R).
- * points    Array of N input points (secp256k1_pubkey).
- * scalars   Flat array of N 32-byte scalars.
- * n         The number of terms (N).
- * return    1 on success, 0 on failure.
- * NOTE: This MSM is used only for Bulletproofs where all scalars are public.
- * It is NOT constant-time with respect to scalars and MUST NOT be used
- * for secret-key operations.
- */
+* Computes Multiscalar Multiplication (MSM): R = sum(s[i] * P[i]).
+* This function is called in two contexts:
+* 1. secp256k1_bulletproof_ipa_compute_LR (prover only):
+* - Round 0: scalars are a_L/b_R in {0,1}, derived from the prover's secret.
+* - Rounds 1+: scalars are general 256-bit folded values.
+* Timing varies with the scalar's Hamming weight. Because the prover
+* operates on their own secret, exploitation requires an external attacker
+* to have precise timing observation over the prover's local execution environment.
+* 2. fold_generators (verifier) and calculate_commitment_term (prover):
+* Scalars are either public Fiat-Shamir values or sparse bit vectors.
+* There is no secret timing concern in these contexts.
+*/
+
 int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
                                   secp256k1_pubkey *r_out,
                                   const secp256k1_pubkey *points,
                                   const unsigned char *scalars, size_t n)
 {
-  secp256k1_pubkey acc;
-  memset(&acc, 0, sizeof(acc));
-  int initialized = 0;
-  unsigned char zero[32] = {0};
+    secp256k1_pubkey acc;
+    memset(&acc, 0, sizeof(acc));
+    int initialized = 0;
 
-  for (size_t i = 0; i < n; ++i)
-  {
-    if (memcmp(scalars + i * 32, zero, 32) == 0)
-      continue;
+    for (size_t i = 0; i < n; ++i)
+    {
+        unsigned char s_tmp[32];
+        memcpy(s_tmp, scalars + i * 32, 32);
 
-    secp256k1_pubkey term = points[i];
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, scalars + i * 32))
-      return 0;
+        if (scalar_is_zero(s_tmp)) {
+            continue;
+        }
 
-    if (!add_term(ctx, &acc, &initialized, &term))
-      return 0;
-  }
+        secp256k1_pubkey term = points[i];
+        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_tmp))
+            return 0;
 
-  /* All scalars zero → result is infinity (not representable here) */
-  if (!initialized)
-    return 0;
+        if (!add_term(ctx, &acc, &initialized, &term))
+            return 0;
+    }
 
-  *r_out = acc;
-  return 1;
+    if (!initialized)
+        return 0;
+
+    *r_out = acc;
+    return 1;
 }
+
 /* Try to add MSM(points, scalars) into acc.
  * If MSM is all-zero, do nothing and succeed.
  */
@@ -552,7 +569,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
     goto cleanup;
 
   secp256k1_mpt_scalar_mul(cLux, cL, ux);
-  if (memcmp(cLux, zero, 32) != 0)
+  if (!scalar_is_zero(cLux))
   {
     term = *U;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cLux))
@@ -579,7 +596,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
     goto cleanup;
 
   secp256k1_mpt_scalar_mul(cRux, cR, ux);
-  if (memcmp(cRux, zero, 32) != 0)
+  if (!scalar_is_zero(cRux))
   {
     term = *U;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cRux))
@@ -698,11 +715,7 @@ cleanup:
   OPENSSL_cleanse(t2, 32);
   return ok;
 }
-static int scalar_is_zero(const unsigned char s[32])
-{
-  unsigned char z[32] = {0};
-  return memcmp(s, z, 32) == 0;
-}
+
 
 /*
  * ux is the fixed IPA binding scalar.
@@ -1075,21 +1088,16 @@ int secp256k1_bulletproof_compute_vectors_block(
   for (size_t i = 0; i < BP_VALUE_BITS; i++)
   {
     size_t idx = offset + i;
+    unsigned char bit = (unsigned char)((value >> i) & 1);
+    unsigned char mask =
+        (unsigned char)(-bit); /* 0xFF if bit==1, 0x00 if bit==0 */
 
-    if ((value >> i) & 1)
+    for (int b = 0; b < 32; b++)
     {
-      /* bit = 1  => al = 1, ar = 0 */
-      memcpy(al + idx * 32, one, 32);
-      memcpy(ar + idx * 32, zero, 32);
-    }
-    else
-    {
-      /* bit = 0  => al = 0, ar = -1 */
-      memcpy(al + idx * 32, zero, 32);
-      memcpy(ar + idx * 32, minus_one, 32);
+      al[idx * 32 + b] = one[b] & mask;
+      ar[idx * 32 + b] = minus_one[b] & ~mask;
     }
   }
-
   /* ---- 2. Generate random blinding vectors sl/sr ---- */
   for (size_t i = 0; i < BP_VALUE_BITS; i++)
   {
@@ -1333,15 +1341,15 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       unsigned char *sl_k = sl + 32 * k;
       unsigned char *sr_k = sr + 32 * k;
 
-      if ((v >> i) & 1)
+      /* Constant-time bit decomposition to prevent cache-timing leaks */
+      unsigned char bit = (unsigned char)((v >> i) & 1);
+      unsigned char mask =
+          (unsigned char)(0 - bit); /* 0xFF if bit==1, 0x00 if bit==0 */
+
+      for (int b = 0; b < 32; b++)
       {
-        memcpy(al_k, one, 32);
-        memset(ar_k, 0, 32);
-      }
-      else
-      {
-        memset(al_k, 0, 32);
-        memcpy(ar_k, minus_one, 32);
+        al_k[b] = one[b] & mask;
+        ar_k[b] = minus_one[b] & ~mask;
       }
 
       if (!generate_random_scalar(ctx, sl_k))
@@ -2549,14 +2557,18 @@ fs_fail:
     }
     OPENSSL_cleanse(x_sq, 32);
 
-    // if (!inited) { free(y_block_sum); free(y_powers); free(y_inv_powers);
-    // goto fail; }
+    if (!inited)
+    {
+      free(y_block_sum);
+      free(y_powers);
+      free(y_inv_powers);
+      goto fail;
+    }
     RHS = acc;
   }
 
   if (!pubkey_equal(ctx, &LHS, &RHS))
   {
-    printf("[VERIFY] Step3 polynomial identity failed\n");
     free(y_block_sum);
     free(y_powers);
     free(y_inv_powers);
