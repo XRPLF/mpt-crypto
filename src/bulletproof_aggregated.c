@@ -187,60 +187,61 @@ int secp256k1_bulletproof_add_point_to_accumulator(const secp256k1_context *ctx,
 
 static int scalar_is_zero(const unsigned char s[32])
 {
-    unsigned char b = 0;
-    for (int i = 0; i < 32; i++)
-    {
-        b |= s[i];
-    }
-    return (b == 0) ? 1 : 0;
+  unsigned char b = 0;
+  for (int i = 0; i < 32; i++)
+  {
+    b |= s[i];
+  }
+  return (b == 0) ? 1 : 0;
 }
 
-
 /**
-* Computes Multiscalar Multiplication (MSM): R = sum(s[i] * P[i]).
-* This function is called in two contexts:
-* 1. secp256k1_bulletproof_ipa_compute_LR (prover only):
-* - Round 0: scalars are a_L/b_R in {0,1}, derived from the prover's secret.
-* - Rounds 1+: scalars are general 256-bit folded values.
-* Timing varies with the scalar's Hamming weight. Because the prover
-* operates on their own secret, exploitation requires an external attacker
-* to have precise timing observation over the prover's local execution environment.
-* 2. fold_generators (verifier) and calculate_commitment_term (prover):
-* Scalars are either public Fiat-Shamir values or sparse bit vectors.
-* There is no secret timing concern in these contexts.
-*/
+ * Computes Multiscalar Multiplication (MSM): R = sum(s[i] * P[i]).
+ * This function is called in two contexts:
+ * 1. secp256k1_bulletproof_ipa_compute_LR (prover only):
+ * - Round 0: scalars are a_L/b_R in {0,1}, derived from the prover's secret.
+ * - Rounds 1+: scalars are general 256-bit folded values.
+ * Timing varies with the scalar's Hamming weight. Because the prover
+ * operates on their own secret, exploitation requires an external attacker
+ * to have precise timing observation over the prover's local execution
+ * environment.
+ * 2. fold_generators (verifier) and calculate_commitment_term (prover):
+ * Scalars are either public Fiat-Shamir values or sparse bit vectors.
+ * There is no secret timing concern in these contexts.
+ */
 
 int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
                                   secp256k1_pubkey *r_out,
                                   const secp256k1_pubkey *points,
                                   const unsigned char *scalars, size_t n)
 {
-    secp256k1_pubkey acc;
-    memset(&acc, 0, sizeof(acc));
-    int initialized = 0;
+  secp256k1_pubkey acc;
+  memset(&acc, 0, sizeof(acc));
+  int initialized = 0;
 
-    for (size_t i = 0; i < n; ++i)
+  for (size_t i = 0; i < n; ++i)
+  {
+    unsigned char s_tmp[32];
+    memcpy(s_tmp, scalars + i * 32, 32);
+
+    if (scalar_is_zero(s_tmp))
     {
-        unsigned char s_tmp[32];
-        memcpy(s_tmp, scalars + i * 32, 32);
-
-        if (scalar_is_zero(s_tmp)) {
-            continue;
-        }
-
-        secp256k1_pubkey term = points[i];
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_tmp))
-            return 0;
-
-        if (!add_term(ctx, &acc, &initialized, &term))
-            return 0;
+      continue;
     }
 
-    if (!initialized)
-        return 0;
+    secp256k1_pubkey term = points[i];
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_tmp))
+      return 0;
 
-    *r_out = acc;
-    return 1;
+    if (!add_term(ctx, &acc, &initialized, &term))
+      return 0;
+  }
+
+  if (!initialized)
+    return 0;
+
+  *r_out = acc;
+  return 1;
 }
 
 /* Try to add MSM(points, scalars) into acc.
@@ -715,7 +716,6 @@ cleanup:
   OPENSSL_cleanse(t2, 32);
   return ok;
 }
-
 
 /*
  * ux is the fixed IPA binding scalar.

@@ -168,10 +168,10 @@ int secp256k1_mpt_prove_equality_shared_r(
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
-    /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
-    if (n == 0 || n > 4)
-        return 0;
-    /* Local Variables */
+  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
+  if (n == 0 || n > 4)
+    return 0;
+  /* Local Variables */
   unsigned char k_m[32], k_r[32];
   unsigned char m_scalar[32] = {0};
   unsigned char e[32];
@@ -258,7 +258,8 @@ int secp256k1_mpt_prove_equality_shared_r(
   /* Serialize Tr */
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tr,
-                                     SECP256K1_EC_COMPRESSED) || len != 33)
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
 
@@ -267,7 +268,8 @@ int secp256k1_mpt_prove_equality_shared_r(
   {
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tm_vec[i],
-                                       SECP256K1_EC_COMPRESSED) || len != 33)
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
       goto cleanup;
     ptr += 33;
   }
@@ -302,10 +304,10 @@ int secp256k1_mpt_verify_equality_shared_r(
     size_t n, const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
-    /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
-    if (n == 0 || n > 4)
-        return 0;
-    /* Calculate expected size internally for strict checking later */
+  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
+  if (n == 0 || n > 4)
+    return 0;
+  /* Calculate expected size internally for strict checking later */
   size_t expected_len = secp256k1_mpt_proof_equality_shared_r_size(n);
 
   /* Local Variables */
@@ -350,8 +352,8 @@ int secp256k1_mpt_verify_equality_shared_r(
     goto cleanup;
 
   /* Fail fast! Strict length check before heavy crypto math */
-    if ((size_t)(ptr - proof) != expected_len)
-        goto cleanup;
+  if ((size_t)(ptr - proof) != expected_len)
+    goto cleanup;
 
   /* 2. Challenge */
   compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
