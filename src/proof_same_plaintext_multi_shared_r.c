@@ -49,31 +49,12 @@
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.4] Proof of Equality of
  * Plaintexts with Shared Randomness
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* --- Internal Helpers --- */
-
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
-
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar)
-{
-  do
-  {
-    if (RAND_bytes(scalar, 32) != 1)
-      return 0;
-  } while (!secp256k1_ec_seckey_verify(ctx, scalar));
-  return 1;
-}
 
 size_t secp256k1_mpt_proof_equality_shared_r_size(size_t n_recipients)
 {
@@ -179,10 +160,7 @@ int secp256k1_mpt_prove_equality_shared_r(
   }
 
   /* 1. Prepare Witness */
-  for (i = 0; i < 8; i++)
-  {
-    m_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
-  }
+  mpt_uint64_to_scalar(m_scalar, amount);
 
   /* 2. Sample Random Nonces */
   if (!generate_random_scalar(ctx, k_m))
