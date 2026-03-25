@@ -481,6 +481,77 @@ secp256k1_bulletproof_verify_agg(
     secp256k1_pubkey const* pk_base,
     unsigned char const* context_id);
 
+/*
+================================================================================
+|                                                                              |
+|               AND-COMPOSED COMPACT SIGMA PROOF (STANDARD EG)                |
+|                                                                              |
+================================================================================
+ *
+ * Combines ciphertext equality, Pedersen linkage, and balance verification
+ * into a single sigma protocol under a shared Fiat-Shamir challenge.
+ *
+ * Language: exists (r, m, sk_A, r_b, v) in Z_q^5 such that:
+ *   C1          = r*G
+ *   C_{2,i}     = r*pk_i + m*G   for i = 1..n
+ *   PC_m        = r*G + m*H
+ *   pk_A        = sk_A*G
+ *   PC_b        = r_b*G + v*H
+ *   sk_A*C1_rem + v*G = C2_rem
+ *
+ * Compact proof: (e, z_r, z_m, z_sk, z_rb, z_v) in Z_q^6 = 192 bytes.
+ * Fiat-Shamir domain: "CMPT_COMBINED_STD_PROOF"
+ */
+
+/** Serialized size of the compact standard proof in bytes. */
+#define SECP256K1_COMPACT_STANDARD_PROOF_SIZE 192
+
+/**
+ * @brief Generate a compact AND-composed sigma proof for standard EC-ElGamal.
+ *
+ * proof_out must point to a buffer of SECP256K1_COMPACT_STANDARD_PROOF_SIZE
+ * bytes. context_id is an optional 32-byte transaction context (may be NULL).
+ */
+SECP256K1_API int
+secp256k1_compact_standard_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    uint64_t remainder,
+    unsigned char const* r_shared,
+    unsigned char const* sk_A,
+    unsigned char const* r_b,
+    size_t n,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2_vec,
+    secp256k1_pubkey const* Pk_vec,
+    secp256k1_pubkey const* PC_m,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* PC_b,
+    secp256k1_pubkey const* C1_rem,
+    secp256k1_pubkey const* C2_rem,
+    unsigned char const* context_id);
+
+/**
+ * @brief Verify a compact AND-composed sigma proof for standard EC-ElGamal.
+ *
+ * Returns 1 if the proof is valid, 0 otherwise.
+ */
+SECP256K1_API int
+secp256k1_compact_standard_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    size_t n,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2_vec,
+    secp256k1_pubkey const* Pk_vec,
+    secp256k1_pubkey const* PC_m,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* PC_b,
+    secp256k1_pubkey const* C1_rem,
+    secp256k1_pubkey const* C2_rem,
+    unsigned char const* context_id);
+
 #ifdef __cplusplus
 }
 #endif
