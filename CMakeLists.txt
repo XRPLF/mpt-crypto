@@ -5,8 +5,14 @@ project(mpt-crypto C CXX)
 find_package(OpenSSL REQUIRED)
 find_package(secp256k1 REQUIRED)
 
-# --- Define The Library ---
+# --- Add common options ---
+add_library(common INTERFACE)
+if(NOT MSVC)
+    target_compile_options(common INTERFACE -Wall -Wextra -Wpedantic -Werror)
+endif()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --- Define The Library ---
 add_library(
     mpt-crypto
     src/bulletproof_aggregated.c
@@ -22,6 +28,9 @@ add_library(
 
 # --- Set Include Directories ---
 target_include_directories(mpt-crypto PUBLIC include)
+
+# --- Link Common Options ---
+target_link_libraries(mpt-crypto PUBLIC common)
 
 # --- Set Compile Definitions ---
 include(CheckTypeSize)
