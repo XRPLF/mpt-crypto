@@ -156,6 +156,7 @@ int secp256k1_bulletproof_ipa_dot(const secp256k1_context *ctx,
                                   unsigned char *out, const unsigned char *a,
                                   const unsigned char *b, size_t n)
 {
+  (void)ctx;
   unsigned char acc[32] = {0};
   unsigned char term[32];
 
@@ -268,6 +269,7 @@ static int msm_try_add(const secp256k1_context *ctx, secp256k1_pubkey *acc,
 void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
                        unsigned char a[][32], unsigned char b[][32], size_t n)
 {
+  (void)ctx;
   for (size_t i = 0; i < n; i++)
   {
     secp256k1_mpt_scalar_mul(res[i], a[i], b[i]);
@@ -280,6 +282,7 @@ void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
 void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
                        unsigned char a[][32], unsigned char b[][32], size_t n)
 {
+  (void)ctx;
   for (size_t i = 0; i < n; i++)
   {
     secp256k1_mpt_scalar_add(res[i], a[i], b[i]);
@@ -292,6 +295,7 @@ void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
 void scalar_vector_powers(const secp256k1_context *ctx, unsigned char res[][32],
                           const unsigned char *y, size_t n)
 {
+  (void)ctx;
   if (n == 0)
     return;
 
@@ -332,18 +336,6 @@ static void compute_z_pows_j2(const secp256k1_context *ctx,
   {
     scalar_pow_u32(ctx, z_j2[j], z, (unsigned int)(j + 2));
   }
-}
-
-/**
- * Point = Scalar * Point (using public API)
- */
-static int secp256k1_bulletproof_point_scalar_mul(const secp256k1_context *ctx,
-                                                  secp256k1_pubkey *r_out,
-                                                  const secp256k1_pubkey *p_in,
-                                                  const unsigned char *s_scalar)
-{
-  *r_out = *p_in;
-  return secp256k1_ec_pubkey_tweak_mul(ctx, r_out, s_scalar);
 }
 
 /**
@@ -549,7 +541,6 @@ int secp256k1_bulletproof_ipa_compute_LR(
 {
   unsigned char cL[32], cR[32];
   unsigned char cLux[32], cRux[32];
-  unsigned char zero[32] = {0};
 
   secp256k1_pubkey acc, term;
   int acc_inited; /* Tracks if acc contains a valid point */
@@ -1073,12 +1064,10 @@ int secp256k1_bulletproof_compute_vectors_block(
     unsigned char *ar, unsigned char *sl, unsigned char *sr)
 {
   const size_t offset = BP_VALUE_BITS * block_index;
-  int ok = 1;
 
   /* Scalars */
   unsigned char one[32] = {0};
   unsigned char minus_one[32];
-  unsigned char zero[32] = {0};
 
   one[31] = 1;
   memcpy(minus_one, one, 32);
@@ -1105,12 +1094,10 @@ int secp256k1_bulletproof_compute_vectors_block(
 
     if (!generate_random_scalar(ctx, sl + idx * 32))
     {
-      ok = 0;
       goto cleanup;
     }
     if (!generate_random_scalar(ctx, sr + idx * 32))
     {
-      ok = 0;
       goto cleanup;
     }
   }
