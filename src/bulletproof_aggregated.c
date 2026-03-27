@@ -56,6 +56,10 @@
 /* Compute total vector length for aggregated Bulletproof */
 #define BP_TOTAL_BITS(m) ((size_t)(BP_VALUE_BITS * (m)))
 
+/* Maximum number of values that can be aggregated in a single proof
+ * to prevent excessive memory allocation. */
+#define BP_MAX_VALUES 4
+
 /* Compute IPA rounds = log2(total_bits) */
 static inline size_t bp_ipa_rounds(size_t total_bits)
 {
@@ -1238,7 +1242,7 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   const size_t rounds = bp_ipa_rounds(n); /* log2(64*m) */
 
   /* 64*m must be power-of-two -> m must be power-of-two */
-  if (m == 0)
+  if (m == 0 || m > BP_MAX_VALUES)
     return 0;
   if ((n & (n - 1)) != 0)
     return 0;
@@ -2092,7 +2096,7 @@ int secp256k1_bulletproof_verify_agg(
 {
   if (!ctx || !G_vec || !H_vec || !proof || !commitment_C_vec || !pk_base)
     return 0;
-  if (m == 0)
+  if (m == 0 || m > BP_MAX_VALUES)
     return 0;
   /* Aggregation requires n = 64*m to be power-of-two => m must be power-of-two.
    */
