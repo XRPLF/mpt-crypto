@@ -48,8 +48,8 @@
  */
 #include "secp256k1_mpt.h"
 #include <assert.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -73,7 +73,7 @@ static int generate_random_scalar(const secp256k1_context *ctx,
   return 1;
 }
 
-static void build_link_challenge_hash(
+static int build_link_challenge_hash(
     const secp256k1_context *ctx, unsigned char *e_out,
     const secp256k1_pubkey *c1, const secp256k1_pubkey *c2,
     const secp256k1_pubkey *pk, const secp256k1_pubkey *pcm,
@@ -85,11 +85,14 @@ static void build_link_challenge_hash(
   unsigned char h[32];
   size_t len;
   const char *domain = "MPT_ELGAMAL_PEDERSEN_LINK";
+  int ok = 0;
 
   if (!mdctx)
-    return;
+  {
+    memset(e_out, 0, 32);
+    return 0;
+  }
 
-  EVP_MD_CTX_reset(mdctx);
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
   if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
@@ -125,10 +128,17 @@ static void build_link_challenge_hash(
 
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
+
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
+  if (!ok)
+  {
+    memset(e_out, 0, 32); /* Poison on failure */
+  }
+  return ok;
 }
 
 /* --- Prover Implementation --- */
@@ -193,7 +203,9 @@ int secp256k1_elgamal_pedersen_link_prove(
     goto cleanup;
 
   /* 3. Challenge */
-  build_link_challenge_hash(ctx, e, c1, c2, pk, pcm, &T1, &T2, &T3, context_id);
+  if (!build_link_challenge_hash(ctx, e, c1, c2, pk, pcm, &T1, &T2, &T3,
+                                 context_id))
+    goto cleanup;
 
   /* 4. Responses */
   /* Convert amount to scalar */
@@ -311,7 +323,9 @@ int secp256k1_elgamal_pedersen_link_verify(const secp256k1_context *ctx,
     goto cleanup;
 
   /* 2. Challenge */
-  build_link_challenge_hash(ctx, e, c1, c2, pk, pcm, &T1, &T2, &T3, context_id);
+  if (!build_link_challenge_hash(ctx, e, c1, c2, pk, pcm, &T1, &T2, &T3,
+                                 context_id))
+    goto cleanup;
 
   /* 3. Verification Equations */
 

@@ -46,7 +46,6 @@
 #include <assert.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <secp256k1.h>
 #include <stdlib.h>
 #include <string.h>
@@ -764,7 +763,7 @@ cleanup:
  * Derive u = H(last_challenge || L || R) reduced to a valid scalar.
  * IMPORTANT: use the SAME exact logic in verifier.
  */
-// C
+
 int derive_ipa_round_challenge(const secp256k1_context *ctx,
                                unsigned char u_out[32],
                                const unsigned char last_challenge[32],
@@ -1363,7 +1362,6 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     goto cleanup;
 
   /* ---- 6. Fiat–Shamir y,z ---- */
-  // src/bulletproof_aggregated.c
   {
     unsigned char A_ser[33], S_ser[33];
     size_t len;
@@ -2567,7 +2565,6 @@ fs_fail:
    * =========================================================================
    */
 
-  // src/bulletproof_aggregated.c
   unsigned char ipa_transcript_id[32];
   {
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];

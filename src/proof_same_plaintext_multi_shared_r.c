@@ -84,7 +84,7 @@ size_t secp256k1_mpt_proof_equality_shared_r_size(size_t n_recipients)
 /*
  * Hash( Domain || C1 || {C2_i, Pk_i} || Tr || {Tm_i} || ContextID )
  */
-static void compute_challenge_equality_shared_r(
+static int compute_challenge_equality_shared_r(
     const secp256k1_context *ctx, unsigned char *e_out, size_t n,
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *Tr,
@@ -96,11 +96,14 @@ static void compute_challenge_equality_shared_r(
   size_t len;
   size_t i;
   const char *domain = "MPT_POK_SAME_PLAINTEXT_SHARED_R";
+  int ok = 0;
 
   if (!mdctx)
-    return;
+  {
+    memset(e_out, 0, 32);
+    return 0;
+  }
 
-  EVP_MD_CTX_reset(mdctx);
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
   if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
@@ -108,7 +111,10 @@ static void compute_challenge_equality_shared_r(
 
   /* 1. Shared C1 */
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1, SECP256K1_EC_COMPRESSED);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
   if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
     goto cleanup;
 
@@ -116,20 +122,27 @@ static void compute_challenge_equality_shared_r(
   for (i = 0; i < n; i++)
   {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
     if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
       goto cleanup;
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
     if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
       goto cleanup;
   }
 
   /* 3. Commitment Tr */
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr, SECP256K1_EC_COMPRESSED);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
   if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
     goto cleanup;
 
@@ -137,8 +150,10 @@ static void compute_challenge_equality_shared_r(
   for (i = 0; i < n; i++)
   {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
     if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
       goto cleanup;
   }
@@ -153,9 +168,15 @@ static void compute_challenge_equality_shared_r(
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
+  if (!ok)
+  {
+    memset(e_out, 0, 32); /* Poison buffer on failure */
+  }
+  return ok;
 }
 
 /* --- Public API --- */
@@ -163,7 +184,7 @@ cleanup:
 int secp256k1_mpt_prove_equality_shared_r(
     const secp256k1_context *ctx,
     unsigned char *proof_out, // Caller MUST allocate
-                              // secp256k1_mpt_proof_equality_shared_r_size(n)
+    // secp256k1_mpt_proof_equality_shared_r_size(n)
     uint64_t amount, const unsigned char *r_shared, size_t n,
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
@@ -232,8 +253,9 @@ int secp256k1_mpt_prove_equality_shared_r(
   }
 
   /* 4. Compute Challenge */
-  compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
-                                      Tm_vec, context_id);
+  if (!compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
+                                           Tm_vec, context_id))
+    goto cleanup;
 
   /* 5. Compute Responses */
 
@@ -297,10 +319,11 @@ cleanup:
     free(Tm_vec);
   return ok;
 }
+
 int secp256k1_mpt_verify_equality_shared_r(
     const secp256k1_context *ctx,
     const unsigned char *proof, // Caller MUST provide buffer of size:
-                                // secp256k1_mpt_proof_equality_shared_r_size(n)
+    // secp256k1_mpt_proof_equality_shared_r_size(n)
     size_t n, const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
@@ -356,8 +379,9 @@ int secp256k1_mpt_verify_equality_shared_r(
     goto cleanup;
 
   /* 2. Challenge */
-  compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
-                                      Tm_vec, context_id);
+  if (!compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
+                                           Tm_vec, context_id))
+    goto cleanup;
 
   /* 3. Verification Equations */
 

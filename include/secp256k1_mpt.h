@@ -35,7 +35,11 @@ secp256k1_elgamal_encrypt(
  * only successfully recover plaintext amounts between 0 and 1,000,000 (inclusive).
  * If the ciphertext encrypts a value greater than 1,000,000, the search will
  * exhaust its range and the function will safely return 0 (failure).
- * Architectural Note:
+ * * NOTE: To mitigate timing side-channels, this search executes with a fixed
+ * iteration count (always looping to the maximum limit). However, because the
+ * underlying libsecp256k1 curve operations are inherently variable-time, this
+ * function does NOT provide a strict constant-time guarantee.
+ * * Architectural Note:
  * On-chain validators and verifiers never need to perform decryption; this
  * function is provided primarily for testing and basic client-side operations.
  * Off-chain applications (like wallets) requiring decryption of larger balances

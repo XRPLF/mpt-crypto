@@ -64,29 +64,30 @@ static int generate_random_scalar(const secp256k1_context *ctx,
   return 1;
 }
 
-static void build_pok_challenge(const secp256k1_context *ctx,
-                                unsigned char *e_out,
-                                const secp256k1_pubkey *pk,
-                                const secp256k1_pubkey *T,
-                                const unsigned char *context_id)
+static int build_pok_challenge(const secp256k1_context *ctx,
+                               unsigned char *e_out, const secp256k1_pubkey *pk,
+                               const secp256k1_pubkey *T,
+                               const unsigned char *context_id)
 {
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
   const char *domain = "MPT_POK_SK_REGISTER";
+  int ok = 0;
 
   if (!mdctx)
-    return;
+  {
+    memset(e_out, 0, 32);
+    return 0;
+  }
 
-  EVP_MD_CTX_reset(mdctx);
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
   if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
     goto cleanup;
 
   len = 33;
-
   if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk,
                                      SECP256K1_EC_COMPRESSED) ||
       len != 33)
@@ -110,10 +111,17 @@ static void build_pok_challenge(const secp256k1_context *ctx,
 
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
+
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
+  if (!ok)
+  {
+    memset(e_out, 0, 32);
+  }
+  return ok;
 }
 
 /* --- Public API --- */
@@ -139,7 +147,8 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
   if (!secp256k1_ec_pubkey_create(ctx, &T, k))
     goto cleanup;
 
-  build_pok_challenge(ctx, e, pk, &T, context_id);
+  if (!build_pok_challenge(ctx, e, pk, &T, context_id))
+    goto cleanup;
 
   // s = k + e*sk
   memcpy(term, sk, 32);
@@ -189,7 +198,8 @@ int secp256k1_mpt_pok_sk_verify(
     goto cleanup;
 
   /* 3. Recompute Challenge */
-  build_pok_challenge(ctx, e, pk, &T, context_id);
+  if (!build_pok_challenge(ctx, e, pk, &T, context_id))
+    goto cleanup;
 
   /* 4. Verify Equation: s*G == T + e*Pk */
   if (!secp256k1_ec_pubkey_create(ctx, &LHS, s))

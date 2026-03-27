@@ -122,11 +122,9 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 }
 
 /* --- Decryption --- */
-static int secp256k1_solve_dlp_small_range_ct(const secp256k1_context *ctx,
-                                              uint64_t *out_amount,
-                                              uint64_t *out_is_found,
-                                              const unsigned char *target_ser,
-                                              uint64_t max_range)
+static int secp256k1_solve_dlp_small_range_fixed(
+    const secp256k1_context *ctx, uint64_t *out_amount, uint64_t *out_is_found,
+    const unsigned char *target_ser, uint64_t max_range)
 {
   if (max_range == 0)
   {
@@ -155,10 +153,17 @@ static int secp256k1_solve_dlp_small_range_ct(const secp256k1_context *ctx,
   for (uint64_t i = 1; i <= max_range; ++i)
   {
     ser_len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, current_M_ser, &ser_len, &current_M,
-                                       SECP256K1_EC_COMPRESSED))
+    unsigned char temp_ser[33] = {0};
+    int ser_ok = secp256k1_ec_pubkey_serialize(
+        ctx, temp_ser, &ser_len, &current_M, SECP256K1_EC_COMPRESSED);
+
+    /* 1. Branchless Serialization Fallback
+     * If ser_ok == 1, ser_mask is 0xFF. If ser_ok == 0, ser_mask is 0x00.
+     */
+    unsigned char ser_mask = (unsigned char)(0 - ser_ok);
+    for (int j = 0; j < 33; j++)
     {
-      memset(current_M_ser, 0, 33);
+      current_M_ser[j] = temp_ser[j] & ser_mask;
     }
 
     /* Accumulate differences using an explicit 8-bit accumulator */
@@ -173,11 +178,7 @@ static int secp256k1_solve_dlp_small_range_ct(const secp256k1_context *ctx,
     uint64_t diff64 = (uint64_t)match_diff;
     uint64_t match = 1 ^ (((diff64 | (~diff64 + 1)) >> 63) & 1);
 
-    /* Constant-time assignment mask.
-     * NOTE: When match == 0, (match - 1) wraps via unsigned underflow to
-     * 0xFFFFFFFFFFFFFFFF. Inverting that gives 0x0000000000000000.
-     * When match == 1, (match - 1) is 0, inverted to 0xFFFFFFFFFFFFFFFF.
-     * This creates a safe, branchless mask. DO NOT MODIFY. */
+    /* Constant-time assignment mask */
     uint64_t mask = ~(match - 1);
     found_amount ^= (found_amount ^ i) & mask;
     is_found |= match;
@@ -187,11 +188,17 @@ static int secp256k1_solve_dlp_small_range_ct(const secp256k1_context *ctx,
     pts[1] = &G_point;
     int combine_ok = secp256k1_ec_pubkey_combine(ctx, &next_M, pts, 2);
 
-    /* On failure, freeze current_M in place. Loop must always run to max_range.
+    /* 2. Branchless Conditional Move for Point Addition
+     * If combine_ok == 1, combine_mask is 0xFF. If combine_ok == 0, it is 0x00.
      */
-    if (combine_ok)
+    unsigned char combine_mask = (unsigned char)(0 - combine_ok);
+    unsigned char *curr_ptr = (unsigned char *)&current_M;
+    unsigned char *next_ptr = (unsigned char *)&next_M;
+
+    for (size_t b = 0; b < sizeof(secp256k1_pubkey); b++)
     {
-      current_M = next_M;
+      curr_ptr[b] =
+          (curr_ptr[b] & ~combine_mask) | (next_ptr[b] & combine_mask);
     }
   }
 
@@ -271,8 +278,8 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
   uint64_t loop_amount = 0;
   uint64_t match_loop = 0;
 
-  if (!secp256k1_solve_dlp_small_range_ct(ctx, &loop_amount, &match_loop,
-                                          M_target_ser, 1000000))
+  if (!secp256k1_solve_dlp_small_range_fixed(ctx, &loop_amount, &match_loop,
+                                             M_target_ser, 1000000))
   {
     OPENSSL_cleanse(S_ser, 33);
     OPENSSL_cleanse(c2_ser, 33);
