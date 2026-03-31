@@ -114,3 +114,13 @@ The following tests should pass:
 - `test_same_plaintext_multi_shared_r` - Shared randomness variant
 
 **Note:** `test_bulletproof.c` is excluded from the build because the aggregated implementation (bulletproof_aggregated.c) is fully general; verifying the m=1 case is now covered by test_bulletproof_agg.c.
+
+## Documentation
+
+Two public documents cover the design choices and integration details:
+
+- **XLS-0096 Standard Specification:** [XRPL Standards – XLS-0096](https://github.com/XRPLF/XRPL-Standards/tree/master/XLS-0096-confidential-mpt)
+  The specification covers the protocol design and how it integrates with the XRPL ledger.
+
+- **Research Paper:** [ePrint 2026/602](https://eprint.iacr.org/2026/602)
+  The paper provides a deeper dive into the cryptographic design choices and security analysis.
