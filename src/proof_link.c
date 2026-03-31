@@ -46,32 +46,13 @@
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.5] Linking ElGamal
  * Ciphertexts and Pedersen Commitments
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <assert.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdio.h>
 #include <string.h>
-
-/* --- Internal Helpers --- */
-
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
-
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar_bytes)
-{
-  do
-  {
-    if (RAND_bytes(scalar_bytes, 32) != 1)
-      return 0;
-  } while (secp256k1_ec_seckey_verify(ctx, scalar_bytes) != 1);
-  return 1;
-}
 
 static void build_link_challenge_hash(
     const secp256k1_context *ctx, unsigned char *e_out,
@@ -183,9 +164,7 @@ int secp256k1_elgamal_pedersen_link_prove(
   build_link_challenge_hash(ctx, e, c1, c2, pk, pcm, &T1, &T2, &T3, context_id);
 
   /* 4. Responses */
-  /* Convert amount to scalar */
-  for (int i = 0; i < 8; i++)
-    m_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
+  mpt_uint64_to_scalar(m_scalar, amount);
 
   /* sm = km + e * m */
   memcpy(sm, km, 32);
