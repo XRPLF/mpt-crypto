@@ -17,6 +17,7 @@ add_library(
     src/proof_link.c
     src/proof_pok_sk.c
     src/proof_same_plaintext_multi_shared_r.c
+    src/proof_compact_standard.c
     src/utility/mpt_utility.cpp
 )
 
