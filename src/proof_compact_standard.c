@@ -10,9 +10,9 @@
  *   exists (r, m, sk_A, r_b, v) in Z_q^5 such that:
  *     C1          = r*G
  *     C_{2,i}     = r*pk_i + m*G        for i = 1..n
- *     PC_m        = r*G + m*H
+ *     PC_m        = m*G + r*H
  *     pk_A        = sk_A*G
- *     PC_b        = r_b*G + v*H
+ *     PC_b        = v*G + r_b*H
  *     sk_A*C1_rem + v*G = C2_rem
  *
  * Compact proof: (e, z_r, z_m, z_sk, z_rb, z_v) in Z_q^6 = 192 bytes.
@@ -20,9 +20,9 @@
  * Verification reconstructs commitments:
  *   T1         = z_r*G - e*C1
  *   T_{2,i}    = z_r*pk_i + z_m*G - e*C_{2,i}
- *   T_PCm      = z_r*G + z_m*H - e*PC_m
+ *   T_PCm      = z_m*G + z_r*H - e*PC_m
  *   K1         = z_sk*G - e*pk_A
- *   T_PCb      = z_rb*G + z_v*H - e*PC_b
+ *   T_PCb      = z_v*G + z_rb*H - e*PC_b
  *   K2         = z_sk*C1_rem + z_v*G - e*C2_rem
  * then recomputes the hash and checks e' == e.
  */
@@ -176,15 +176,15 @@ int secp256k1_compact_standard_prove(
     }
   }
 
-  /* T_PCm = alpha*G + beta*H */
+  /* T_PCm = beta*G + alpha*H  (paper: m-nonce on G, r-nonce on H) */
   {
-    secp256k1_pubkey alphaG, betaH;
-    if (!secp256k1_ec_pubkey_create(ctx, &alphaG, alpha))
+    secp256k1_pubkey betaG, alphaH;
+    if (!secp256k1_ec_pubkey_create(ctx, &betaG, beta))
       goto cleanup;
-    betaH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &betaH, beta))
+    alphaH = H;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &alphaH, alpha))
       goto cleanup;
-    const secp256k1_pubkey *pts[2] = {&alphaG, &betaH};
+    const secp256k1_pubkey *pts[2] = {&betaG, &alphaH};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCm, pts, 2))
       goto cleanup;
   }
@@ -193,15 +193,15 @@ int secp256k1_compact_standard_prove(
   if (!secp256k1_ec_pubkey_create(ctx, &K1, gamma))
     goto cleanup;
 
-  /* T_PCb = delta*G + epsilon*H */
+  /* T_PCb = epsilon*G + delta*H  (paper: v-nonce on G, r_b-nonce on H) */
   {
-    secp256k1_pubkey deltaG, epsH;
-    if (!secp256k1_ec_pubkey_create(ctx, &deltaG, delta))
+    secp256k1_pubkey epsG, deltaH;
+    if (!secp256k1_ec_pubkey_create(ctx, &epsG, epsilon))
       goto cleanup;
-    epsH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &epsH, epsilon))
+    deltaH = H;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &deltaH, delta))
       goto cleanup;
-    const secp256k1_pubkey *pts[2] = {&deltaG, &epsH};
+    const secp256k1_pubkey *pts[2] = {&epsG, &deltaH};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCb, pts, 2))
       goto cleanup;
   }
@@ -356,18 +356,18 @@ int secp256k1_compact_standard_verify(
     }
   }
 
-  /* T_PCm = z_r*G + z_m*H - e*PC_m */
+  /* T_PCm = z_m*G + z_r*H - e*PC_m */
   {
-    secp256k1_pubkey zrG, zmH, ePCm;
-    if (!secp256k1_ec_pubkey_create(ctx, &zrG, z_r))
+    secp256k1_pubkey zmG, zrH, ePCm;
+    if (!secp256k1_ec_pubkey_create(ctx, &zmG, z_m))
       goto cleanup;
-    zmH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zmH, z_m))
+    zrH = H;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrH, z_r))
       goto cleanup;
     ePCm = *PC_m;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePCm, neg_e))
       goto cleanup;
-    const secp256k1_pubkey *pts[3] = {&zrG, &zmH, &ePCm};
+    const secp256k1_pubkey *pts[3] = {&zmG, &zrH, &ePCm};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCm, pts, 3))
       goto cleanup;
   }
@@ -385,18 +385,18 @@ int secp256k1_compact_standard_verify(
       goto cleanup;
   }
 
-  /* T_PCb = z_rb*G + z_v*H - e*PC_b */
+  /* T_PCb = z_v*G + z_rb*H - e*PC_b */
   {
-    secp256k1_pubkey zrbG, zvH, ePCb;
-    if (!secp256k1_ec_pubkey_create(ctx, &zrbG, z_rb))
+    secp256k1_pubkey zvG, zrbH, ePCb;
+    if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_v))
       goto cleanup;
-    zvH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zvH, z_v))
+    zrbH = H;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrbH, z_rb))
       goto cleanup;
     ePCb = *PC_b;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePCb, neg_e))
       goto cleanup;
-    const secp256k1_pubkey *pts[3] = {&zrbG, &zvH, &ePCb};
+    const secp256k1_pubkey *pts[3] = {&zvG, &zrbH, &ePCb};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCb, pts, 3))
       goto cleanup;
   }

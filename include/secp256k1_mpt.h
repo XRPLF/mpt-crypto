@@ -494,9 +494,9 @@ secp256k1_bulletproof_verify_agg(
  * Language: exists (r, m, sk_A, r_b, v) in Z_q^5 such that:
  *   C1          = r*G
  *   C_{2,i}     = r*pk_i + m*G   for i = 1..n
- *   PC_m        = r*G + m*H
+ *   PC_m        = m*G + r*H
  *   pk_A        = sk_A*G
- *   PC_b        = r_b*G + v*H
+ *   PC_b        = v*G + r_b*H
  *   sk_A*C1_rem + v*G = C2_rem
  *
  * Compact proof: (e, z_r, z_m, z_sk, z_rb, z_v) in Z_q^6 = 192 bytes.
