@@ -46,6 +46,7 @@
 #include <assert.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <openssl/crypto.h>
 #include <secp256k1.h>
 #include <stdlib.h>
 #include <string.h>

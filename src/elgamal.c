@@ -38,6 +38,7 @@
 #include "secp256k1_mpt.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <openssl/crypto.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -150,6 +151,7 @@ static int secp256k1_solve_dlp_small_range_fixed(
   }
   current_M = G_point;
 
+  unsigned char global_ser_error = 0;
   for (uint64_t i = 1; i <= max_range; ++i)
   {
     ser_len = 33;
@@ -166,6 +168,10 @@ static int secp256k1_solve_dlp_small_range_fixed(
       current_M_ser[j] = temp_ser[j] & ser_mask;
     }
 
+    /* Track any global serialization failures across the 1M iterations */
+      global_ser_error |= (unsigned char)(ser_ok ^ 1);
+      global_ser_error |= (unsigned char)(ser_len ^ 33);
+
     /* Accumulate differences using an explicit 8-bit accumulator */
     unsigned char match_diff = 0;
     for (int j = 0; j < 33; j++)
@@ -173,10 +179,15 @@ static int secp256k1_solve_dlp_small_range_fixed(
       match_diff |= current_M_ser[j] ^ target_ser[j];
     }
 
-    /* Expand to 64-bit before the idiom to make width explicit.
-     * Nonzero detection: if diff64 != 0, saturate bit 63. */
+      /* Mix serialization success into the match diff to prevent false positives */
+      match_diff |= (unsigned char)(ser_ok ^ 1);
+      match_diff |= (unsigned char)(ser_len ^ 33);
+
+      /* Expand to 64-bit before the idiom to make width explicit.
+       * Nonzero detection: if diff64 != 0, saturate bit 63. */
     uint64_t diff64 = (uint64_t)match_diff;
     uint64_t match = 1 ^ (((diff64 | (~diff64 + 1)) >> 63) & 1);
+
 
     /* Constant-time assignment mask */
     uint64_t mask = ~(match - 1);
@@ -201,6 +212,12 @@ static int secp256k1_solve_dlp_small_range_fixed(
           (curr_ptr[b] & ~combine_mask) | (next_ptr[b] & combine_mask);
     }
   }
+
+    /* If any serialization failed during the loop, invalidate the result */
+    if (global_ser_error != 0) {
+        *out_is_found = 0;
+        return 0;
+    }
 
   *out_amount = found_amount;
   *out_is_found = is_found;
@@ -232,11 +249,11 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
 
   ser_len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, c2_ser, &ser_len, c2,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) || ser_len != 33)
     return 0;
   ser_len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) || ser_len != 33)
     return 0;
 
   /* 2. Inline Constant-Time Check for Amount = 0 (c2 == S) */
@@ -264,7 +281,7 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
   {
     ser_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, M_target_ser, &ser_len,
-                                       &M_target_sum, SECP256K1_EC_COMPRESSED))
+                                       &M_target_sum, SECP256K1_EC_COMPRESSED) || ser_len != 33)
     {
       memset(M_target_ser, 0, 33);
     }
