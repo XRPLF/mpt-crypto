@@ -236,7 +236,8 @@ int main(void)
       goto test_cleanup;
     if (EVP_DigestUpdate(mdctx, "IPA_TEST", 8) != 1)
       goto test_cleanup;
-    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1 || md_len != 32)
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1 ||
+        md_len != 32)
       goto test_cleanup;
 
     /* ux = SHA256(ipa_transcript_id || dot) */

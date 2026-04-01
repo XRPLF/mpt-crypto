@@ -29,8 +29,8 @@
  */
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h> // For OPENSSL_cleanse
-#include <openssl/evp.h>
 #include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <string.h>
 
 /* --- Internal Helpers --- */

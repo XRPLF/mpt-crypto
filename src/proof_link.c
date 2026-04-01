@@ -48,9 +48,9 @@
  */
 #include "secp256k1_mpt.h"
 #include <assert.h>
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/crypto.h>
 #include <stdio.h>
 #include <string.h>
 
