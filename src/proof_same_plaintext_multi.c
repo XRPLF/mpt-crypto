@@ -48,30 +48,12 @@
  * @see [Spec (ConfidentialMPT_20260106.pdf) Section 3.3.4] Generalization for
  * Multiple Ciphertexts
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Helper for comparing public keys (from internal utils) */
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
-
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar)
-{
-  do
-  {
-    if (RAND_bytes(scalar, 32) != 1)
-      return 0;
-  } while (!secp256k1_ec_seckey_verify(ctx, scalar));
-  return 1;
-}
 
 /*
  * Hash( Domain || {R_i, S_i, Pk_i} || Tm || {TrG_i, TrP_i} || TxID )
@@ -216,10 +198,8 @@ int secp256k1_mpt_prove_same_plaintext_multi(
 
   // s_m = k_m + e * m
   {
-    unsigned char m_scalar[32] = {0};
-    // Convert uint64 to big-endian 32-byte
-    for (i = 0; i < 8; ++i)
-      m_scalar[31 - i] = (amount_m >> (i * 8)) & 0xFF;
+    unsigned char m_scalar[32];
+    mpt_uint64_to_scalar(m_scalar, amount_m);
 
     memcpy(s_m, k_m, 32);
     if (!secp256k1_ec_seckey_tweak_mul(ctx, m_scalar, e))

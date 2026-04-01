@@ -50,31 +50,12 @@
  * @see [Spec (ConfidentialMPT_20260106.pdf) Section 3.3.3] Proof of Equality of
  * Plaintexts (Different Keys, Same Secret Amount)
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* --- Internal Helpers --- */
-
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
-
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar)
-{
-  do
-  {
-    if (RAND_bytes(scalar, 32) != 1)
-      return 0;
-  } while (!secp256k1_ec_seckey_verify(ctx, scalar));
-  return 1;
-}
 
 /**
  * Builds the challenge hash input.
@@ -181,8 +162,7 @@ int secp256k1_mpt_prove_same_plaintext(
                                   &T_r1_P1, &T_r2_G, &T_r2_P2, tx_context_id);
 
   /* 4. Responses */
-  for (int i = 0; i < 8; ++i)
-    m_scalar[31 - i] = (amount_m >> (i * 8)) & 0xFF;
+  mpt_uint64_to_scalar(m_scalar, amount_m);
 
   // s_m = k_m + e * m
   memcpy(s_m, k_m, 32);

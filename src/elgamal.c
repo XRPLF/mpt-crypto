@@ -35,6 +35,7 @@
  *
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.2.2] ElGamal Encryption
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/rand.h>
 #include <openssl/sha.h>
@@ -42,13 +43,6 @@
 #include <string.h>
 
 /* --- Internal Helpers --- */
-
-static int pubkey_equal(const secp256k1_context *ctx,
-                        const secp256k1_pubkey *pk1,
-                        const secp256k1_pubkey *pk2)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
-}
 
 static int compute_amount_point(const secp256k1_context *ctx,
                                 secp256k1_pubkey *mG, uint64_t amount)
