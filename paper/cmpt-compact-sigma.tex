@@ -735,8 +735,8 @@ a single Schnorr response suffices.
 \begin{protocol}[$\pi_{\mathrm{eq}}$: constant-size shared-$r$ equality]
   \label{prot:equality-o1}
   On public input
-  $(C, \Delta D_2, \ldots, \Delta D_n,
-    \Delta P_2, \ldots, \Delta P_n)$
+  $\bigl(C,\; \Delta D_2, \ldots, \Delta D_n,$
+  $\Delta P_2, \ldots, \Delta P_n\bigr)$
   and private input~$r$:
 
   \begin{enumerate}
@@ -1056,6 +1056,350 @@ primitives, and no specification of new ciphertext formats;
 only the proof serialization changes.
 
 %--------------------------------------------------------------------
+\section{Extension to Other Transaction Types}
+\label{sec:other-tx}
+%--------------------------------------------------------------------
+
+The preceding analysis targets \textsf{ConfidentialMPTSend}, which
+carries the heaviest proof bundle.
+The remaining confidential transaction types---\textsf{Convert},
+\textsf{ConvertBack}, and \textsf{Clawback}---operate at the
+public/confidential boundary: the transfer amount~$m$ is publicly
+known, eliminating the need for same-plaintext equality proofs and,
+in most cases, range proofs.
+We show that compact-form techniques apply to these lighter
+transactions as well.
+
+\subsection{Convert and Clawback}
+\label{sec:convert-clawback}
+
+In \textsf{ConfidentialMPTConvert}, a holder moves a publicly known
+amount~$m$ from cleartext into a confidential balance.
+The holder proves knowledge of the randomness~$r$ used in the
+ciphertext $(C_1, C_2) = (r \cdot G,\; m \cdot G + r \cdot P_A)$.
+Since $m$ is public, this is a single Schnorr proof of knowledge
+of~$r$ ($\Pi_{\mathrm{plain}}$), currently serialised in commitment
+form as $(T_1, T_2, s) \in \G^2 \times \Zq$ costing
+$2 \times 33 + 32 = 98$~bytes.
+
+In compact form, the proof becomes
+\[
+  \Pi_{\mathrm{plain}} = (e,\, z_r) \;\in\; \Zq^2,
+  \qquad\text{costing } 2 \times 32 = \mathbf{64}\text{~bytes},
+\]
+with reconstruction:
+\begin{align}
+  T_1 &= z_r \cdot G - e \cdot C_1, \label{eq:recon-conv-t1} \\
+  T_2 &= z_r \cdot P_A - e \cdot (C_2 - m \cdot G).
+    \label{eq:recon-conv-t2}
+\end{align}
+
+\textsf{ConfidentialMPTClawback} is structurally identical: the issuer
+reveals $m$ and proves knowledge of randomness in a mirror ciphertext.
+Compact form yields the same $64$-byte proof.
+
+\begin{remark}[Deterministic verification]
+  \label{rem:deterministic}
+  Both Convert and Clawback admit an alternative where the prover
+  reveals~$r$ directly and the verifier checks the ciphertext
+  deterministically, at the cost of $32$~bytes with no sigma protocol.
+  If this path is adopted, compact form is moot for these two
+  transaction types.
+  The analysis below assumes ZK proofs are used.
+\end{remark}
+
+\subsection{ConvertBack}
+\label{sec:convertback}
+
+In \textsf{ConfidentialMPTConvertBack}, a holder withdraws a publicly
+known amount~$m$ from a confidential balance back to cleartext.
+The proof bundle has two sigma components:
+\begin{enumerate}[label=(\roman*)]
+  \item $\Pi_{\mathrm{plain}}$: proof that the withdrawal ciphertext
+        encrypts the declared~$m$ ($98$~bytes in commitment form).
+  \item $\Pi_{\mathrm{link\text{-}B}}$: balance linkage
+        (Variant~B)---the existing balance ciphertext $(B_1, B_2)$
+        encodes the same value~$b$ committed in $\mathit{PC}_b$
+        ($195$~bytes in commitment form).
+\end{enumerate}
+A single-value Bulletproof ($688$~bytes) then proves
+$b - m \in [0, 2^{64})$.
+
+\subsubsection*{Combined relation}
+
+Let $r_w$ denote the fresh randomness for the withdrawal ciphertext,
+$(C_{1,w}, C_{2,w}) = (r_w \cdot G,\; m \cdot G + r_w \cdot P_A)$.
+The combined ConvertBack relation is
+\begin{equation}
+  \label{eq:convertback-relation}
+  \mathcal{R}_{\mathrm{cb}} = \left\{
+  \bigl(\mathbf{x},\; w\bigr)
+  \;\middle|\;
+  \begin{aligned}
+    C_{1,w} &= r_w \cdot G, \\
+    C_{2,w} &= m \cdot G + r_w \cdot P_A, \\
+    P_A &= \sk_A \cdot G, \\
+    B_2 - b \cdot G &= \sk_A \cdot B_1, \\
+    \mathit{PC}_b &= b \cdot G + \rho \cdot H
+  \end{aligned}
+  \right\},
+\end{equation}
+where $w = (r_w,\, b,\, \sk_A,\, \rho)$ and $m$ is a public input.
+
+\subsubsection*{AND-composed compact-form protocol}
+
+The prover samples nonces $(t_{r_w},\, t_b,\, t_{\sk},\, t_\rho)
+\xleftarrow{\$} \Zq^4$ and computes five commitments:
+\begin{alignat*}{2}
+  T_1 &= t_{r_w} \cdot G, &\qquad
+  T_2 &= t_{r_w} \cdot P_A, \\
+  T_{\sk,1} &= t_{\sk} \cdot G, &\qquad
+  T_{\sk,2} &= t_b \cdot G + t_{\sk} \cdot B_1, \\
+  T_b &= t_b \cdot G + t_\rho \cdot H.
+\end{alignat*}
+Challenge and responses follow the same pattern as
+\cref{sec:protocol}: a single Fiat--Shamir challenge~$e$ binds all
+five commitments, and responses are
+$z_{r_w} = t_{r_w} + e \cdot r_w$,
+$z_b = t_b + e \cdot b$,
+$z_{\sk} = t_{\sk} + e \cdot \sk_A$,
+$z_\rho = t_\rho + e \cdot \rho$.
+
+\begin{definition}[Compact-form proof $\Pi_{\mathrm{cb}}$]
+  \label{def:compact-cb}
+  The non-interactive proof in compact form is
+  \[
+    \Pi_{\mathrm{cb}} = (e,\, z_{r_w},\, z_b,\, z_{\sk},\, z_\rho)
+    \;\in\; \Zq^5.
+  \]
+  \textbf{Verification:}
+  \begin{enumerate}
+    \item Reconstruct commitments:
+    \begin{align}
+      T_1 &= z_{r_w} \cdot G - e \cdot C_{1,w},
+        \label{eq:recon-cb-t1} \\
+      T_2 &= z_{r_w} \cdot P_A - e \cdot (C_{2,w} - m \cdot G),
+        \label{eq:recon-cb-t2} \\
+      T_{\sk,1} &= z_{\sk} \cdot G - e \cdot P_A,
+        \label{eq:recon-cb-tsk1} \\
+      T_{\sk,2} &= z_b \cdot G + z_{\sk} \cdot B_1 - e \cdot B_2,
+        \label{eq:recon-cb-tsk2} \\
+      T_b &= z_b \cdot G + z_\rho \cdot H - e \cdot \mathit{PC}_b.
+        \label{eq:recon-cb-tb}
+    \end{align}
+    \item Recompute $e'$ from the Fiat--Shamir hash over the domain
+          tag, public inputs, and reconstructed commitments.
+    \item Accept iff $e' = e$.
+  \end{enumerate}
+\end{definition}
+
+\noindent\textbf{Proof size.}
+$5 \times 32 = \mathbf{160}$~bytes (one challenge, four responses).
+The current commitment-form cost is $98 + 195 = 293$~bytes.
+The saving decomposes into two independent contributions:
+\begin{itemize}
+  \item \emph{Compact form} (dropping group-element commitments):
+        $293 - 192 = 101$~bytes.
+  \item \emph{AND composition} (merging two separate challenges into
+        one): a further $192 - 160 = 32$~bytes.
+\end{itemize}
+
+\begin{remark}[Security]
+  The security argument for $\Pi_{\mathrm{cb}}$ is analogous to
+  \cref{sec:security}: the witnesses $(r_w, b, \sk_A, \rho)$ are
+  independent, so $2$-special soundness extracts each from two
+  accepting transcripts with distinct challenges.
+  HVZK follows from the uniform distribution of the nonces.
+\end{remark}
+
+\subsection{Cross-Transaction Summary}
+\label{sec:cross-tx-summary}
+
+\Cref{tab:cross-tx} summarises the compact-form savings across all
+four confidential transaction types.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Sigma-proof sizes across transaction types.
+    Range proofs (Bulletproof) are unchanged and shown separately.
+    Convert and Clawback assume ZK proofs rather than deterministic
+    verification (\cref{rem:deterministic}).}
+  \label{tab:cross-tx}
+  \begin{tabular}{l@{\quad}r@{\quad}r@{\quad}r@{\quad}r}
+    \toprule
+    Transaction type
+    & \shortstack{Sigma\\(current)}
+    & \shortstack{Sigma\\(compact)}
+    & \shortstack{Range\\proof}
+    & \shortstack{Sigma\\saving} \\
+    \midrule
+    \textsf{Send} ($n{=}4$)
+      & $619$ & $192$ & $754$ & $427$ ($69\%$) \\
+    \textsf{ConvertBack}
+      & $293$ & $160$ & $688$ & $133$ ($45\%$) \\
+    \textsf{Convert}
+      & $98$ & $64$ & --- & $34$ ($35\%$) \\
+    \textsf{Clawback}
+      & $98$ & $64$ & --- & $34$ ($35\%$) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\noindent
+The absolute savings are largest for \textsf{Send} ($427$~bytes), as
+expected given its richer proof structure.
+For \textsf{ConvertBack}, the $133$-byte reduction still represents a
+meaningful improvement: the total proof payload drops from
+$293 + 688 = 981$~bytes to $160 + 688 = 848$~bytes ($14\%$).
+Convert and Clawback see modest absolute savings ($34$~bytes each),
+though the percentage reduction in sigma overhead is comparable.
+
+The compact-form technique is uniform: the same design
+pattern---AND-compose all sigma relations, transmit $(e, \mathbf{z})$
+instead of $(\mathbf{T}, \mathbf{z})$, reconstruct commitments during
+verification---applies to every transaction type without exception.
+
+\subsection{Implementation Changes}
+\label{sec:other-tx-impl}
+
+Adopting compact sigma for the non-Send transaction types requires
+coordinated changes in the cryptographic library
+(\texttt{mpt-crypto}) and the ledger node (\texttt{rippled}).
+
+\subsubsection*{Changes in \texttt{mpt-crypto}}
+
+The \texttt{mpt-crypto} library already implements each building-block
+sigma protocol as a separate prove/verify pair:
+\texttt{secp256k1\_equality\_plaintext\_\{prove,verify\}} for the
+plaintext~PoK ($\Pi_{\mathrm{plain}}$, $98$~bytes) and
+\texttt{secp256k1\_elgamal\_pedersen\_link\_\{prove,verify\}} for
+the linkage proof ($\Pi_{\mathrm{link}}$, $195$~bytes).
+The different transaction types compose these building blocks: Convert
+and Clawback use $\Pi_{\mathrm{plain}}$ alone; ConvertBack uses
+$\Pi_{\mathrm{plain}} + \Pi_{\mathrm{link\text{-}B}}$ plus a
+Bulletproof; Send uses all three plus the shared-$r$ equality proof.
+
+The compact sigma implementation for Send (PR~\#18) establishes
+the pattern: a single new source file
+(\texttt{proof\_compact\_standard.c}) with dedicated
+prove/verify entry points, a size constant, and a
+Fiat--Shamir domain tag distinct from the commitment-form proofs.
+No changes to the underlying scalar or group-arithmetic layer are
+needed.
+
+Following this convention, we propose one new source file per
+remaining transaction type:
+
+\begin{description}[style=nextline,leftmargin=1.5em]
+  \item[Convert / Clawback (compact $\Pi_{\mathrm{plain}}$).]
+    A new source file (e.g.\
+    \texttt{proof\_compact\_convert.c}) providing prove/verify
+    entry points that replace the commitment-form
+    \texttt{secp256k1\_equality\_plaintext} calls on main.
+    The proof shrinks from $98$ to $64$~bytes.
+    Internally, the prover samples one nonce~$t_{r}$, computes one
+    response $z_r = t_r + e \cdot r$, and serialises $(e, z_r)$.
+    The verifier reconstructs $T_1, T_2$ via
+    \crefrange{eq:recon-conv-t1}{eq:recon-conv-t2} and re-hashes.
+    %
+    The Fiat--Shamir domain tag must differ from both the
+    Send compact tag (\texttt{CMPT\_COMBINED\_STD\_PROOF}) and the
+    existing commitment-form tag
+    (\texttt{MPT\_POK\_PLAINTEXT\_PROOF}) to prevent cross-protocol
+    forgery.
+
+  \item[ConvertBack (compact $\Pi_{\mathrm{cb}}$).]
+    A new source file (e.g.\
+    \texttt{proof\_compact\_convertback.c}) providing
+    prove/verify entry points.
+    Proof size: $160$~bytes.
+    This AND-composes the $\Pi_{\mathrm{plain}}$ and
+    $\Pi_{\mathrm{link\text{-}B}}$ relations under a single
+    Fiat--Shamir challenge, replacing the two separate
+    building-block calls on main
+    (plaintext PoK and ElGamal--Pedersen linkage).
+    The implementation mirrors the Send compact proof: sample four
+    nonces, compute the five commitments of
+    \cref{sec:convertback}, derive~$e$, compute four responses,
+    and serialise $(e, z_{r_w}, z_b, z_{\sk}, z_\rho)$.
+    A new domain tag (distinct from both the Send compact tag and
+    the existing commitment-form tags) is required.
+
+    The Bulletproof range proof for
+    $b - m \in [0, 2^{64})$ is unchanged;
+    the existing Bulletproof prove/verify functions continue to
+    operate on the Pedersen commitment
+    $\mathit{PC}_b - m \cdot G$.
+\end{description}
+
+\noindent
+PR~\#18 also introduces \texttt{mpt\_internal.h} with shared
+helpers (\texttt{generate\_random\_scalar},
+\texttt{mpt\_uint64\_to\_scalar}, etc.) that the new source
+files can reuse directly.
+In all cases, the old commitment-form functions on main are
+retained; the compact variants are strictly additive.
+The nonce-generation guidance of \cref{sec:nonces} (deterministic
+synthetic nonces incorporating the full witness) applies equally to
+ConvertBack and Convert.
+
+\subsubsection*{Changes in \texttt{rippled}}
+
+The ledger node calls \texttt{mpt-crypto} during transaction
+validation.
+Required changes:
+
+\begin{enumerate}
+  \item \textbf{Proof-size constants.}
+    The serialisation layer must accept the new proof sizes:
+    $64$~bytes for Convert/Clawback sigma proofs and $160$~bytes for
+    ConvertBack sigma proofs (replacing $98$ and $98 + 195 = 293$
+    respectively).
+    These constants gate deserialisation and buffer allocation.
+
+  \item \textbf{Verification call sites.}
+    Each transaction handler currently calls the commitment-form
+    verify function.
+    For \textsf{ConfidentialMPTConvertBack}, the two separate verify
+    calls (plaintext proof and linkage proof) are replaced by a
+    single call to the compact ConvertBack verifier.
+    For Convert and Clawback, a single call replaces the existing
+    one, with the only visible change being the proof buffer size.
+
+  \item \textbf{TransactionContextID construction.}
+    The Fiat--Shamir hash in each compact proof binds the
+    $\TransCtx$.
+    The \texttt{rippled} code that constructs these context IDs is
+    transaction-type-specific and is already in place; no change is
+    needed unless the domain tag is incorporated into the
+    context ID itself rather than the proof hash (the current
+    design keeps them separate).
+
+  \item \textbf{Amendment gating.}
+    Because the proof format is a consensus-visible change (validators
+    must agree on the serialisation), the new compact formats must be
+    gated behind an XRPL amendment.
+    The amendment can cover all three transaction types simultaneously,
+    or be staged (Send first, others in a follow-up), depending on
+    rollout preferences.
+    During the transition, validators must accept \emph{both}
+    commitment-form and compact-form proofs until the amendment
+    activates, at which point only compact form is accepted.
+\end{enumerate}
+
+\begin{remark}[Scope relative to Send]
+  The compact sigma for \textsf{Send} is the higher-priority
+  implementation target, since it delivers the largest absolute saving
+  ($427$~bytes) on the most frequent transaction type.
+  The Convert/ConvertBack/Clawback extensions described here are
+  incremental: they reuse the same architectural pattern and can share
+  infrastructure (e.g., the scalar serialisation helpers in
+  \texttt{mpt\_internal.h}) already introduced for Send.
+  They can be implemented in a follow-up PR once the Send compact
+  sigma has been validated.
+\end{remark}
+
+%--------------------------------------------------------------------
 \appendix
 \section{Twisted ElGamal Variant}
 \label{app:twisted}
@@ -1076,10 +1420,10 @@ $\mathit{PC}_m$ and $\mathit{PC}_b$.
 The refreshed remainder ciphertext $(Y^*, X^*)$ uses a DDH proof
 to link to the balance.
 The combined relation is:
-\[
+\begin{multline*}
   L_{\mathrm{comb}}^{(n)} = \bigl\{
   (\pk_i, Y, X_i, \pk_A, D_X, D_Y) \;\big|\;
-  \exists\,(r, m, \sk_A) \in \Zq^3:
+  \exists\,(r, m, \sk_A) \in \Zq^3: \\
   Y = r \cdot G + m \cdot H
   \;\wedge\;
   X_i = r \cdot \pk_i\; \forall i
@@ -1088,7 +1432,7 @@ The combined relation is:
   \;\wedge\;
   D_X = \sk_A \cdot D_Y
   \bigr\},
-\]
+\end{multline*}
 where $D_X, D_Y$ are the difference ciphertext components.
 The witness is $(r, m, \sk_A)$---only three scalars, compared to five
 for standard EC-ElGamal.
