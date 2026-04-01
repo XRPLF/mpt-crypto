@@ -117,7 +117,6 @@ int secp256k1_compact_standard_prove(
   unsigned char alpha[32], beta[32], gamma[32], delta[32], epsilon[32];
   unsigned char m_scalar[32], v_scalar[32];
   unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_v[32];
-  unsigned char term[32];
   secp256k1_pubkey T1, T_PCm, K1, T_PCb, K2;
   secp256k1_pubkey *T2_vec = NULL;
   secp256k1_pubkey H;
@@ -228,43 +227,19 @@ int secp256k1_compact_standard_prove(
   /* 4. Responses */
 
   /* z_r = alpha + e*r */
-  memcpy(z_r, alpha, 32);
-  memcpy(term, r_shared, 32);
-  if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
+  if (!compute_sigma_response(ctx, z_r, alpha, e, r_shared))
     goto cleanup;
-  if (!secp256k1_ec_seckey_tweak_add(ctx, z_r, term))
-    goto cleanup;
-
   /* z_m = beta + e*m */
-  memcpy(z_m, beta, 32);
-  memcpy(term, m_scalar, 32);
-  if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
+  if (!compute_sigma_response(ctx, z_m, beta, e, m_scalar))
     goto cleanup;
-  if (!secp256k1_ec_seckey_tweak_add(ctx, z_m, term))
-    goto cleanup;
-
   /* z_sk = gamma + e*sk_A */
-  memcpy(z_sk, gamma, 32);
-  memcpy(term, sk_A, 32);
-  if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
+  if (!compute_sigma_response(ctx, z_sk, gamma, e, sk_A))
     goto cleanup;
-  if (!secp256k1_ec_seckey_tweak_add(ctx, z_sk, term))
-    goto cleanup;
-
   /* z_rb = delta + e*r_b */
-  memcpy(z_rb, delta, 32);
-  memcpy(term, r_b, 32);
-  if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
+  if (!compute_sigma_response(ctx, z_rb, delta, e, r_b))
     goto cleanup;
-  if (!secp256k1_ec_seckey_tweak_add(ctx, z_rb, term))
-    goto cleanup;
-
   /* z_v = epsilon + e*v */
-  memcpy(z_v, epsilon, 32);
-  memcpy(term, v_scalar, 32);
-  if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
-    goto cleanup;
-  if (!secp256k1_ec_seckey_tweak_add(ctx, z_v, term))
+  if (!compute_sigma_response(ctx, z_v, epsilon, e, v_scalar))
     goto cleanup;
 
   /* 5. Serialize compact proof: e || z_r || z_m || z_sk || z_rb || z_v */
@@ -286,7 +261,6 @@ cleanup:
   OPENSSL_cleanse(m_scalar, 32);
   OPENSSL_cleanse(v_scalar, 32);
   OPENSSL_cleanse(e, 32);
-  OPENSSL_cleanse(term, 32);
   OPENSSL_cleanse(z_r, 32);
   OPENSSL_cleanse(z_m, 32);
   OPENSSL_cleanse(z_sk, 32);

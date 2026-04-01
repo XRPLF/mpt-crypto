@@ -552,6 +552,97 @@ secp256k1_compact_standard_verify(
     secp256k1_pubkey const* C2_rem,
     unsigned char const* context_id);
 
+/*
+================================================================================
+|                                                                              |
+|            COMPACT SIGMA PROOF — CONVERT / CLAWBACK                         |
+|                                                                              |
+================================================================================
+ *
+ * Proves knowledge of randomness r for a ciphertext encrypting a publicly
+ * known amount m:  C1 = r*G,  C2 = m*G + r*P_A.
+ *
+ * Compact proof: (e, z_r) in Z_q^2 = 64 bytes.
+ * Fiat-Shamir domain: "CMPT_CONVERT_COMPACT"
+ */
+
+#define SECP256K1_COMPACT_CONVERT_PROOF_SIZE 64
+
+SECP256K1_API int
+secp256k1_compact_convert_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    unsigned char const* r,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    secp256k1_pubkey const* pk_A,
+    unsigned char const* context_id);
+
+SECP256K1_API int
+secp256k1_compact_convert_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    uint64_t amount,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    secp256k1_pubkey const* pk_A,
+    unsigned char const* context_id);
+
+/*
+================================================================================
+|                                                                              |
+|            COMPACT SIGMA PROOF — CONVERTBACK                                |
+|                                                                              |
+================================================================================
+ *
+ * AND-composed proof for withdrawing a publicly known amount m from an
+ * encrypted balance.  Combines withdrawal ciphertext correctness, key
+ * ownership, balance decryption linkage, and balance Pedersen commitment.
+ *
+ * Language: exists (r_w, b, sk_A, rho) in Z_q^4 such that:
+ *   C1_w     = r_w*G
+ *   C2_w     = m*G + r_w*P_A
+ *   P_A      = sk_A*G
+ *   B2 - b*G = sk_A*B1
+ *   PC_b     = b*G + rho*H
+ *
+ * Compact proof: (e, z_rw, z_b, z_sk, z_rho) in Z_q^5 = 160 bytes.
+ * Fiat-Shamir domain: "CMPT_CONVERTBACK_COMPACT"
+ */
+
+#define SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE 160
+
+SECP256K1_API int
+secp256k1_compact_convertback_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    uint64_t balance,
+    unsigned char const* r_w,
+    unsigned char const* sk_A,
+    unsigned char const* rho,
+    secp256k1_pubkey const* C1_w,
+    secp256k1_pubkey const* C2_w,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    secp256k1_pubkey const* PC_b,
+    unsigned char const* context_id);
+
+SECP256K1_API int
+secp256k1_compact_convertback_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    uint64_t amount,
+    secp256k1_pubkey const* C1_w,
+    secp256k1_pubkey const* C2_w,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    secp256k1_pubkey const* PC_b,
+    unsigned char const* context_id);
+
 #ifdef __cplusplus
 }
 #endif
