@@ -13,6 +13,7 @@ static void test_homomorphic_operations(const secp256k1_context *ctx);
 static void test_zero_encryption(const secp256k1_context *ctx);
 static void test_canonical_zero(const secp256k1_context *ctx);
 static void test_verify_encryption(const secp256k1_context *ctx);
+static void test_decryption_boundaries(const secp256k1_context *ctx);
 
 // Main test runner
 int main()
@@ -32,6 +33,7 @@ int main()
   test_zero_encryption(ctx);
   test_canonical_zero(ctx);
   test_verify_encryption(ctx);
+  test_decryption_boundaries(ctx);
 
   secp256k1_context_destroy(ctx);
   printf("ALL TESTS PASSED\n");
@@ -207,6 +209,35 @@ static void test_verify_encryption(const secp256k1_context *ctx)
   c2 = c1; // Force a mismatch
   EXPECT(secp256k1_elgamal_verify_encryption(
              ctx, &c1, &c2, &pubkey, zero_amount, blinding_factor) == 0);
+
+  printf("Test passed!\n");
+}
+static void test_decryption_boundaries(const secp256k1_context *ctx)
+{
+  unsigned char privkey[32], blinding_factor[32];
+  secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
+  uint64_t decrypted_amount = 0;
+
+  printf("Running test: decryption boundary limits (1,000,000)...\n");
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  // Need a random scalar for the blinding factor
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, blinding_factor,
+                                            &temp_pubkey) == 1);
+
+  /* Test exact upper boundary: 1,000,000 (Should succeed) */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000000,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
+         1);
+  EXPECT(decrypted_amount == 1000000);
+
+  /* Test just outside boundary: 1,000,001 (Should gracefully fail to find) */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000001,
+                                   blinding_factor) == 1);
+  /* The decryption function should return 0 (not found) */
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
+         0);
 
   printf("Test passed!\n");
 }

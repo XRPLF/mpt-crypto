@@ -42,8 +42,9 @@
  */
 
 #include "secp256k1_mpt.h"
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -82,7 +83,7 @@ static int compute_amount_point(const secp256k1_context *ctx,
 /**
  * Streaming Hash Builder (Avoids large stack buffers)
  */
-static void compute_challenge_equality(
+static int compute_challenge_equality(
     const secp256k1_context *ctx, unsigned char *e_out,
     const secp256k1_pubkey *c1, const secp256k1_pubkey *c2,
     const secp256k1_pubkey *pk,
@@ -90,50 +91,92 @@ static void compute_challenge_equality(
     const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
     const unsigned char *tx_context_id)
 {
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
   const char *domain = "MPT_POK_PLAINTEXT_PROOF";
+  int ok = 0;
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, domain, strlen(domain));
+  if (!mdctx)
+  {
+    memset(e_out, 0, 32);
+    return 0;
+  }
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
 
   // C1, C2, Pk
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, c1, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, c1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, c2, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, c2,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
-  // mG (Only if nonzero, logic from original code implied this structure)
-  // Note: The original code had two separate functions. We unify them here.
   if (mG)
   {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, mG, SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, mG,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
   }
 
-  // T1, T2
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, T1, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, T1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, T2, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, T2,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
   if (tx_context_id)
   {
-    SHA256_Update(&sha, tx_context_id, 32);
+    if (EVP_DigestUpdate(mdctx, tx_context_id, 32) != 1)
+      goto cleanup;
   }
 
-  SHA256_Final(h, &sha);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
+
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  if (!ok)
+  {
+    memset(e_out, 0, 32); /* Poison buffer on failure */
+  }
+  return ok;
 }
 
 /* --- Public API --- */
@@ -177,8 +220,10 @@ int secp256k1_equality_plaintext_prove(
       goto cleanup;
     mG_ptr = &mG;
   }
-  compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1, &T2,
-                             tx_context_id);
+
+  if (!compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1,
+                                  &T2, tx_context_id))
+    goto cleanup;
 
   /* 4. Compute s = t + e * r */
   memcpy(s, t, 32);
@@ -192,13 +237,15 @@ int secp256k1_equality_plaintext_prove(
   unsigned char *ptr = proof;
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T1,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
 
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &T2,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
 
@@ -213,6 +260,7 @@ cleanup:
   OPENSSL_cleanse(s, 32);
   return ok;
 }
+
 int secp256k1_equality_plaintext_verify(const secp256k1_context *ctx,
                                         const unsigned char *proof,
                                         const secp256k1_pubkey *c1,
@@ -252,8 +300,10 @@ int secp256k1_equality_plaintext_verify(const secp256k1_context *ctx,
       goto cleanup;
     mG_ptr = &mG;
   }
-  compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1, &T2,
-                             tx_context_id);
+
+  if (!compute_challenge_equality(ctx, e, c1, c2, pk_recipient, mG_ptr, &T1,
+                                  &T2, tx_context_id))
+    goto cleanup;
 
   /* 3. Verify Equations */
 

@@ -16,8 +16,6 @@ add_library(
     src/mpt_scalar.c
     src/proof_link.c
     src/proof_pok_sk.c
-    src/proof_same_plaintext.c
-    src/proof_same_plaintext_multi.c
     src/proof_same_plaintext_multi_shared_r.c
     src/utility/mpt_utility.cpp
 )

@@ -50,8 +50,9 @@
  * Plaintexts with Shared Randomness
  */
 #include "secp256k1_mpt.h"
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -84,62 +85,99 @@ size_t secp256k1_mpt_proof_equality_shared_r_size(size_t n_recipients)
 /*
  * Hash( Domain || C1 || {C2_i, Pk_i} || Tr || {Tm_i} || ContextID )
  */
-static void compute_challenge_equality_shared_r(
+static int compute_challenge_equality_shared_r(
     const secp256k1_context *ctx, unsigned char *e_out, size_t n,
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *Tr,
     const secp256k1_pubkey *Tm_vec, const unsigned char *context_id)
 {
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
   size_t i;
   const char *domain = "MPT_POK_SAME_PLAINTEXT_SHARED_R";
+  int ok = 0;
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, domain, strlen(domain));
+  if (!mdctx)
+  {
+    memset(e_out, 0, 32);
+    return 0;
+  }
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
+    goto cleanup;
 
   /* 1. Shared C1 */
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
   /* 2. Pairs {C2_i, Pk_i} */
   for (i = 0; i < n; i++)
   {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
   }
 
   /* 3. Commitment Tr */
   len = 33;
-  secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr, SECP256K1_EC_COMPRESSED);
-  SHA256_Update(&sha, buf, 33);
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto cleanup;
 
   /* 4. Commitments {Tm_i} */
   for (i = 0; i < n; i++)
   {
     len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, buf, 33);
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto cleanup;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto cleanup;
   }
 
   /* 5. Transaction Context */
   if (context_id)
   {
-    SHA256_Update(&sha, context_id, 32);
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
   }
 
-  SHA256_Final(h, &sha);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  if (!ok)
+  {
+    memset(e_out, 0, 32); /* Poison buffer on failure */
+  }
+  return ok;
 }
 
 /* --- Public API --- */
@@ -147,11 +185,14 @@ static void compute_challenge_equality_shared_r(
 int secp256k1_mpt_prove_equality_shared_r(
     const secp256k1_context *ctx,
     unsigned char *proof_out, // Caller MUST allocate
-                              // secp256k1_mpt_proof_equality_shared_r_size(n)
+    // secp256k1_mpt_proof_equality_shared_r_size(n)
     uint64_t amount, const unsigned char *r_shared, size_t n,
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
+  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
+  if (n == 0 || n > 4)
+    return 0;
   /* Local Variables */
   unsigned char k_m[32], k_r[32];
   unsigned char m_scalar[32] = {0};
@@ -213,8 +254,9 @@ int secp256k1_mpt_prove_equality_shared_r(
   }
 
   /* 4. Compute Challenge */
-  compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
-                                      Tm_vec, context_id);
+  if (!compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
+                                           Tm_vec, context_id))
+    goto cleanup;
 
   /* 5. Compute Responses */
 
@@ -239,7 +281,8 @@ int secp256k1_mpt_prove_equality_shared_r(
   /* Serialize Tr */
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tr,
-                                     SECP256K1_EC_COMPRESSED))
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
     goto cleanup;
   ptr += 33;
 
@@ -248,7 +291,8 @@ int secp256k1_mpt_prove_equality_shared_r(
   {
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tm_vec[i],
-                                       SECP256K1_EC_COMPRESSED))
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
       goto cleanup;
     ptr += 33;
   }
@@ -276,13 +320,17 @@ cleanup:
     free(Tm_vec);
   return ok;
 }
+
 int secp256k1_mpt_verify_equality_shared_r(
     const secp256k1_context *ctx,
     const unsigned char *proof, // Caller MUST provide buffer of size:
-                                // secp256k1_mpt_proof_equality_shared_r_size(n)
+    // secp256k1_mpt_proof_equality_shared_r_size(n)
     size_t n, const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
+  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
+  if (n == 0 || n > 4)
+    return 0;
   /* Calculate expected size internally for strict checking later */
   size_t expected_len = secp256k1_mpt_proof_equality_shared_r_size(n);
 
@@ -327,9 +375,14 @@ int secp256k1_mpt_verify_equality_shared_r(
   if (!secp256k1_ec_seckey_verify(ctx, s_r))
     goto cleanup;
 
+  /* Fail fast! Strict length check before heavy crypto math */
+  if ((size_t)(ptr - proof) != expected_len)
+    goto cleanup;
+
   /* 2. Challenge */
-  compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
-                                      Tm_vec, context_id);
+  if (!compute_challenge_equality_shared_r(ctx, e, n, C1, C2_vec, Pk_vec, &Tr,
+                                           Tm_vec, context_id))
+    goto cleanup;
 
   /* 3. Verification Equations */
 
@@ -383,10 +436,6 @@ int secp256k1_mpt_verify_equality_shared_r(
         goto cleanup;
     }
   }
-
-  // Strict Length Check: Ensure we read exactly what was expected
-  if ((size_t)(ptr - proof) != expected_len)
-    goto cleanup;
 
   ok = 1;
 

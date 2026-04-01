@@ -1,5 +1,6 @@
 #include "secp256k1_mpt.h"
 #include "test_utils.h"
+#include <openssl/evp.h>
 #include <secp256k1.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -220,17 +221,47 @@ int main(void)
 
   /* 4. Transcript & Binding Challenge */
   unsigned char ipa_transcript_id[32];
-  SHA256((unsigned char *)"IPA_TEST", 8, ipa_transcript_id);
-
   unsigned char ux[32];
+
   {
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, ipa_transcript_id, 32);
-    SHA256_Update(&sha, dot, 32);
-    SHA256_Final(ux, &sha);
-    /* Reduce is handled in real code, here just check verify */
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int ok = 0;
+    unsigned int md_len = 0;
+
+    if (!mdctx)
+      goto test_cleanup;
+
+    /* ipa_transcript_id = SHA256("IPA_TEST") */
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto test_cleanup;
+    if (EVP_DigestUpdate(mdctx, "IPA_TEST", 8) != 1)
+      goto test_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1 ||
+        md_len != 32)
+      goto test_cleanup;
+
+    /* ux = SHA256(ipa_transcript_id || dot) */
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto test_cleanup;
+    if (EVP_DigestUpdate(mdctx, ipa_transcript_id, 32) != 1)
+      goto test_cleanup;
+    if (EVP_DigestUpdate(mdctx, dot, 32) != 1)
+      goto test_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, ux, &md_len) != 1 || md_len != 32)
+      goto test_cleanup;
+
     secp256k1_mpt_scalar_reduce32(ux, ux);
+
+    ok = 1;
+
+  test_cleanup:
+    EVP_MD_CTX_free(mdctx);
+
+    if (!ok)
+    {
+      fprintf(stderr, "[IPA TEST] Transcript construction failed\n");
+      return 1; /* exit test immediately */
+    }
   }
 
   /* 5. Build Initial Commitment P = <a,G> + <b,H> + <a,b>*ux*U */
@@ -245,25 +276,25 @@ int main(void)
     if (!scalar_is_zero(ai))
     {
       tmp = G0[i];
-      secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ai);
-      add_term(ctx, &P, &P_inited, &tmp);
+      EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ai) == 1);
+      EXPECT(add_term(ctx, &P, &P_inited, &tmp) == 1);
     }
+
     if (!scalar_is_zero(bi))
     {
       tmp = H0[i];
-      secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, bi);
-      add_term(ctx, &P, &P_inited, &tmp);
+      EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, bi) == 1);
+      EXPECT(add_term(ctx, &P, &P_inited, &tmp) == 1);
     }
   }
-
   /* Add Binding Term: (<a,b>*ux)*U */
   unsigned char dot_ux[32];
   secp256k1_mpt_scalar_mul(dot_ux, dot, ux);
   if (!scalar_is_zero(dot_ux))
   {
     tmp = U;
-    secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, dot_ux);
-    add_term(ctx, &P, &P_inited, &tmp);
+    EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, dot_ux) == 1);
+    EXPECT(add_term(ctx, &P, &P_inited, &tmp) == 1);
   }
   EXPECT(P_inited);
 

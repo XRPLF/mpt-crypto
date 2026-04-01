@@ -36,14 +36,6 @@ add_mpt_test(test_elgamal test_elgamal.c DEPENDENCIES mpt-crypto)
 
 add_mpt_test(test_equality_proof test_equality_proof.c DEPENDENCIES mpt-crypto)
 
-add_mpt_test(test_same_plaintext test_same_plaintext.c DEPENDENCIES mpt-crypto)
-
-add_mpt_test(
-    test_same_plaintext_multi
-    test_same_plaintext_multi.c
-    DEPENDENCIES mpt-crypto
-)
-
 add_mpt_test(
     test_link_proof
     test_link_proof.c

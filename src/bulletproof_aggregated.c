@@ -44,8 +44,9 @@
  */
 #include "secp256k1_mpt.h"
 #include <assert.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <secp256k1.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,10 @@
 
 /* Compute total vector length for aggregated Bulletproof */
 #define BP_TOTAL_BITS(m) ((size_t)(BP_VALUE_BITS * (m)))
+
+/* Maximum number of values that can be aggregated in a single proof
+ * to prevent excessive memory allocation. */
+#define BP_MAX_VALUES 4
 
 /* Compute IPA rounds = log2(total_bits) */
 static inline size_t bp_ipa_rounds(size_t total_bits)
@@ -155,6 +160,7 @@ int secp256k1_bulletproof_ipa_dot(const secp256k1_context *ctx,
                                   unsigned char *out, const unsigned char *a,
                                   const unsigned char *b, size_t n)
 {
+  (void)ctx;
   unsigned char acc[32] = {0};
   unsigned char term[32];
 
@@ -183,18 +189,32 @@ int secp256k1_bulletproof_add_point_to_accumulator(const secp256k1_context *ctx,
   *acc = temp_sum;
   return 1;
 }
+
+static int scalar_is_zero(const unsigned char s[32])
+{
+  unsigned char b = 0;
+  for (int i = 0; i < 32; i++)
+  {
+    b |= s[i];
+  }
+  return (b == 0) ? 1 : 0;
+}
+
 /**
  * Computes Multiscalar Multiplication (MSM): R = sum(s[i] * P[i]).
- * ctx       The context.
- * r_out     Output point (the sum R).
- * points    Array of N input points (secp256k1_pubkey).
- * scalars   Flat array of N 32-byte scalars.
- * n         The number of terms (N).
- * return    1 on success, 0 on failure.
- * NOTE: This MSM is used only for Bulletproofs where all scalars are public.
- * It is NOT constant-time with respect to scalars and MUST NOT be used
- * for secret-key operations.
+ * This function is called in two contexts:
+ * 1. secp256k1_bulletproof_ipa_compute_LR (prover only):
+ * - Round 0: scalars are a_L/b_R in {0,1}, derived from the prover's secret.
+ * - Rounds 1+: scalars are general 256-bit folded values.
+ * Timing varies with the scalar's Hamming weight. Because the prover
+ * operates on their own secret, exploitation requires an external attacker
+ * to have precise timing observation over the prover's local execution
+ * environment.
+ * 2. fold_generators (verifier) and calculate_commitment_term (prover):
+ * Scalars are either public Fiat-Shamir values or sparse bit vectors.
+ * There is no secret timing concern in these contexts.
  */
+
 int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
                                   secp256k1_pubkey *r_out,
                                   const secp256k1_pubkey *points,
@@ -203,28 +223,32 @@ int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
   secp256k1_pubkey acc;
   memset(&acc, 0, sizeof(acc));
   int initialized = 0;
-  unsigned char zero[32] = {0};
 
   for (size_t i = 0; i < n; ++i)
   {
-    if (memcmp(scalars + i * 32, zero, 32) == 0)
+    unsigned char s_tmp[32];
+    memcpy(s_tmp, scalars + i * 32, 32);
+
+    if (scalar_is_zero(s_tmp))
+    {
       continue;
+    }
 
     secp256k1_pubkey term = points[i];
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, scalars + i * 32))
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_tmp))
       return 0;
 
     if (!add_term(ctx, &acc, &initialized, &term))
       return 0;
   }
 
-  /* All scalars zero → result is infinity (not representable here) */
   if (!initialized)
     return 0;
 
   *r_out = acc;
   return 1;
 }
+
 /* Try to add MSM(points, scalars) into acc.
  * If MSM is all-zero, do nothing and succeed.
  */
@@ -249,6 +273,7 @@ static int msm_try_add(const secp256k1_context *ctx, secp256k1_pubkey *acc,
 void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
                        unsigned char a[][32], unsigned char b[][32], size_t n)
 {
+  (void)ctx;
   for (size_t i = 0; i < n; i++)
   {
     secp256k1_mpt_scalar_mul(res[i], a[i], b[i]);
@@ -261,6 +286,7 @@ void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
 void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
                        unsigned char a[][32], unsigned char b[][32], size_t n)
 {
+  (void)ctx;
   for (size_t i = 0; i < n; i++)
   {
     secp256k1_mpt_scalar_add(res[i], a[i], b[i]);
@@ -273,6 +299,7 @@ void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
 void scalar_vector_powers(const secp256k1_context *ctx, unsigned char res[][32],
                           const unsigned char *y, size_t n)
 {
+  (void)ctx;
   if (n == 0)
     return;
 
@@ -313,18 +340,6 @@ static void compute_z_pows_j2(const secp256k1_context *ctx,
   {
     scalar_pow_u32(ctx, z_j2[j], z, (unsigned int)(j + 2));
   }
-}
-
-/**
- * Point = Scalar * Point (using public API)
- */
-static int secp256k1_bulletproof_point_scalar_mul(const secp256k1_context *ctx,
-                                                  secp256k1_pubkey *r_out,
-                                                  const secp256k1_pubkey *p_in,
-                                                  const unsigned char *s_scalar)
-{
-  *r_out = *p_in;
-  return secp256k1_ec_pubkey_tweak_mul(ctx, r_out, s_scalar);
 }
 
 /**
@@ -530,7 +545,6 @@ int secp256k1_bulletproof_ipa_compute_LR(
 {
   unsigned char cL[32], cR[32];
   unsigned char cLux[32], cRux[32];
-  unsigned char zero[32] = {0};
 
   secp256k1_pubkey acc, term;
   int acc_inited; /* Tracks if acc contains a valid point */
@@ -551,7 +565,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
     goto cleanup;
 
   secp256k1_mpt_scalar_mul(cLux, cL, ux);
-  if (memcmp(cLux, zero, 32) != 0)
+  if (!scalar_is_zero(cLux))
   {
     term = *U;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cLux))
@@ -578,7 +592,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
     goto cleanup;
 
   secp256k1_mpt_scalar_mul(cRux, cR, ux);
-  if (memcmp(cRux, zero, 32) != 0)
+  if (!scalar_is_zero(cRux))
   {
     term = *U;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cRux))
@@ -697,11 +711,6 @@ cleanup:
   OPENSSL_cleanse(t2, 32);
   return ok;
 }
-static int scalar_is_zero(const unsigned char s[32])
-{
-  unsigned char z[32] = {0};
-  return memcmp(s, z, 32) == 0;
-}
 
 /*
  * ux is the fixed IPA binding scalar.
@@ -723,33 +732,43 @@ int derive_ipa_binding_challenge(const secp256k1_context *ctx,
 {
   unsigned char hash_input[64];
   unsigned char hash_output[32];
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int ok = 0;
+
+  if (!mdctx)
+    return 0;
 
   /* 1. Build hash input = commit_inp || dot */
   memcpy(hash_input, commit_inp_32, 32);
   memcpy(hash_input + 32, dot_32, 32);
 
   /* 2. Hash */
-  SHA256(hash_input, 64, hash_output);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, hash_input, 64) != 1)
+    goto cleanup;
+  if (EVP_DigestFinal_ex(mdctx, hash_output, NULL) != 1)
+    goto cleanup;
 
   /* 3. Reduce hash to a valid scalar */
-  /* CRITICAL: Wraps the 32-byte random string into the curve order */
   secp256k1_mpt_scalar_reduce32(ux_out, hash_output);
 
-  /* * 4. Verify (Sanity check)
-   * Reduce32 guarantees the value is < Order.
-   * This checks for the virtually impossible case where hash is exactly 0.
-   */
+  /* 4. Verify (Sanity check) */
   if (secp256k1_ec_seckey_verify(ctx, ux_out) != 1)
-  {
-    return 0;
-  }
+    goto cleanup;
 
-  return 1;
+  ok = 1;
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  return ok;
 }
+
 /**
  * Derive u = H(last_challenge || L || R) reduced to a valid scalar.
  * IMPORTANT: use the SAME exact logic in verifier.
  */
+
 int derive_ipa_round_challenge(const secp256k1_context *ctx,
                                unsigned char u_out[32],
                                const unsigned char last_challenge[32],
@@ -757,32 +776,50 @@ int derive_ipa_round_challenge(const secp256k1_context *ctx,
                                const secp256k1_pubkey *R)
 {
   unsigned char L_ser[33], R_ser[33];
-  size_t len = 33;
-  SHA256_CTX sha;
+  size_t len;
   unsigned char hash[32];
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int ok = 0;
 
-  if (!secp256k1_ec_pubkey_serialize(ctx, L_ser, &len, L,
-                                     SECP256K1_EC_COMPRESSED))
+  if (!mdctx)
     return 0;
+
+  len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, L_ser, &len, L,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
+
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, R_ser, &len, R,
-                                     SECP256K1_EC_COMPRESSED))
-    return 0;
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto cleanup;
 
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, last_challenge, 32);
-  SHA256_Update(&sha, L_ser, 33);
-  SHA256_Update(&sha, R_ser, 33);
-  SHA256_Final(hash, &sha);
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, last_challenge, 32) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, L_ser, 33) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, R_ser, 33) != 1)
+    goto cleanup;
+  if (EVP_DigestFinal_ex(mdctx, hash, NULL) != 1)
+    goto cleanup;
+
   secp256k1_mpt_scalar_reduce32(hash, hash);
   memcpy(u_out, hash, 32);
 
-  /* Reject invalid scalar (0 or >= group order). */
   if (secp256k1_ec_seckey_verify(ctx, u_out) != 1)
-    return 0;
+    goto cleanup;
 
-  return 1;
+  ok = 1;
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
+  return ok;
 }
+
 /**
  * Runs the Inner Product Argument (IPA) prover.
  * Recursively folds vectors G, H, a, and b into a single final term,
@@ -1031,12 +1068,10 @@ int secp256k1_bulletproof_compute_vectors_block(
     unsigned char *ar, unsigned char *sl, unsigned char *sr)
 {
   const size_t offset = BP_VALUE_BITS * block_index;
-  int ok = 1;
 
   /* Scalars */
   unsigned char one[32] = {0};
   unsigned char minus_one[32];
-  unsigned char zero[32] = {0};
 
   one[31] = 1;
   memcpy(minus_one, one, 32);
@@ -1046,21 +1081,16 @@ int secp256k1_bulletproof_compute_vectors_block(
   for (size_t i = 0; i < BP_VALUE_BITS; i++)
   {
     size_t idx = offset + i;
+    unsigned char bit = (unsigned char)((value >> i) & 1);
+    unsigned char mask =
+        (unsigned char)(-bit); /* 0xFF if bit==1, 0x00 if bit==0 */
 
-    if ((value >> i) & 1)
+    for (int b = 0; b < 32; b++)
     {
-      /* bit = 1  => al = 1, ar = 0 */
-      memcpy(al + idx * 32, one, 32);
-      memcpy(ar + idx * 32, zero, 32);
-    }
-    else
-    {
-      /* bit = 0  => al = 0, ar = -1 */
-      memcpy(al + idx * 32, zero, 32);
-      memcpy(ar + idx * 32, minus_one, 32);
+      al[idx * 32 + b] = one[b] & mask;
+      ar[idx * 32 + b] = minus_one[b] & ~mask;
     }
   }
-
   /* ---- 2. Generate random blinding vectors sl/sr ---- */
   for (size_t i = 0; i < BP_VALUE_BITS; i++)
   {
@@ -1068,12 +1098,10 @@ int secp256k1_bulletproof_compute_vectors_block(
 
     if (!generate_random_scalar(ctx, sl + idx * 32))
     {
-      ok = 0;
       goto cleanup;
     }
     if (!generate_random_scalar(ctx, sr + idx * 32))
     {
-      ok = 0;
       goto cleanup;
     }
   }
@@ -1215,7 +1243,7 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   const size_t rounds = bp_ipa_rounds(n); /* log2(64*m) */
 
   /* 64*m must be power-of-two -> m must be power-of-two */
-  if (m == 0)
+  if (m == 0 || m > BP_MAX_VALUES)
     return 0;
   if ((n & (n - 1)) != 0)
     return 0;
@@ -1304,15 +1332,15 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       unsigned char *sl_k = sl + 32 * k;
       unsigned char *sr_k = sr + 32 * k;
 
-      if ((v >> i) & 1)
+      /* Constant-time bit decomposition to prevent cache-timing leaks */
+      unsigned char bit = (unsigned char)((v >> i) & 1);
+      unsigned char mask =
+          (unsigned char)(0 - bit); /* 0xFF if bit==1, 0x00 if bit==0 */
+
+      for (int b = 0; b < 32; b++)
       {
-        memcpy(al_k, one, 32);
-        memset(ar_k, 0, 32);
-      }
-      else
-      {
-        memset(al_k, 0, 32);
-        memcpy(ar_k, minus_one, 32);
+        al_k[b] = one[b] & mask;
+        ar_k[b] = minus_one[b] & ~mask;
       }
 
       if (!generate_random_scalar(ctx, sl_k))
@@ -1341,75 +1369,161 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   /* ---- 6. Fiat–Shamir y,z ---- */
   {
     unsigned char A_ser[33], S_ser[33];
-    size_t len = 33;
-    SHA256_CTX sha;
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 1;
 
-    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
-                                       SECP256K1_EC_COMPRESSED))
+    if (!mdctx)
       goto cleanup;
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
 
-    /* --- START OF TRANSCRIPT --- */
-    SHA256_Init(&sha);
+    // y = H(domain || context || V* || A || S)
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
 
-    /* 1. Domain Separation  */
-    SHA256_Update(&sha, "MPT_BULLETPROOF_RANGE", 21);
-
-    /* 2. Transaction Context [cite: 431] */
-    if (context_id)
-      SHA256_Update(&sha, context_id, 32);
-
-    /* 3. Statement: Value Commitments*/
     for (size_t i = 0; i < m; i++)
     {
       secp256k1_pubkey V_temp;
       unsigned char V_ser[33];
       size_t v_len = 33;
-      /* Reconstruct commitment for the transcript */
       if (!secp256k1_bulletproof_create_commitment(
               ctx, &V_temp, values[i], blindings_flat + 32 * i, pk_base))
-        goto cleanup;
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
       if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
-                                         SECP256K1_EC_COMPRESSED))
-        goto cleanup;
-      SHA256_Update(&sha, V_ser, 33);
+                                         SECP256K1_EC_COMPRESSED) ||
+          v_len != 33)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
     }
 
-    SHA256_Update(&sha, A_ser, 33);
-    SHA256_Update(&sha, S_ser, 33);
-
-    SHA256_Final(y, &sha);
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
     secp256k1_mpt_scalar_reduce32(y, y);
 
-    /* To match spec H(T1 || y), we continue from the previous state (or
-     * re-hash) */
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, "MPT_BULLETPROOF_RANGE", 21);
-    if (context_id)
-      SHA256_Update(&sha, context_id, 32);
+    // z = H(domain || context || V* || A || S || y)
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
 
     for (size_t i = 0; i < m; i++)
     {
-      /* ... (re-add commitments) ... */
       secp256k1_pubkey V_temp;
       unsigned char V_ser[33];
       size_t v_len = 33;
-      secp256k1_bulletproof_create_commitment(ctx, &V_temp, values[i],
-                                              blindings_flat + 32 * i, pk_base);
-      secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
-                                    SECP256K1_EC_COMPRESSED);
-      SHA256_Update(&sha, V_ser, 33);
+      if (!secp256k1_bulletproof_create_commitment(
+              ctx, &V_temp, values[i], blindings_flat + 32 * i, pk_base))
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
+                                         SECP256K1_EC_COMPRESSED) ||
+          v_len != 33)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
+      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      {
+        fs_ok = 0;
+        goto fs_cleanup;
+      }
     }
-    SHA256_Update(&sha, A_ser, 33);
-    SHA256_Update(&sha, S_ser, 33);
-    SHA256_Update(&sha, y, 32);
-    SHA256_Final(z, &sha);
+
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
     secp256k1_mpt_scalar_reduce32(z, z);
+
     memcpy(z_neg, z, 32);
     secp256k1_mpt_scalar_negate(z_neg, z_neg);
+
+  fs_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      goto cleanup;
   }
 
   /* ---- 7. Aggregated polynomial setup ---- */
@@ -1548,39 +1662,63 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   /* x = H(context_id || A || S || y || z || T1 || T2) */
   {
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-    size_t len = 33;
-    SHA256_CTX sha;
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 0;
 
-    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
-                                       SECP256K1_EC_COMPRESSED))
+    if (!mdctx)
       goto cleanup;
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto fs_x_cleanup;
 
-    SHA256_Init(&sha);
-    if (context_id)
-      SHA256_Update(&sha, context_id, 32);
-    SHA256_Update(&sha, A_ser, 33);
-    SHA256_Update(&sha, S_ser, 33);
-    SHA256_Update(&sha, y, 32);
-    SHA256_Update(&sha, z, 32);
-    SHA256_Update(&sha, T1_ser, 33);
-    SHA256_Update(&sha, T2_ser, 33);
-    SHA256_Final(x, &sha);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_x_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
+      goto fs_x_cleanup;
 
     secp256k1_mpt_scalar_reduce32(x, x);
     if (memcmp(x, zero, 32) == 0)
-      goto cleanup; /* avoid infinity later */
+      goto fs_x_cleanup; /* avoid infinity later */
+
+    fs_ok = 1;
+
+  fs_x_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      goto cleanup;
   }
 
   /* ---- 10. Evaluate l(x), r(x), t_hat ---- */
@@ -1648,46 +1786,67 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   {
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
     size_t ser_len;
-    SHA256_CTX sha;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 0;
+
+    if (!mdctx)
+      goto cleanup;
 
     ser_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &ser_len, &A,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
+
     ser_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
+
     ser_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &ser_len, &T1,
-                                       SECP256K1_EC_COMPRESSED))
-      goto cleanup;
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
+
     ser_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &ser_len, &T2,
-                                       SECP256K1_EC_COMPRESSED))
+                                       SECP256K1_EC_COMPRESSED) ||
+        ser_len != 33)
+      goto fs_ipa_cleanup;
+
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_ipa_cleanup;
+
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto fs_ipa_cleanup;
+
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript, NULL) != 1)
+      goto fs_ipa_cleanup;
+
+    fs_ok = 1;
+
+  fs_ipa_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
       goto cleanup;
-
-    SHA256_Init(&sha);
-
-    /* Domain/context binding */
-    if (context_id)
-      SHA256_Update(&sha, context_id, 32);
-
-    /* Outer commitments */
-    SHA256_Update(&sha, A_ser, 33);
-    SHA256_Update(&sha, S_ser, 33);
-    SHA256_Update(&sha, T1_ser, 33);
-    SHA256_Update(&sha, T2_ser, 33);
-
-    /* Outer challenges */
-    SHA256_Update(&sha, y, 32);
-    SHA256_Update(&sha, z, 32);
-    SHA256_Update(&sha, x, 32);
-
-    /* Bind to t_hat as well (public scalar) */
-    SHA256_Update(&sha, t_hat, 32);
-
-    SHA256_Final(ipa_transcript, &sha);
   }
 
   /* 12b. Derive u_x = H(ipa_transcript || t_hat) reduced to scalar. */
@@ -1938,7 +2097,7 @@ int secp256k1_bulletproof_verify_agg(
 {
   if (!ctx || !G_vec || !H_vec || !proof || !commitment_C_vec || !pk_base)
     return 0;
-  if (m == 0)
+  if (m == 0 || m > BP_MAX_VALUES)
     return 0;
   /* Aggregation requires n = 64*m to be power-of-two => m must be power-of-two.
    */
@@ -2036,75 +2195,102 @@ int secp256k1_bulletproof_verify_agg(
     U = U_arr[0];
   }
 
-  /* --- Fiat–Shamir: y,z --- */
+  /* --- Fiat–Shamir: y,z,x --- */
   unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-  size_t slen = 33;
-  SHA256_CTX sha;
+  size_t slen;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  int fs_ok = 0;
 
-  if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A,
-                                     SECP256K1_EC_COMPRESSED))
+  if (!mdctx)
     goto fail;
+
+  /* Serialize A,S,T1,T2 */
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
   slen = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &S,
-                                     SECP256K1_EC_COMPRESSED))
-    goto fail;
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
   slen = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &T1,
-                                     SECP256K1_EC_COMPRESSED))
-    goto fail;
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
   slen = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &T2,
-                                     SECP256K1_EC_COMPRESSED))
-    goto fail;
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    goto fs_fail;
 
-  SHA256_Init(&sha);
+  /* ---------------- y = H(domain || context || C_i || A || S) ----------------
+   */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
 
-  /* 1. Domain Separation */
-  SHA256_Update(&sha, "MPT_BULLETPROOF_RANGE", 21);
-
-  /* 2. Transaction Context */
-  if (context_id)
-    SHA256_Update(&sha, context_id, 32);
-
-  /* 3. Value Commitments (Inputs to Verify) */
   for (size_t i = 0; i < m; i++)
   {
     unsigned char C_ser[33];
     size_t c_len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                       SECP256K1_EC_COMPRESSED))
-      goto fail;
-    SHA256_Update(&sha, C_ser, 33);
+                                       SECP256K1_EC_COMPRESSED) ||
+        c_len != 33)
+      goto fs_fail;
+    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+      goto fs_fail;
   }
 
-  /* 4. A, S */
-  SHA256_Update(&sha, A_ser, 33);
-  SHA256_Update(&sha, S_ser, 33);
-  SHA256_Final(y, &sha);
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
+    goto fs_fail;
+
   secp256k1_mpt_scalar_reduce32(y, y);
 
-  /* Generate z (Hash T1 || y) */
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, "MPT_BULLETPROOF_RANGE", 21);
-  if (context_id)
-    SHA256_Update(&sha, context_id, 32);
+  /* ---------------- z = H(domain || context || C_i || A || S || y)
+   * ---------------- */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
+
   for (size_t i = 0; i < m; i++)
   {
     unsigned char C_ser[33];
     size_t c_len = 33;
-    secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                  SECP256K1_EC_COMPRESSED);
-    SHA256_Update(&sha, C_ser, 33);
+    if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        c_len != 33)
+      goto fs_fail;
+    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+      goto fs_fail;
   }
-  SHA256_Update(&sha, A_ser, 33);
-  SHA256_Update(&sha, S_ser, 33);
-  SHA256_Update(&sha, y, 32);
-  SHA256_Final(z, &sha);
+
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
+    goto fs_fail;
+
   secp256k1_mpt_scalar_reduce32(z, z);
 
   if (!secp256k1_ec_seckey_verify(ctx, y) ||
       !secp256k1_ec_seckey_verify(ctx, z))
-    goto fail;
+    goto fs_fail;
 
   /* Powers */
   unsigned char *y_powers = (unsigned char *)malloc(n * 32);
@@ -2113,7 +2299,7 @@ int secp256k1_bulletproof_verify_agg(
   {
     free(y_powers);
     free(y_inv_powers);
-    goto fail;
+    goto fs_fail;
   }
 
   unsigned char y_inv[32];
@@ -2121,25 +2307,44 @@ int secp256k1_bulletproof_verify_agg(
   secp256k1_mpt_scalar_inverse(y_inv, y);
   scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
 
-  /* --- Fiat–Shamir: x --- */
-  SHA256_Init(&sha);
-  if (context_id)
-    SHA256_Update(&sha, context_id, 32);
-  SHA256_Update(&sha, A_ser, 33);
-  SHA256_Update(&sha, S_ser, 33);
-  SHA256_Update(&sha, y, 32);
-  SHA256_Update(&sha, z, 32);
-  SHA256_Update(&sha, T1_ser, 33);
-  SHA256_Update(&sha, T2_ser, 33);
-  SHA256_Final(x, &sha);
+  /* ---------------- x = H(context || A || S || y || z || T1 || T2)
+   * ---------------- */
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    goto fs_fail;
+  if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
+    goto fs_fail;
+
   secp256k1_mpt_scalar_reduce32(x, x);
 
   if (!secp256k1_ec_seckey_verify(ctx, x))
   {
     free(y_powers);
+    y_powers = NULL;
     free(y_inv_powers);
-    goto fail;
+    y_inv_powers = NULL;
+    goto fs_fail;
   }
+
+  fs_ok = 1;
+
+fs_fail:
+  EVP_MD_CTX_free(mdctx);
+  if (!fs_ok)
+    goto fail;
 
   /* z^2 */
   secp256k1_mpt_scalar_mul(z_sq, z, z);
@@ -2342,14 +2547,18 @@ int secp256k1_bulletproof_verify_agg(
     }
     OPENSSL_cleanse(x_sq, 32);
 
-    // if (!inited) { free(y_block_sum); free(y_powers); free(y_inv_powers);
-    // goto fail; }
+    if (!inited)
+    {
+      free(y_block_sum);
+      free(y_powers);
+      free(y_inv_powers);
+      goto fail;
+    }
     RHS = acc;
   }
 
   if (!pubkey_equal(ctx, &LHS, &RHS))
   {
-    printf("[VERIFY] Step3 polynomial identity failed\n");
     free(y_block_sum);
     free(y_powers);
     free(y_inv_powers);
@@ -2363,38 +2572,67 @@ int secp256k1_bulletproof_verify_agg(
 
   unsigned char ipa_transcript_id[32];
   {
-    SHA256_CTX sha;
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-    size_t len = 33;
+    size_t len;
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int ok = 0;
+    unsigned int md_len = 0;
 
-    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
-                                       SECP256K1_EC_COMPRESSED))
+    if (!mdctx)
       goto fail;
+
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
-                                       SECP256K1_EC_COMPRESSED))
-      goto fail;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
-                                       SECP256K1_EC_COMPRESSED))
-      goto fail;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
-                                       SECP256K1_EC_COMPRESSED))
-      goto fail;
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto ipa_tid_cleanup;
 
-    SHA256_Init(&sha);
-    if (context_id)
-      SHA256_Update(&sha, context_id, 32);
-    SHA256_Update(&sha, A_ser, 33);
-    SHA256_Update(&sha, S_ser, 33);
-    SHA256_Update(&sha, T1_ser, 33);
-    SHA256_Update(&sha, T2_ser, 33);
-    SHA256_Update(&sha, y, 32);
-    SHA256_Update(&sha, z, 32);
-    SHA256_Update(&sha, x, 32);
-    SHA256_Update(&sha, t_hat, 32);
-    SHA256_Final(ipa_transcript_id, &sha);
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto ipa_tid_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1)
+      goto ipa_tid_cleanup;
+    if (md_len != 32)
+      goto ipa_tid_cleanup;
+
+    ok = 1;
+
+  ipa_tid_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!ok)
+      goto fail;
   }
 
   if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript_id, t_hat))
