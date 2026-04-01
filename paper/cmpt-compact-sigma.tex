@@ -420,12 +420,12 @@ In the Fiat--Shamir transform, the challenge is:
 \begin{multline}
   \label{eq:fs-hash}
   e = \mathcal{H}\!\bigl(
-    \texttt{"CMPT\_SEND\_SIGMA"} \;\|\;
-    P_1 \| \cdots \| P_n \| P_A \;\|\;
+    \texttt{"CMPT\_COMBINED\_STD\_PROOF"} \;\|\;
+    P_1 \| \cdots \| P_n \;\|\;
     C_1 \| C_{2,1} \| \cdots \| C_{2,n} \;\|\; \\
-    \mathit{PC}_m \| \mathit{PC}_b \| B_1 \| B_2 \;\|\;
-    T_1 \| T_{2,1} \| \cdots \| T_{2,n} \| T_m \| T_b
-    \| T_{\sk,1} \| T_{\sk,2} \;\|\;
+    \mathit{PC}_m \| P_A \| \mathit{PC}_b \| B_1 \| B_2 \;\|\;
+    T_1 \| T_{2,1} \| \cdots \| T_{2,n} \| T_m
+    \| T_{\sk,1} \| T_b \| T_{\sk,2} \;\|\;
     \TransCtx
   \bigr).
 \end{multline}
@@ -434,7 +434,7 @@ In the Fiat--Shamir transform, the challenge is:
   \label{def:compact}
   The non-interactive proof in compact form is
   \[
-    \Pi_{\mathrm{send}} = (e,\, z_m,\, z_r,\, z_b,\, z_\rho,\, z_{\sk})
+    \Pi_{\mathrm{send}} = (e,\, z_r,\, z_m,\, z_{\sk},\, z_\rho,\, z_b)
     \;\in\; \Zq^6.
   \]
   \textbf{Verification:}
@@ -540,10 +540,10 @@ $\log_G H$ is unknown.
   \label{thm:soundness}
   Given two accepting transcripts
   \begin{align*}
-    &(T_1, T_{2,i}, T_m, T_b, T_{\sk,1}, T_{\sk,2},\;
-       e,\; z_m, z_r, z_b, z_\rho, z_{\sk}) \quad\text{and}\\
-    &(T_1, T_{2,i}, T_m, T_b, T_{\sk,1}, T_{\sk,2},\;
-       e',\; z_m', z_r', z_b', z_\rho', z_{\sk}')
+    &(T_1, T_{2,i}, T_m, T_{\sk,1}, T_b, T_{\sk,2},\;
+       e,\; z_r, z_m, z_{\sk}, z_\rho, z_b) \quad\text{and}\\
+    &(T_1, T_{2,i}, T_m, T_{\sk,1}, T_b, T_{\sk,2},\;
+       e',\; z_r', z_m', z_{\sk}', z_\rho', z_b')
   \end{align*}
   with the same first-round commitments and $e \ne e'$,
   one can efficiently extract a witness
@@ -616,8 +616,8 @@ $\log_G H$ is unknown.
     \item Set commitments via the reconstruction equations
           \crefrange{eq:recon-t1}{eq:recon-tsk2}.
     \item Output the full transcript
-          $(T_1, T_{2,i}, T_m, T_b, T_{\sk,1}, T_{\sk,2},\;
-            e,\; z_m, z_r, z_b, z_\rho, z_{\sk})$.
+          $(T_1, T_{2,i}, T_m, T_{\sk,1}, T_b, T_{\sk,2},\;
+            e,\; z_r, z_m, z_{\sk}, z_\rho, z_b)$.
   \end{enumerate}
 
   \medskip\noindent\textbf{Verification.}
@@ -849,14 +849,14 @@ An adversary observing both proofs can extract the witnesses.
 The hash input for the challenge (\cref{eq:fs-hash}) must include:
 \begin{enumerate}
   \item A fixed domain-separation tag
-        (\texttt{"CMPT\_SEND\_SIGMA"}).
+        (\texttt{"CMPT\_COMBINED\_STD\_PROOF"}).
   \item \emph{All} public-key and ciphertext components:
         the recipient keys $P_1, \ldots, P_n$, the sender key~$P_A$,
         the ciphertext bundle $C_1, C_{2,1}, \ldots, C_{2,n}$, the
         commitments $\mathit{PC}_m, \mathit{PC}_b$, and the balance
         ciphertext~$(B_1, B_2)$.
   \item All first-round commitments
-        $T_1, T_{2,1}, \ldots, T_{2,n}, T_m, T_b, T_{\sk,1}, T_{\sk,2}$.
+        $T_1, T_{2,1}, \ldots, T_{2,n}, T_m, T_{\sk,1}, T_b, T_{\sk,2}$.
   \item The \TransCtx{} for replay protection.
 \end{enumerate}
 Omitting any statement element from the hash would allow
