@@ -72,30 +72,30 @@ int main(void)
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &C2_vec[i], pts, 2));
   }
 
-  /* PC_m = r*G + m*H */
+  /* PC_m = m*G + r*H  (paper convention: value on G, blinding on H) */
   {
-    secp256k1_pubkey rG, mH;
-    EXPECT(secp256k1_ec_pubkey_create(ctx, &rG, r));
+    secp256k1_pubkey mG_pc, rH;
     unsigned char m_scalar[32] = {0};
     for (int b = 0; b < 8; b++)
       m_scalar[31 - b] = (amount >> (b * 8)) & 0xFF;
-    mH = H;
-    EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &mH, m_scalar));
-    const secp256k1_pubkey *pts[2] = {&rG, &mH};
+    EXPECT(secp256k1_ec_pubkey_create(ctx, &mG_pc, m_scalar));
+    rH = H;
+    EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &rH, r));
+    const secp256k1_pubkey *pts[2] = {&mG_pc, &rH};
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &PC_m, pts, 2));
   }
 
-  /* PC_b = r_b*G + v*H */
+  /* PC_b = v*G + r_b*H  (paper convention: value on G, blinding on H) */
   secp256k1_pubkey PC_b;
   {
-    secp256k1_pubkey rbG, vH;
-    EXPECT(secp256k1_ec_pubkey_create(ctx, &rbG, r_b));
+    secp256k1_pubkey vG, rbH;
     unsigned char v_scalar[32] = {0};
     for (int b = 0; b < 8; b++)
       v_scalar[31 - b] = (remainder >> (b * 8)) & 0xFF;
-    vH = H;
-    EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &vH, v_scalar));
-    const secp256k1_pubkey *pts[2] = {&rbG, &vH};
+    EXPECT(secp256k1_ec_pubkey_create(ctx, &vG, v_scalar));
+    rbH = H;
+    EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &rbH, r_b));
+    const secp256k1_pubkey *pts[2] = {&vG, &rbH};
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &PC_b, pts, 2));
   }
 
