@@ -81,3 +81,15 @@ add_mpt_test(
     test_compact_standard.c
     DEPENDENCIES mpt-crypto secp256k1
 )
+
+add_mpt_test(
+    test_compact_convert
+    test_compact_convert.c
+    DEPENDENCIES mpt-crypto secp256k1
+)
+
+add_mpt_test(
+    test_compact_convertback
+    test_compact_convertback.c
+    DEPENDENCIES mpt-crypto secp256k1
+)

@@ -70,4 +70,31 @@ compute_amount_point(secp256k1_context const* ctx, secp256k1_pubkey* mG, uint64_
     return ret;
 }
 
+/** Compute a sigma-protocol response: z = nonce + e * secret (mod order).
+ *  Cleanses the intermediate product. Returns 1 on success, 0 on failure. */
+static inline int
+compute_sigma_response(
+    secp256k1_context const* ctx,
+    unsigned char* z_out,
+    unsigned char const* nonce,
+    unsigned char const* e,
+    unsigned char const* secret)
+{
+    unsigned char term[32];
+    memcpy(z_out, nonce, 32);
+    memcpy(term, secret, 32);
+    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
+    {
+        OPENSSL_cleanse(term, 32);
+        return 0;
+    }
+    if (!secp256k1_ec_seckey_tweak_add(ctx, z_out, term))
+    {
+        OPENSSL_cleanse(term, 32);
+        return 0;
+    }
+    OPENSSL_cleanse(term, 32);
+    return 1;
+}
+
 #endif /* MPT_INTERNAL_H */
