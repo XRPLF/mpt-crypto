@@ -445,49 +445,6 @@ secp256k1_compact_standard_verify(
 /*
 ================================================================================
 |                                                                              |
-|            COMPACT SIGMA PROOF — CONVERT / CLAWBACK (OPTIONAL)              |
-|                                                                              |
-================================================================================
- *
- * NOTE: In production, Convert and Clawback transactions disclose the
- * encryption randomness r on-chain as the BlindingFactor field, allowing
- * deterministic verification (C1 == r*G, C2 == m*G + r*P_A) without a ZKP.
- * These functions are provided for contexts where the caller prefers
- * cryptographic binding over deterministic verification.
- *
- * Proves knowledge of randomness r for a ciphertext encrypting a publicly
- * known amount m:  C1 = r*G,  C2 = m*G + r*P_A.
- *
- * Compact proof: (e, z_r) in Z_q^2 = 64 bytes.
- * Fiat-Shamir domain: "CMPT_CONVERT_COMPACT"
- */
-
-#define SECP256K1_COMPACT_CONVERT_PROOF_SIZE 64
-
-SECP256K1_API int
-secp256k1_compact_convert_prove(
-    secp256k1_context const* ctx,
-    unsigned char* proof_out,
-    uint64_t amount,
-    unsigned char const* r,
-    secp256k1_pubkey const* C1,
-    secp256k1_pubkey const* C2,
-    secp256k1_pubkey const* pk_A,
-    unsigned char const* context_id);
-
-SECP256K1_API int
-secp256k1_compact_convert_verify(
-    secp256k1_context const* ctx,
-    unsigned char const* proof,
-    uint64_t amount,
-    secp256k1_pubkey const* C1,
-    secp256k1_pubkey const* C2,
-    secp256k1_pubkey const* pk_A,
-    unsigned char const* context_id);
-
-/*
-================================================================================
-|                                                                              |
 |            COMPACT SIGMA PROOF — CONVERTBACK                                |
 |                                                                              |
 ================================================================================
