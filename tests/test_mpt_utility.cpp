@@ -121,12 +121,12 @@ test_mpt_confidential_send()
     add_participant(dest_pub, dest_ct);
     add_participant(issuer_pub, issuer_ct);
 
-    // Generate pedersen commitments for amount and balance
-    uint8_t amount_bf[kMPT_BLINDING_FACTOR_SIZE];
+    // Generate pedersen commitment for amount.
+    // PC_m = amount*G + shared_bf*H — uses the shared ElGamal r as Pedersen blinding.
     uint8_t amount_comm[kMPT_PEDERSEN_COMMIT_SIZE];
-    EXPECT(mpt_generate_blinding_factor(amount_bf) == 0);
-    EXPECT(mpt_get_pedersen_commitment(amount_to_send, amount_bf, amount_comm) == 0);
+    EXPECT(mpt_get_pedersen_commitment(amount_to_send, shared_bf, amount_comm) == 0);
 
+    // Generate pedersen commitment for balance.
     uint8_t balance_bf[kMPT_BLINDING_FACTOR_SIZE];
     uint8_t balance_comm[kMPT_PEDERSEN_COMMIT_SIZE];
     EXPECT(mpt_generate_blinding_factor(balance_bf) == 0);
@@ -138,10 +138,12 @@ test_mpt_confidential_send()
         mpt_get_send_context_hash(sender_acc, issuance, seq, dest_acc, version, send_ctx_hash) ==
         0);
 
-    // Prepare pedersen proof params for both amount and balance linkage proofs
+    // Prepare pedersen proof params for amount and balance.
+    // amt_params.blinding_factor is not used by the compact sigma prover
+    // (it uses tx_blinding_factor = shared_bf directly), but we set it for completeness.
     mpt_pedersen_proof_params amt_params;
     amt_params.amount = amount_to_send;
-    std::memcpy(amt_params.blinding_factor, amount_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(amt_params.blinding_factor, shared_bf, kMPT_BLINDING_FACTOR_SIZE);
     std::memcpy(amt_params.pedersen_commitment, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
     std::memcpy(amt_params.ciphertext, sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
@@ -224,7 +226,7 @@ test_mpt_convert_back()
     std::memcpy(pc_params.ciphertext, spending_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
     // Generate convert back proof
-    uint8_t proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE];
+    uint8_t proof[kMPT_COMPACT_CONVERTBACK_PROOF_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE];
     EXPECT(
         mpt_get_convert_back_proof(
             priv, pub, context_hash, amount_to_convert_back, &pc_params, proof) == 0);
@@ -260,7 +262,7 @@ test_mpt_clawback()
     EXPECT(mpt_encrypt_amount(claw_amount, issuer_pub, bf, issuer_encrypted_bal) == 0);
 
     // Generate clawback proof
-    uint8_t proof[kMPT_EQUALITY_PROOF_SIZE];
+    uint8_t proof[kMPT_COMPACT_CLAWBACK_PROOF_SIZE];
     EXPECT(
         mpt_get_clawback_proof(
             issuer_priv, issuer_pub, context_hash, claw_amount, issuer_encrypted_bal, proof) == 0);

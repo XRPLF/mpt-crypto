@@ -12,11 +12,8 @@ add_library(
     src/bulletproof_aggregated.c
     src/commitments.c
     src/elgamal.c
-    src/equality_proof.c
     src/mpt_scalar.c
-    src/proof_link.c
     src/proof_pok_sk.c
-    src/proof_same_plaintext_multi_shared_r.c
     src/proof_compact_standard.c
     src/proof_compact_clawback.c
     src/proof_compact_convertback.c
