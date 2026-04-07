@@ -37,8 +37,8 @@
  */
 #include "mpt_internal.h"
 #include "secp256k1_mpt.h"
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <string.h>
 
 /* --- Internal Helpers --- */
@@ -268,7 +268,6 @@ int generate_canonical_encrypted_zero(
   unsigned char hash_input[51]; // 7 ("EncZero") + 20 + 24
   const char *domain = "EncZero";
   int ret;
-  SHA256_CTX sha;
 
   // Build static buffer part
   memcpy(hash_input, domain, 7);
@@ -278,18 +277,15 @@ int generate_canonical_encrypted_zero(
   /* Rejection sampling loop to ensure scalar is valid */
   do
   {
-    SHA256(hash_input, 51, deterministic_scalar);
+    unsigned int md_len = 32;
+    if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
+                   NULL) != 1)
+      return 0;
 
-    // If invalid, re-hash the hash (standard chain method for determinism)
-    // Or simply fail if strict canonical behavior is required.
-    // Assuming rejection sampling is the intended design for safety:
     if (secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
       break;
 
-    // Update input for next iteration to get new hash
-    // (Note: The original code just looped SHA256 on same input which is
-    // static, so it would loop forever if the first hash was invalid. Fixed
-    // here by re-hashing the output if needed, though highly unlikely to fail).
+    // Re-hash the output for next iteration (chain method for determinism)
     memcpy(hash_input, deterministic_scalar, 32);
 
   } while (1);
