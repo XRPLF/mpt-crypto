@@ -49,7 +49,7 @@ static int compute_compact_std_challenge(
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *C1,
     const secp256k1_pubkey *C2_vec, const secp256k1_pubkey *PC_m,
     const secp256k1_pubkey *pk_A, const secp256k1_pubkey *PC_b,
-    const secp256k1_pubkey *C1_rem, const secp256k1_pubkey *C2_rem,
+    const secp256k1_pubkey *B1, const secp256k1_pubkey *B2,
     const secp256k1_pubkey *T1, const secp256k1_pubkey *T2_vec,
     const secp256k1_pubkey *T_PCm, const secp256k1_pubkey *K1,
     const secp256k1_pubkey *T_PCb, const secp256k1_pubkey *K2,
@@ -91,8 +91,8 @@ static int compute_compact_std_challenge(
     SER(&C2_vec[i]);
   SER(PC_m);
   SER(PC_b);
-  SER(C1_rem);
-  SER(C2_rem);
+  SER(B1);
+  SER(B2);
 
   /* Commitments — order: T_1, T_{2,i}, T_m, T_b, T_{sk,1}, T_{sk,2} */
   SER(T1);
@@ -130,7 +130,7 @@ int secp256k1_compact_standard_prove(
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *PC_m,
     const secp256k1_pubkey *pk_A, const secp256k1_pubkey *PC_b,
-    const secp256k1_pubkey *C1_rem, const secp256k1_pubkey *C2_rem,
+    const secp256k1_pubkey *B1, const secp256k1_pubkey *B2,
     const unsigned char *context_id)
 {
   /* n=0 would produce a proof binding no ciphertexts to any recipient,
@@ -147,8 +147,8 @@ int secp256k1_compact_standard_prove(
   MPT_ARG_CHECK(PC_m != NULL);
   MPT_ARG_CHECK(pk_A != NULL);
   MPT_ARG_CHECK(PC_b != NULL);
-  MPT_ARG_CHECK(C1_rem != NULL);
-  MPT_ARG_CHECK(C2_rem != NULL);
+  MPT_ARG_CHECK(B1 != NULL);
+  MPT_ARG_CHECK(B2 != NULL);
 
   /* Nonces: alpha(r), beta(m), gamma(sk_A), delta(r_b), epsilon(v) */
   unsigned char alpha[32], beta[32], gamma[32], delta[32], epsilon[32];
@@ -235,8 +235,8 @@ int secp256k1_compact_standard_prove(
         SHASH(&C2_vec[i]);
       SHASH(PC_m);
       SHASH(PC_b);
-      SHASH(C1_rem);
-      SHASH(C2_rem);
+      SHASH(B1);
+      SHASH(B2);
       if (context_id)
       {
         if (EVP_DigestUpdate(sh, context_id, 32) != 1)
@@ -320,23 +320,23 @@ int secp256k1_compact_standard_prove(
       goto cleanup;
   }
 
-  /* K2 = gamma*C1_rem + epsilon*G */
+  /* K2 = gamma*B1 + epsilon*G */
   {
-    secp256k1_pubkey gC1r, epsG;
-    gC1r = *C1_rem;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &gC1r, gamma))
+    secp256k1_pubkey gB1, epsG;
+    gB1 = *B1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &gB1, gamma))
       goto cleanup;
     if (!secp256k1_ec_pubkey_create(ctx, &epsG, epsilon))
       goto cleanup;
-    const secp256k1_pubkey *pts[2] = {&gC1r, &epsG};
+    const secp256k1_pubkey *pts[2] = {&gB1, &epsG};
     if (!secp256k1_ec_pubkey_combine(ctx, &K2, pts, 2))
       goto cleanup;
   }
 
   /* 3. Challenge */
   if (!compute_compact_std_challenge(ctx, e, n, Pk_vec, C1, C2_vec, PC_m, pk_A,
-                                     PC_b, C1_rem, C2_rem, &T1, T2_vec, &T_PCm,
-                                     &K1, &T_PCb, &K2, context_id))
+                                     PC_b, B1, B2, &T1, T2_vec, &T_PCm, &K1,
+                                     &T_PCb, &K2, context_id))
     goto cleanup;
 
   /* 4. Responses */
@@ -393,7 +393,7 @@ int secp256k1_compact_standard_verify(
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *PC_m,
     const secp256k1_pubkey *pk_A, const secp256k1_pubkey *PC_b,
-    const secp256k1_pubkey *C1_rem, const secp256k1_pubkey *C2_rem,
+    const secp256k1_pubkey *B1, const secp256k1_pubkey *B2,
     const unsigned char *context_id)
 {
   /* n=0 would produce a proof binding no ciphertexts to any recipient,
@@ -407,8 +407,8 @@ int secp256k1_compact_standard_verify(
   MPT_ARG_CHECK(PC_m != NULL);
   MPT_ARG_CHECK(pk_A != NULL);
   MPT_ARG_CHECK(PC_b != NULL);
-  MPT_ARG_CHECK(C1_rem != NULL);
-  MPT_ARG_CHECK(C2_rem != NULL);
+  MPT_ARG_CHECK(B1 != NULL);
+  MPT_ARG_CHECK(B2 != NULL);
 
   unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_v[32];
   unsigned char e_prime[32], neg_e[32];
@@ -530,26 +530,26 @@ int secp256k1_compact_standard_verify(
       goto cleanup;
   }
 
-  /* K2 = z_sk*C1_rem + z_v*G - e*C2_rem */
+  /* K2 = z_sk*B1 + z_v*G - e*B2 */
   {
-    secp256k1_pubkey zskC1r, zvG, eC2r;
-    zskC1r = *C1_rem;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskC1r, z_sk))
+    secp256k1_pubkey zskB1, zvG, eB2;
+    zskB1 = *B1;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskB1, z_sk))
       goto cleanup;
     if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_v))
       goto cleanup;
-    eC2r = *C2_rem;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eC2r, neg_e))
+    eB2 = *B2;
+    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eB2, neg_e))
       goto cleanup;
-    const secp256k1_pubkey *pts[3] = {&zskC1r, &zvG, &eC2r};
+    const secp256k1_pubkey *pts[3] = {&zskB1, &zvG, &eB2};
     if (!secp256k1_ec_pubkey_combine(ctx, &K2, pts, 3))
       goto cleanup;
   }
 
   /* 3. Recompute challenge */
   if (!compute_compact_std_challenge(ctx, e_prime, n, Pk_vec, C1, C2_vec, PC_m,
-                                     pk_A, PC_b, C1_rem, C2_rem, &T1, T2_vec,
-                                     &T_PCm, &K1, &T_PCb, &K2, context_id))
+                                     pk_A, PC_b, B1, B2, &T1, T2_vec, &T_PCm,
+                                     &K1, &T_PCb, &K2, context_id))
     goto cleanup;
 
   /* 4. Accept iff e' == e (constant-time comparison) */

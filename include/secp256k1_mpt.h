@@ -422,8 +422,8 @@ secp256k1_compact_standard_prove(
     secp256k1_pubkey const* PC_m,
     secp256k1_pubkey const* pk_A,
     secp256k1_pubkey const* PC_b,
-    secp256k1_pubkey const* C1_rem,
-    secp256k1_pubkey const* C2_rem,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
     unsigned char const* context_id);
 
 /**
@@ -442,8 +442,8 @@ secp256k1_compact_standard_verify(
     secp256k1_pubkey const* PC_m,
     secp256k1_pubkey const* pk_A,
     secp256k1_pubkey const* PC_b,
-    secp256k1_pubkey const* C1_rem,
-    secp256k1_pubkey const* C2_rem,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
     unsigned char const* context_id);
 
 /*

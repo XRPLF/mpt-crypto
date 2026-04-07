@@ -101,15 +101,15 @@ int main(void)
 
   /* Balance ciphertext: C_bal = (r_bal*G, r_bal*pk_A + balance*G)
    * Remainder: C_rem = C_bal - C_send_to_A
-   *   C1_rem = (r_bal - r)*G
-   *   C2_rem = (r_bal - r)*pk_A + (balance - amount)*G
+   *   B1 = (r_bal - r)*G
+   *   B2 = (r_bal - r)*pk_A + (balance - amount)*G
    *          = (r_bal - r)*pk_A + v*G
    *
-   * Variant B relation: sk_A * C1_rem + v*G = C2_rem
+   * Variant B relation: sk_A * B1 + v*G = B2
    */
-  secp256k1_pubkey C1_rem, C2_rem;
+  secp256k1_pubkey B1, B2;
   {
-    /* C1_rem = (r_bal - r)*G */
+    /* B1 = (r_bal - r)*G */
     unsigned char r_diff[32];
     memcpy(r_diff, r_bal, 32);
     unsigned char neg_r[32];
@@ -117,9 +117,9 @@ int main(void)
     secp256k1_mpt_scalar_add(r_diff, r_bal, neg_r);
     /* Need to reduce */
     secp256k1_mpt_scalar_reduce32(r_diff, r_diff);
-    EXPECT(secp256k1_ec_pubkey_create(ctx, &C1_rem, r_diff));
+    EXPECT(secp256k1_ec_pubkey_create(ctx, &B1, r_diff));
 
-    /* C2_rem = r_diff*pk_A + v*G */
+    /* B2 = r_diff*pk_A + v*G */
     secp256k1_pubkey rdPk, vG;
     rdPk = pk_A;
     EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &rdPk, r_diff));
@@ -130,13 +130,13 @@ int main(void)
     EXPECT(secp256k1_ec_pubkey_create(ctx, &vG, v_scalar));
 
     const secp256k1_pubkey *pts[2] = {&rdPk, &vG};
-    EXPECT(secp256k1_ec_pubkey_combine(ctx, &C2_rem, pts, 2));
+    EXPECT(secp256k1_ec_pubkey_combine(ctx, &B2, pts, 2));
   }
 
-  /* Verify the Variant B relation holds: sk_A*C1_rem + v*G == C2_rem */
+  /* Verify the Variant B relation holds: sk_A*B1 + v*G == B2 */
   {
     secp256k1_pubkey skC1r, vG, check;
-    skC1r = C1_rem;
+    skC1r = B1;
     EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &skC1r, sk_A));
     unsigned char v_scalar[32] = {0};
     for (int b = 0; b < 8; b++)
@@ -144,7 +144,7 @@ int main(void)
     EXPECT(secp256k1_ec_pubkey_create(ctx, &vG, v_scalar));
     const secp256k1_pubkey *pts[2] = {&skC1r, &vG};
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &check, pts, 2));
-    EXPECT(secp256k1_ec_pubkey_cmp(ctx, &check, &C2_rem) == 0);
+    EXPECT(secp256k1_ec_pubkey_cmp(ctx, &check, &B2) == 0);
     printf("Variant B relation verified.\n");
   }
 
@@ -154,13 +154,13 @@ int main(void)
   unsigned char proof[SECP256K1_COMPACT_STANDARD_PROOF_SIZE];
   int res = secp256k1_compact_standard_prove(
       ctx, proof, amount, remainder, r, sk_A, r_b, N, &C1, C2_vec, pks, &PC_m,
-      &pk_A, &PC_b, &C1_rem, &C2_rem, context_id);
+      &pk_A, &PC_b, &B1, &B2, context_id);
   EXPECT(res == 1);
   printf("Proof generated: %d bytes.\n", SECP256K1_COMPACT_STANDARD_PROOF_SIZE);
 
-  res = secp256k1_compact_standard_verify(ctx, proof, N, &C1, C2_vec, pks,
-                                          &PC_m, &pk_A, &PC_b, &C1_rem, &C2_rem,
-                                          context_id);
+  res =
+      secp256k1_compact_standard_verify(ctx, proof, N, &C1, C2_vec, pks, &PC_m,
+                                        &pk_A, &PC_b, &B1, &B2, context_id);
   EXPECT(res == 1);
   printf("Proof verified successfully.\n");
 
@@ -171,8 +171,8 @@ int main(void)
     memcpy(fake_ctx, context_id, 32);
     fake_ctx[0] ^= 0xFF;
     res = secp256k1_compact_standard_verify(ctx, proof, N, &C1, C2_vec, pks,
-                                            &PC_m, &pk_A, &PC_b, &C1_rem,
-                                            &C2_rem, fake_ctx);
+                                            &PC_m, &pk_A, &PC_b, &B1, &B2,
+                                            fake_ctx);
     EXPECT(res == 0);
   }
   printf("Wrong context: rejected OK.\n");
@@ -185,8 +185,8 @@ int main(void)
     tweak[31] = 1;
     EXPECT(secp256k1_ec_pubkey_tweak_add(ctx, &C1_bad, tweak));
     res = secp256k1_compact_standard_verify(ctx, proof, N, &C1_bad, C2_vec, pks,
-                                            &PC_m, &pk_A, &PC_b, &C1_rem,
-                                            &C2_rem, context_id);
+                                            &PC_m, &pk_A, &PC_b, &B1, &B2,
+                                            context_id);
     EXPECT(res == 0);
   }
   printf("Tampered C1: rejected OK.\n");
@@ -200,8 +200,8 @@ int main(void)
     tweak[31] = 1;
     EXPECT(secp256k1_ec_pubkey_tweak_add(ctx, &C2_bad[0], tweak));
     res = secp256k1_compact_standard_verify(ctx, proof, N, &C1, C2_bad, pks,
-                                            &PC_m, &pk_A, &PC_b, &C1_rem,
-                                            &C2_rem, context_id);
+                                            &PC_m, &pk_A, &PC_b, &B1, &B2,
+                                            context_id);
     EXPECT(res == 0);
   }
   printf("Tampered C2_0: rejected OK.\n");
@@ -212,9 +212,9 @@ int main(void)
     unsigned char bad[SECP256K1_COMPACT_STANDARD_PROOF_SIZE];
     memcpy(bad, proof, SECP256K1_COMPACT_STANDARD_PROOF_SIZE);
     bad[SECP256K1_COMPACT_STANDARD_PROOF_SIZE - 1] ^= 0x01;
-    res = secp256k1_compact_standard_verify(ctx, bad, N, &C1, C2_vec, pks,
-                                            &PC_m, &pk_A, &PC_b, &C1_rem,
-                                            &C2_rem, context_id);
+    res =
+        secp256k1_compact_standard_verify(ctx, bad, N, &C1, C2_vec, pks, &PC_m,
+                                          &pk_A, &PC_b, &B1, &B2, context_id);
     EXPECT(res == 0);
   }
   printf("Corrupted proof: rejected OK.\n");
@@ -227,8 +227,8 @@ int main(void)
     random_scalar(ctx, bad_rb);
     EXPECT(secp256k1_ec_pubkey_create(ctx, &PC_b_bad, bad_rb));
     res = secp256k1_compact_standard_verify(ctx, proof, N, &C1, C2_vec, pks,
-                                            &PC_m, &pk_A, &PC_b_bad, &C1_rem,
-                                            &C2_rem, context_id);
+                                            &PC_m, &pk_A, &PC_b_bad, &B1, &B2,
+                                            context_id);
     EXPECT(res == 0);
   }
   printf("Wrong PC_b: rejected OK.\n");
