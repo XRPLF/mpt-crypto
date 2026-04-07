@@ -1,11 +1,11 @@
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <utility/mpt_utility.h>
 
 #include <secp256k1_mpt.h>
 
 #include <cstring>
-#include <iostream>
 #include <vector>
 
 // Platform endianness support for serialization
@@ -92,30 +92,40 @@ mpt_get_bulletproof_agg(
         return -1;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
+    int rc = -1;
 
     uint8_t blindings_flat[64];
     for (size_t i = 0; i < m; ++i)
     {
         if (!blinding_ptrs[i])
-            return -1;
+            goto cleanup;
         std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
     }
 
-    secp256k1_pubkey pk_base;
-    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
-        return -1;
-
-    if (secp256k1_bulletproof_prove_agg(
-            ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
     {
-        return -1;
+        secp256k1_pubkey pk_base;
+        if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+            goto cleanup;
+
+        if (secp256k1_bulletproof_prove_agg(
+                ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
+        {
+            goto cleanup;
+        }
     }
 
-    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
-    if (*out_len != expected)
-        return -1;
+    {
+        size_t const expected =
+            (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+        if (*out_len != expected)
+            goto cleanup;
+    }
 
-    return 0;
+    rc = 0;
+
+cleanup:
+    OPENSSL_cleanse(blindings_flat, sizeof(blindings_flat));
+    return rc;
 }
 
 /**
@@ -196,12 +206,15 @@ struct Serializer
     }
 };
 
-void
+int
 sha512_half(uint8_t const* data, size_t len, uint8_t* out)
 {
-    uint8_t full_hash[SHA512_DIGEST_LENGTH];
-    SHA512(data, len, full_hash);
-    memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2);
+    uint8_t full_hash[64];
+    unsigned int md_len = 64;
+    if (EVP_Digest(data, len, full_hash, &md_len, EVP_sha512(), NULL) != 1)
+        return -1;
+    memcpy(out, full_hash, 32);
+    return 0;
 }
 
 void
@@ -290,8 +303,7 @@ mpt_get_convert_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -312,8 +324,7 @@ mpt_get_convert_back_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -335,8 +346,7 @@ mpt_get_send_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -357,8 +367,7 @@ mpt_get_clawback_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -580,64 +589,73 @@ mpt_get_confidential_send_proof(
     // Compute rho_rem = balance_bf - amount_bf (blinding for remainder commitment)
     uint8_t rho_rem[32];
     uint8_t neg_rho_m[32];
+    int rc = -1;
     secp256k1_mpt_scalar_negate(neg_rho_m, amount_params->blinding_factor);
     secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_rho_m);
 
-    // Construct PC_b = remainder*G + rho_rem*H
-    secp256k1_pubkey PC_b;
-    if (secp256k1_mpt_pedersen_commit(ctx, &PC_b, remainder, rho_rem) != 1)
-        return -1;
-
-    // Compute remainder ciphertext: C_rem = balance_ct - send_ct
-    // C1_rem = C1_bal - C1_send = C1_bal - C1 (same C1 since shared r)
-    // But balance was encrypted with different r, so:
-    // C1_rem = C1_bal - C1_send, C2_rem = C2_bal - C2_send[0]
-    secp256k1_pubkey C1_bal, C2_bal;
-    if (!mpt_make_ec_pair(balance_params->ciphertext, &C1_bal, &C2_bal))
-        return -1;
-
-    // C2_send[0] is in c2_vec[0], C1_send is c1
-    secp256k1_pubkey C1_rem, C2_rem;
-    if (secp256k1_elgamal_subtract(ctx, &C1_rem, &C2_rem, &C1_bal, &C2_bal, &c1, &c2_vec[0]) != 1)
-        return -1;
-
-    // Generate compact standard sigma proof
-    if (secp256k1_compact_standard_prove(
-            ctx,
-            out_proof,
-            amount,
-            remainder,
-            tx_blinding_factor,
-            priv,
-            rho_rem,
-            n_recipients,
-            &c1,
-            c2_vec.data(),
-            pk_vec.data(),
-            &PC_m,
-            &pk_A,
-            &PC_b,
-            &C1_rem,
-            &C2_rem,
-            context_hash) != 1)
     {
-        return -1;
+        // Construct PC_b = remainder*G + rho_rem*H
+        secp256k1_pubkey PC_b;
+        if (secp256k1_mpt_pedersen_commit(ctx, &PC_b, remainder, rho_rem) != 1)
+            goto send_cleanup;
+
+        // Compute remainder ciphertext: C_rem = balance_ct - send_ct
+        // C1_rem = C1_bal - C1_send = C1_bal - C1 (same C1 since shared r)
+        // But balance was encrypted with different r, so:
+        // C1_rem = C1_bal - C1_send, C2_rem = C2_bal - C2_send[0]
+        secp256k1_pubkey C1_bal, C2_bal;
+        if (!mpt_make_ec_pair(balance_params->ciphertext, &C1_bal, &C2_bal))
+            goto send_cleanup;
+
+        // C2_send[0] is in c2_vec[0], C1_send is c1
+        secp256k1_pubkey C1_rem, C2_rem;
+        if (secp256k1_elgamal_subtract(ctx, &C1_rem, &C2_rem, &C1_bal, &C2_bal, &c1, &c2_vec[0]) !=
+            1)
+            goto send_cleanup;
+
+        // Generate compact standard sigma proof
+        if (secp256k1_compact_standard_prove(
+                ctx,
+                out_proof,
+                amount,
+                remainder,
+                tx_blinding_factor,
+                priv,
+                rho_rem,
+                n_recipients,
+                &c1,
+                c2_vec.data(),
+                pk_vec.data(),
+                &PC_m,
+                &pk_A,
+                &PC_b,
+                &C1_rem,
+                &C2_rem,
+                context_hash) != 1)
+        {
+            goto send_cleanup;
+        }
+
+        // Bulletproof range proof: [amount, remainder]
+        // Blinding factors for bulletproof: [tx_blinding_factor for amount, rho_rem for
+        // remainder]
+        uint8_t* bp_ptr = out_proof + kMPT_COMPACT_SEND_PROOF_SIZE;
+        uint64_t bp_values[2] = {amount, remainder};
+        uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
+        size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
+
+        if (mpt_get_bulletproof_agg(
+                bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
+            goto send_cleanup;
+
+        *out_len = kMPT_COMPACT_SEND_PROOF_SIZE + actual_bp_len;
+        rc = 0;
     }
 
-    // Bulletproof range proof: [amount, remainder]
-    // Blinding factors for bulletproof: [tx_blinding_factor for amount, rho_rem for remainder]
-    uint8_t* bp_ptr = out_proof + kMPT_COMPACT_SEND_PROOF_SIZE;
-    uint64_t bp_values[2] = {amount, remainder};
-    uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
-    size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
-
-    if (mpt_get_bulletproof_agg(
-            bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
-        return -1;
-
-    *out_len = kMPT_COMPACT_SEND_PROOF_SIZE + actual_bp_len;
-
-    return 0;
+send_cleanup:
+    OPENSSL_cleanse(rho_rem, sizeof(rho_rem));
+    OPENSSL_cleanse(neg_rho_m, sizeof(neg_rho_m));
+    return rc;
 }
 
 int
