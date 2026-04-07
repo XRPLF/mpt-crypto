@@ -53,7 +53,7 @@ static int build_pok_challenge(const secp256k1_context *ctx,
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
-  const char *domain = "MPT_POK_SK_REGISTER";
+  const char *domain = "CMPT_POK_SK_REGISTER";
   int ok = 0;
 
   if (!mdctx)
