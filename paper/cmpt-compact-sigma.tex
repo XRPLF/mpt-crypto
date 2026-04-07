@@ -1075,14 +1075,26 @@ transactions as well.
 
 In \textsf{ConfidentialMPTConvert}, a holder moves a publicly known
 amount~$m$ from cleartext into a confidential balance.
-The holder proves knowledge of the randomness~$r$ used in the
-ciphertext $(C_1, C_2) = (r \cdot G,\; m \cdot G + r \cdot P_A)$.
-Since $m$ is public, this is a single Schnorr proof of knowledge
-of~$r$ ($\Pi_{\mathrm{plain}}$), currently serialised in commitment
-form as $(T_1, T_2, s) \in \G^2 \times \Zq$ costing
-$2 \times 33 + 32 = 98$~bytes.
+Because $m$ appears in plaintext on-chain and the holder generates
+the encryption randomness~$r$ themselves, the production CMPT
+specification uses \emph{deterministic verification} rather than a
+zero-knowledge proof: the transaction includes a mandatory
+$32$-byte \texttt{BlindingFactor} field carrying~$r$, and
+validators check
+\[
+  C_1 \stackrel{?}{=} r \cdot G
+  \qquad\text{and}\qquad
+  C_{2,i} \stackrel{?}{=} m \cdot G + r \cdot \mathit{pk}_i
+\]
+for each recipient key~$\mathit{pk}_i$.
+No sigma proof is required or defined for Convert in the
+production protocol.
 
-In compact form, the proof becomes
+For reference, the natural sigma proof for this relation---a
+single Schnorr proof of knowledge of~$r$
+($\Pi_{\mathrm{plain}}$)---is serialised in commitment form as
+$(T_1, T_2, s) \in \G^2 \times \Zq$ costing
+$2 \times 33 + 32 = 98$~bytes, or in compact form as
 \[
   \Pi_{\mathrm{plain}} = (e,\, z_r) \;\in\; \Zq^2,
   \qquad\text{costing } 2 \times 32 = \mathbf{64}\text{~bytes},
@@ -1093,6 +1105,12 @@ with reconstruction:
   T_2 &= z_r \cdot P_A - e \cdot (C_2 - m \cdot G).
     \label{eq:recon-conv-t2}
 \end{align}
+This proof would apply in contexts where the prover cannot or
+should not disclose~$r$ on-chain; it is not part of the
+production CMPT transaction protocol.
+Clawback does not admit the r-disclosure shortcut, since the
+issuer proves knowledge of~$\sk_{\mathrm{iss}}$, not randomness
+(see \cref{sec:clawback}).
 
 \subsection{Clawback}
 \label{sec:clawback}
@@ -1128,20 +1146,6 @@ The Fiat--Shamir hash binds the domain tag
 $P_{\mathrm{iss}}$, $C_1$, $C_2$, $m \cdot G$ (serialised as a
 $33$-byte compressed point), the commitments $T_1$, $T_2$, and
 the transaction context~$\TransCtx$.
-
-\begin{remark}[Deterministic verification for Convert]
-  \label{rem:deterministic}
-  Convert admits an alternative where the prover
-  reveals~$r$ directly via the \texttt{BlindingFactor} field and the
-  verifier checks the ciphertext deterministically, at the cost of
-  $32$~bytes with no sigma protocol.
-  In the production CMPT specification, this is the adopted path: the
-  prover discloses~$r$ and the verifier checks $C_1 = r \cdot G$ and
-  $C_2 = m \cdot G + r \cdot P_A$.
-  If this path is adopted, compact form is moot for Convert.
-  Clawback does not admit this alternative, since the issuer proves
-  knowledge of~$\sk_{\mathrm{iss}}$, not randomness.
-\end{remark}
 
 \subsection{ConvertBack}
 \label{sec:convertback}
@@ -1257,8 +1261,9 @@ four confidential transaction types.
   \centering
   \caption{Sigma-proof sizes across transaction types.
     Range proofs (Bulletproof) are unchanged and shown separately.
-    Convert assumes a ZK proof rather than deterministic
-    verification (\cref{rem:deterministic}).}
+    In production, Convert uses r-disclosure (\cref{sec:convert})
+    rather than a sigma proof; the Convert row shows hypothetical
+    compact-form sizes for reference.}
   \label{tab:cross-tx}
   \begin{tabular}{l@{\quad}r@{\quad}r@{\quad}r@{\quad}r}
     \toprule
@@ -1309,8 +1314,9 @@ sigma protocol as a separate prove/verify pair:
 plaintext~PoK ($\Pi_{\mathrm{plain}}$, $98$~bytes) and
 \texttt{secp256k1\_elgamal\_pedersen\_link\_\{prove,verify\}} for
 the linkage proof ($\Pi_{\mathrm{link}}$, $195$~bytes).
-The different transaction types compose these building blocks: Convert
-uses $\Pi_{\mathrm{plain}}$ alone; Clawback uses a Chaum--Pedersen
+The different transaction types compose these building blocks:
+Convert uses deterministic r-disclosure (no sigma proof; see
+\cref{sec:convert}); Clawback uses a Chaum--Pedersen
 equality-of-discrete-logs proof for~$\sk_{\mathrm{iss}}$;
 ConvertBack uses
 $\Pi_{\mathrm{link\text{-}B}}$ plus a
@@ -1324,21 +1330,13 @@ Fiat--Shamir domain tag distinct from the commitment-form proofs.
 No changes to the underlying scalar or group-arithmetic layer are
 needed.
 
+Convert requires no new source file: the production protocol uses
+deterministic r-disclosure via \texttt{BlindingFactor}, so no sigma
+prove/verify pair is defined.
 Following this convention, we propose one new source file per
 remaining transaction type:
 
 \begin{description}[style=nextline,leftmargin=1.5em]
-  \item[Convert (compact $\Pi_{\mathrm{plain}}$).]
-    A new source file (e.g.\
-    \texttt{proof\_compact\_convert.c}) providing prove/verify
-    entry points that replace the commitment-form
-    \texttt{secp256k1\_equality\_plaintext} calls on main.
-    The proof shrinks from $98$ to $64$~bytes.
-    Internally, the prover samples one nonce~$t_{r}$, computes one
-    response $z_r = t_r + e \cdot r$, and serialises $(e, z_r)$.
-    The verifier reconstructs $T_1, T_2$ via
-    \crefrange{eq:recon-conv-t1}{eq:recon-conv-t2} and re-hashes.
-
   \item[Clawback (compact $\Pi_{\mathrm{claw}}$).]
     Implemented in \texttt{proof\_compact\_clawback.c}.
     The proof shrinks from $98$ to $64$~bytes.
@@ -1381,7 +1379,7 @@ In all cases, the old commitment-form functions on main are
 retained; the compact variants are strictly additive.
 The nonce-generation guidance of \cref{sec:nonces} (deterministic
 synthetic nonces incorporating the full witness) applies equally to
-ConvertBack, Convert, and Clawback.
+ConvertBack and Clawback.
 
 \subsubsection*{Changes in \texttt{rippled}}
 
