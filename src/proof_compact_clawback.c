@@ -110,7 +110,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
   MPT_ARG_CHECK(C1 != NULL);
   MPT_ARG_CHECK(C2 != NULL);
 
-  unsigned char t_sk[32], m_scalar[32];
+  unsigned char t_sk[32];
   unsigned char e[32], z_sk[32];
   secp256k1_pubkey mG, T1, T2;
   int ok = 0;
@@ -119,8 +119,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
     return 0;
 
   /* Compute m*G as a group element */
-  mpt_uint64_to_scalar(m_scalar, amount);
-  if (!secp256k1_ec_pubkey_create(ctx, &mG, m_scalar))
+  if (!compute_amount_point(ctx, &mG, amount))
     goto cleanup;
 
   /* 1. Deterministic nonce */
@@ -219,7 +218,6 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
 
 cleanup:
   OPENSSL_cleanse(t_sk, 32);
-  OPENSSL_cleanse(m_scalar, 32);
   OPENSSL_cleanse(e, 32);
   OPENSSL_cleanse(z_sk, 32);
   return ok;
@@ -238,7 +236,7 @@ int secp256k1_compact_clawback_verify(
   MPT_ARG_CHECK(C1 != NULL);
   MPT_ARG_CHECK(C2 != NULL);
 
-  unsigned char e[32], z_sk[32], e_prime[32], neg_e[32], m_scalar[32];
+  unsigned char e[32], z_sk[32], e_prime[32], neg_e[32];
   secp256k1_pubkey mG, T1, T2;
 
   /* 1. Deserialize: e || z_sk */
@@ -251,8 +249,7 @@ int secp256k1_compact_clawback_verify(
     return 0;
 
   /* Compute m*G as a group element */
-  mpt_uint64_to_scalar(m_scalar, amount);
-  if (!secp256k1_ec_pubkey_create(ctx, &mG, m_scalar))
+  if (!compute_amount_point(ctx, &mG, amount))
     return 0;
 
   secp256k1_mpt_scalar_negate(neg_e, e);
