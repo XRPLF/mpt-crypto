@@ -345,6 +345,9 @@ secp256k1_mpt_proof_equality_shared_r_size(size_t n);
 /**
  * Generates a proof that multiple ciphertexts encrypt the same amount m
  * using the SAME shared randomness r.
+ *
+ * n must satisfy 1 <= n <= 4 (Sender, Receiver, Issuer, Auditor).
+ * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_prove_equality_shared_r(
@@ -360,6 +363,9 @@ secp256k1_mpt_prove_equality_shared_r(
 
 /**
  * Verifies the proof of equality with shared randomness.
+ *
+ * n must satisfy 1 <= n <= 4.
+ * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_verify_equality_shared_r(
@@ -371,6 +377,12 @@ secp256k1_mpt_verify_equality_shared_r(
     secp256k1_pubkey const* Pk_vec,
     unsigned char const* context_id);
 
+/**
+ * Generates an aggregated Bulletproof range proof for m values.
+ *
+ * m must satisfy 1 <= m <= 4 and be a power of two.
+ * Returns 0 if m is out of range.
+ */
 int
 secp256k1_bulletproof_prove_agg(
     secp256k1_context const* ctx,
@@ -381,6 +393,13 @@ secp256k1_bulletproof_prove_agg(
     size_t m,
     secp256k1_pubkey const* pk_base,
     unsigned char const* context_id);
+
+/**
+ * Verifies an aggregated Bulletproof range proof for m values.
+ *
+ * m must satisfy 1 <= m <= 4 and be a power of two.
+ * Returns 0 if m is out of range.
+ */
 int
 secp256k1_bulletproof_verify_agg(
     secp256k1_context const* ctx,
