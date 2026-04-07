@@ -83,6 +83,12 @@ add_mpt_test(
 )
 
 add_mpt_test(
+    test_compact_clawback
+    test_compact_clawback.c
+    DEPENDENCIES mpt-crypto secp256k1
+)
+
+add_mpt_test(
     test_compact_convertback
     test_compact_convertback.c
     DEPENDENCIES mpt-crypto secp256k1

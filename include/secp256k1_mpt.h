@@ -445,6 +445,45 @@ secp256k1_compact_standard_verify(
 /*
 ================================================================================
 |                                                                              |
+|            COMPACT SIGMA PROOF — CLAWBACK                                   |
+|                                                                              |
+================================================================================
+ *
+ * Proves the issuer knows sk_iss consistent with the on-ledger mirror
+ * ciphertext (C1, C2) and the publicly declared amount m:
+ *   P_iss      = sk_iss * G
+ *   C2 - m*G   = sk_iss * C1
+ *
+ * Compact proof: (e, z_sk) in Z_q^2 = 64 bytes.
+ * Fiat-Shamir domain: "CMPT_CLAWBACK_SIGMA"
+ */
+
+#define SECP256K1_COMPACT_CLAWBACK_PROOF_SIZE 64
+
+SECP256K1_API int
+secp256k1_compact_clawback_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    unsigned char const* sk_iss,
+    secp256k1_pubkey const* P_iss,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    unsigned char const* context_id);
+
+SECP256K1_API int
+secp256k1_compact_clawback_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    uint64_t amount,
+    secp256k1_pubkey const* P_iss,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    unsigned char const* context_id);
+
+/*
+================================================================================
+|                                                                              |
 |            COMPACT SIGMA PROOF — CONVERTBACK                                |
 |                                                                              |
 ================================================================================
