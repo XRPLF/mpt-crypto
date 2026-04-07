@@ -422,16 +422,16 @@ secp256k1_bulletproof_verify_agg(
  * Combines ciphertext equality, Pedersen linkage, and balance verification
  * into a single sigma protocol under a shared Fiat-Shamir challenge.
  *
- * Language: exists (r, m, sk_A, r_b, v) in Z_q^5 such that:
+ * Language: exists (r, m, sk_A, rho, b) in Z_q^5 such that:
  *   C1          = r*G
- *   C_{2,i}     = r*pk_i + m*G   for i = 1..n
+ *   C_{2,i}     = m*G + r*pk_i   for i = 1..n
  *   PC_m        = m*G + r*H
  *   pk_A        = sk_A*G
- *   PC_b        = v*G + r_b*H
- *   sk_A*C1_rem + v*G = C2_rem
+ *   PC_b        = b*G + rho*H
+ *   B2 - b*G    = sk_A*B1
  *
- * Compact proof: (e, z_r, z_m, z_sk, z_rb, z_v) in Z_q^6 = 192 bytes.
- * Fiat-Shamir domain: "CMPT_COMBINED_STD_PROOF"
+ * Compact proof: (e, z_m, z_r, z_b, z_rho, z_sk) in Z_q^6 = 192 bytes.
+ * Fiat-Shamir domain: "CMPT_SEND_SIGMA"
  */
 
 /** Serialized size of the compact standard proof in bytes. */
@@ -486,9 +486,15 @@ secp256k1_compact_standard_verify(
 /*
 ================================================================================
 |                                                                              |
-|            COMPACT SIGMA PROOF — CONVERT / CLAWBACK                         |
+|            COMPACT SIGMA PROOF — CONVERT / CLAWBACK (OPTIONAL)              |
 |                                                                              |
 ================================================================================
+ *
+ * NOTE: In production, Convert and Clawback transactions disclose the
+ * encryption randomness r on-chain as the BlindingFactor field, allowing
+ * deterministic verification (C1 == r*G, C2 == m*G + r*P_A) without a ZKP.
+ * These functions are provided for contexts where the caller prefers
+ * cryptographic binding over deterministic verification.
  *
  * Proves knowledge of randomness r for a ciphertext encrypting a publicly
  * known amount m:  C1 = r*G,  C2 = m*G + r*P_A.
@@ -527,34 +533,33 @@ secp256k1_compact_convert_verify(
 |                                                                              |
 ================================================================================
  *
- * AND-composed proof for withdrawing a publicly known amount m from an
- * encrypted balance.  Combines withdrawal ciphertext correctness, key
- * ownership, balance decryption linkage, and balance Pedersen commitment.
+ * AND-composed proof for balance linkage in a ConvertBack withdrawal.
+ * The withdrawal ciphertext (C1_w, C2_w) is verified deterministically
+ * using the publicly disclosed r_w (BlindingFactor field), so the sigma
+ * proof covers only key ownership, balance decryption, and commitment.
  *
- * Language: exists (r_w, b, sk_A, rho) in Z_q^4 such that:
- *   C1_w     = r_w*G
- *   C2_w     = m*G + r_w*P_A
+ * Language: exists (b, sk_A, rho) in Z_q^3 such that:
  *   P_A      = sk_A*G
  *   B2 - b*G = sk_A*B1
  *   PC_b     = b*G + rho*H
  *
- * Compact proof: (e, z_rw, z_b, z_sk, z_rho) in Z_q^5 = 160 bytes.
- * Fiat-Shamir domain: "CMPT_CONVERTBACK_COMPACT"
+ * Compact proof: (e, z_b, z_rho, z_sk) in Z_q^4 = 128 bytes.
+ * Fiat-Shamir domain: "CMPT_CONVERTBACK_SIGMA"
+ *
+ * The caller must separately verify the withdrawal ciphertext:
+ *   C1_w == r_w*G  and  C2_w == m*G + r_w*P_A
+ * using secp256k1_elgamal_verify_encryption() or equivalent.
  */
 
-#define SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE 160
+#define SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE 128
 
 SECP256K1_API int
 secp256k1_compact_convertback_prove(
     secp256k1_context const* ctx,
     unsigned char* proof_out,
-    uint64_t amount,
     uint64_t balance,
-    unsigned char const* r_w,
     unsigned char const* sk_A,
     unsigned char const* rho,
-    secp256k1_pubkey const* C1_w,
-    secp256k1_pubkey const* C2_w,
     secp256k1_pubkey const* pk_A,
     secp256k1_pubkey const* B1,
     secp256k1_pubkey const* B2,
@@ -565,9 +570,6 @@ SECP256K1_API int
 secp256k1_compact_convertback_verify(
     secp256k1_context const* ctx,
     unsigned char const* proof,
-    uint64_t amount,
-    secp256k1_pubkey const* C1_w,
-    secp256k1_pubkey const* C2_w,
     secp256k1_pubkey const* pk_A,
     secp256k1_pubkey const* B1,
     secp256k1_pubkey const* B2,

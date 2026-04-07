@@ -2,8 +2,12 @@
  * @file proof_compact_convert.c
  * @brief Compact-form sigma protocol for Convert / Clawback transactions.
  *
- * Proves knowledge of randomness r for a ciphertext encrypting a publicly
- * known amount m under the account holder's key P_A.
+ * @note OPTIONAL MODULE — In production, Convert and Clawback transactions
+ * disclose the encryption randomness r on-chain as the BlindingFactor
+ * field.  The verifier checks C1 == r*G and C2 == m*G + r*P_A
+ * deterministically, with no ZKP required.  This module provides a
+ * sigma proof for contexts preferring cryptographic binding over
+ * deterministic verification (auditing, testing, etc.).
  *
  * Language L_convert:
  *   exists r in Z_q such that:

@@ -14,7 +14,7 @@ int main(void)
   random_bytes(seed);
   EXPECT(secp256k1_context_randomize(ctx, seed));
 
-  printf("=== Running Test: Compact ConvertBack Proof ===\n");
+  printf("=== Running Test: Compact ConvertBack Proof (128 bytes) ===\n");
 
   uint64_t balance = 1000000;
   uint64_t withdrawal = 250000;
@@ -46,6 +46,12 @@ int main(void)
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &C2_w, pts, 2));
   }
 
+  /* Deterministic ciphertext verification (simulates what verifier does
+   * with disclosed r_w): */
+  EXPECT(secp256k1_elgamal_verify_encryption(ctx, &C1_w, &C2_w, &pk_A,
+                                             withdrawal, r_w));
+  printf("Deterministic ciphertext verification OK.\n");
+
   /* On-ledger balance ciphertext: B1 = r_bal*G, B2 = balance*G + r_bal*P_A */
   secp256k1_pubkey B1, B2;
   EXPECT(secp256k1_ec_pubkey_create(ctx, &B1, r_bal));
@@ -72,7 +78,6 @@ int main(void)
       bal_scalar[31 - b] = (balance >> (b * 8)) & 0xFF;
     secp256k1_pubkey balG, skB1;
     EXPECT(secp256k1_ec_pubkey_create(ctx, &balG, bal_scalar));
-    /* B2 - balance*G */
     unsigned char neg_one[32];
     unsigned char one[32] = {0};
     one[31] = 1;
@@ -82,7 +87,6 @@ int main(void)
     secp256k1_pubkey lhs;
     const secp256k1_pubkey *sub_pts[2] = {&B2, &neg_balG};
     EXPECT(secp256k1_ec_pubkey_combine(ctx, &lhs, sub_pts, 2));
-    /* sk_A*B1 */
     skB1 = B1;
     EXPECT(secp256k1_ec_pubkey_tweak_mul(ctx, &skB1, sk_A));
     EXPECT(secp256k1_ec_pubkey_cmp(ctx, &lhs, &skB1) == 0);
@@ -94,14 +98,13 @@ int main(void)
 
   unsigned char proof[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE];
   int res = secp256k1_compact_convertback_prove(
-      ctx, proof, withdrawal, balance, r_w, sk_A, rho, &C1_w, &C2_w, &pk_A, &B1,
-      &B2, &PC_b, context_id);
+      ctx, proof, balance, sk_A, rho, &pk_A, &B1, &B2, &PC_b, context_id);
   EXPECT(res == 1);
   printf("Proof generated: %d bytes.\n",
          SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE);
 
-  res = secp256k1_compact_convertback_verify(
-      ctx, proof, withdrawal, &C1_w, &C2_w, &pk_A, &B1, &B2, &PC_b, context_id);
+  res = secp256k1_compact_convertback_verify(ctx, proof, &pk_A, &B1, &B2, &PC_b,
+                                             context_id);
   EXPECT(res == 1);
   printf("Proof verified successfully.\n");
 
@@ -111,35 +114,11 @@ int main(void)
     unsigned char fake_ctx[32];
     memcpy(fake_ctx, context_id, 32);
     fake_ctx[0] ^= 0xFF;
-    res = secp256k1_compact_convertback_verify(
-        ctx, proof, withdrawal, &C1_w, &C2_w, &pk_A, &B1, &B2, &PC_b, fake_ctx);
+    res = secp256k1_compact_convertback_verify(ctx, proof, &pk_A, &B1, &B2,
+                                               &PC_b, fake_ctx);
     EXPECT(res == 0);
   }
   printf("Wrong context: rejected OK.\n");
-
-  /* --- Negative: Wrong withdrawal amount --- */
-  printf("Testing wrong withdrawal amount...\n");
-  {
-    res = secp256k1_compact_convertback_verify(ctx, proof, withdrawal + 1,
-                                               &C1_w, &C2_w, &pk_A, &B1, &B2,
-                                               &PC_b, context_id);
-    EXPECT(res == 0);
-  }
-  printf("Wrong withdrawal amount: rejected OK.\n");
-
-  /* --- Negative: Tampered C1_w --- */
-  printf("Testing tampered C1_w...\n");
-  {
-    secp256k1_pubkey C1w_bad = C1_w;
-    unsigned char tweak[32] = {0};
-    tweak[31] = 1;
-    EXPECT(secp256k1_ec_pubkey_tweak_add(ctx, &C1w_bad, tweak));
-    res = secp256k1_compact_convertback_verify(ctx, proof, withdrawal, &C1w_bad,
-                                               &C2_w, &pk_A, &B1, &B2, &PC_b,
-                                               context_id);
-    EXPECT(res == 0);
-  }
-  printf("Tampered C1_w: rejected OK.\n");
 
   /* --- Negative: Corrupted proof byte --- */
   printf("Testing corrupted proof...\n");
@@ -147,8 +126,8 @@ int main(void)
     unsigned char bad[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE];
     memcpy(bad, proof, SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE);
     bad[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE - 1] ^= 0x01;
-    res = secp256k1_compact_convertback_verify(
-        ctx, bad, withdrawal, &C1_w, &C2_w, &pk_A, &B1, &B2, &PC_b, context_id);
+    res = secp256k1_compact_convertback_verify(ctx, bad, &pk_A, &B1, &B2, &PC_b,
+                                               context_id);
     EXPECT(res == 0);
   }
   printf("Corrupted proof: rejected OK.\n");
@@ -160,8 +139,7 @@ int main(void)
     unsigned char bad_rho[32];
     random_scalar(ctx, bad_rho);
     EXPECT(secp256k1_mpt_pedersen_commit(ctx, &PC_b_bad, balance, bad_rho));
-    res = secp256k1_compact_convertback_verify(ctx, proof, withdrawal, &C1_w,
-                                               &C2_w, &pk_A, &B1, &B2,
+    res = secp256k1_compact_convertback_verify(ctx, proof, &pk_A, &B1, &B2,
                                                &PC_b_bad, context_id);
     EXPECT(res == 0);
   }
@@ -174,12 +152,24 @@ int main(void)
     unsigned char tweak[32] = {0};
     tweak[31] = 1;
     EXPECT(secp256k1_ec_pubkey_tweak_add(ctx, &B2_bad, tweak));
-    res = secp256k1_compact_convertback_verify(ctx, proof, withdrawal, &C1_w,
-                                               &C2_w, &pk_A, &B1, &B2_bad,
+    res = secp256k1_compact_convertback_verify(ctx, proof, &pk_A, &B1, &B2_bad,
                                                &PC_b, context_id);
     EXPECT(res == 0);
   }
   printf("Tampered B2: rejected OK.\n");
+
+  /* --- Negative: Wrong pk_A --- */
+  printf("Testing wrong pk_A...\n");
+  {
+    unsigned char sk_bad[32];
+    secp256k1_pubkey pk_bad;
+    random_scalar(ctx, sk_bad);
+    EXPECT(secp256k1_ec_pubkey_create(ctx, &pk_bad, sk_bad));
+    res = secp256k1_compact_convertback_verify(ctx, proof, &pk_bad, &B1, &B2,
+                                               &PC_b, context_id);
+    EXPECT(res == 0);
+  }
+  printf("Wrong pk_A: rejected OK.\n");
 
   secp256k1_context_destroy(ctx);
   printf("ALL COMPACT CONVERTBACK TESTS PASSED\n");
