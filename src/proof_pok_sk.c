@@ -112,6 +112,12 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
                                const unsigned char *sk,
                                const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof_out != NULL);
+  MPT_ARG_CHECK(pk != NULL);
+  MPT_ARG_CHECK(sk != NULL);
+  /* context_id is optional */
+
   unsigned char k[32];
   unsigned char e[32];
   unsigned char s[32];
@@ -162,6 +168,11 @@ int secp256k1_mpt_pok_sk_verify(
     const unsigned char *proof, // Caller MUST ensure this is at least 65 bytes
     const secp256k1_pubkey *pk, const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(pk != NULL);
+  /* context_id is optional */
+
   secp256k1_pubkey T, LHS, RHS, ePk;
   unsigned char e[32], s[32];
   const unsigned char *ptr = proof;

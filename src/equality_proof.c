@@ -156,6 +156,14 @@ int secp256k1_equality_plaintext_prove(
     const secp256k1_pubkey *pk_recipient, uint64_t amount,
     const unsigned char *randomness_r, const unsigned char *tx_context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(c1 != NULL);
+  MPT_ARG_CHECK(c2 != NULL);
+  MPT_ARG_CHECK(pk_recipient != NULL);
+  MPT_ARG_CHECK(randomness_r != NULL);
+  MPT_ARG_CHECK(tx_context_id != NULL);
+
   unsigned char t[32];
   unsigned char e[32];
   unsigned char s[32];
@@ -238,6 +246,13 @@ int secp256k1_equality_plaintext_verify(const secp256k1_context *ctx,
                                         uint64_t amount,
                                         const unsigned char *tx_context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(c1 != NULL);
+  MPT_ARG_CHECK(c2 != NULL);
+  MPT_ARG_CHECK(pk_recipient != NULL);
+  MPT_ARG_CHECK(tx_context_id != NULL);
+
   secp256k1_pubkey T1, T2;
   unsigned char s[32];
   unsigned char e[32];

@@ -24,7 +24,7 @@
 #include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 
 static const char DOMAIN_COMPACT_CONVERT[] = "CMPT_CONVERT_COMPACT";
 
@@ -35,28 +35,38 @@ static void compute_compact_convert_challenge(
     const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
     const unsigned char *context_id)
 {
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
+
+  if (!mdctx)
+    return;
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, DOMAIN_COMPACT_CONVERT,
+                       strlen(DOMAIN_COMPACT_CONVERT)) != 1)
+    goto cleanup;
 
 #define SER(pk_ptr)                                                            \
   do                                                                           \
   {                                                                            \
     len = 33;                                                                  \
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                      \
-                                  SECP256K1_EC_COMPRESSED);                    \
-    SHA256_Update(&sha, buf, 33);                                              \
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
+                                       SECP256K1_EC_COMPRESSED) ||             \
+        len != 33)                                                             \
+      goto cleanup;                                                            \
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+      goto cleanup;                                                            \
   } while (0)
-
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, DOMAIN_COMPACT_CONVERT, strlen(DOMAIN_COMPACT_CONVERT));
 
   /* Statement */
   SER(pk_A);
   SER(C1);
   SER(C2);
-  SHA256_Update(&sha, m_scalar, 32);
+  if (EVP_DigestUpdate(mdctx, m_scalar, 32) != 1)
+    goto cleanup;
 
   /* Commitments */
   SER(T1);
@@ -65,10 +75,17 @@ static void compute_compact_convert_challenge(
 #undef SER
 
   if (context_id)
-    SHA256_Update(&sha, context_id, 32);
+  {
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
+  }
 
-  SHA256_Final(h, &sha);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Prover --- */
@@ -81,6 +98,13 @@ int secp256k1_compact_convert_prove(const secp256k1_context *ctx,
                                     const secp256k1_pubkey *pk_A,
                                     const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof_out != NULL);
+  MPT_ARG_CHECK(r != NULL);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2 != NULL);
+  MPT_ARG_CHECK(pk_A != NULL);
+
   unsigned char t_r[32], m_scalar[32];
   unsigned char e[32], z_r[32];
   secp256k1_pubkey T1, T2;
@@ -135,6 +159,12 @@ int secp256k1_compact_convert_verify(
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2,
     const secp256k1_pubkey *pk_A, const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2 != NULL);
+  MPT_ARG_CHECK(pk_A != NULL);
+
   unsigned char e[32], z_r[32], e_prime[32], neg_e[32], m_scalar[32];
   secp256k1_pubkey T1, T2;
 

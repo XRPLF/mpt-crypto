@@ -18,6 +18,17 @@
 #include <stdint.h>
 #include <string.h>
 
+/**
+ * Argument validation macro, following the secp256k1 ARG_CHECK pattern.
+ * Returns 0 from the calling function if the condition is false.
+ */
+#define MPT_ARG_CHECK(cond) \
+    do                      \
+    {                       \
+        if (!(cond))        \
+            return 0;       \
+    } while (0)
+
 /* Forward-declare secp256k1_mpt helpers used in nonce generation. */
 void
 secp256k1_mpt_scalar_reduce32(unsigned char out32[32], unsigned char const in32[32]);

@@ -30,7 +30,7 @@
 #include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include <stdlib.h>
 
 static const char DOMAIN_COMPACT_STANDARD[] = "CMPT_SEND_SIGMA";
@@ -55,22 +55,31 @@ static void compute_compact_std_challenge(
     const secp256k1_pubkey *T_PCb, const secp256k1_pubkey *K2,
     const unsigned char *context_id)
 {
-  SHA256_CTX sha;
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
+
+  if (!mdctx)
+    return;
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, DOMAIN_COMPACT_STANDARD,
+                       strlen(DOMAIN_COMPACT_STANDARD)) != 1)
+    goto cleanup;
 
 #define SER(pk_ptr)                                                            \
   do                                                                           \
   {                                                                            \
     len = 33;                                                                  \
-    secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                      \
-                                  SECP256K1_EC_COMPRESSED);                    \
-    SHA256_Update(&sha, buf, 33);                                              \
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
+                                       SECP256K1_EC_COMPRESSED) ||             \
+        len != 33)                                                             \
+      goto cleanup;                                                            \
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+      goto cleanup;                                                            \
   } while (0)
-
-  SHA256_Init(&sha);
-  SHA256_Update(&sha, DOMAIN_COMPACT_STANDARD, strlen(DOMAIN_COMPACT_STANDARD));
 
   /* Statement — public keys first, then ciphertexts and commitments */
   for (size_t i = 0; i < n; i++)
@@ -96,10 +105,17 @@ static void compute_compact_std_challenge(
 #undef SER
 
   if (context_id)
-    SHA256_Update(&sha, context_id, 32);
+  {
+    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto cleanup;
+  }
 
-  SHA256_Final(h, &sha);
+  if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
+    goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+
+cleanup:
+  EVP_MD_CTX_free(mdctx);
 }
 
 /* --- Prover --- */
@@ -114,12 +130,22 @@ int secp256k1_compact_standard_prove(
     const secp256k1_pubkey *C1_rem, const secp256k1_pubkey *C2_rem,
     const unsigned char *context_id)
 {
-  /* Guards */
-  if (n == 0)
-    return 0;
-  if (!ctx || !proof_out || !r_shared || !sk_A || !r_b || !C1 || !C2_vec ||
-      !Pk_vec || !PC_m || !pk_A || !PC_b || !C1_rem || !C2_rem)
-    return 0;
+  /* n=0 would produce a proof binding no ciphertexts to any recipient,
+   * which is semantically vacuous (paper requires n >= 1). */
+  MPT_ARG_CHECK(n > 0);
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof_out != NULL);
+  MPT_ARG_CHECK(r_shared != NULL);
+  MPT_ARG_CHECK(sk_A != NULL);
+  MPT_ARG_CHECK(r_b != NULL);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2_vec != NULL);
+  MPT_ARG_CHECK(Pk_vec != NULL);
+  MPT_ARG_CHECK(PC_m != NULL);
+  MPT_ARG_CHECK(pk_A != NULL);
+  MPT_ARG_CHECK(PC_b != NULL);
+  MPT_ARG_CHECK(C1_rem != NULL);
+  MPT_ARG_CHECK(C2_rem != NULL);
 
   /* Nonces: alpha(r), beta(m), gamma(sk_A), delta(r_b), epsilon(v) */
   unsigned char alpha[32], beta[32], gamma[32], delta[32], epsilon[32];
@@ -165,18 +191,39 @@ int secp256k1_compact_standard_prove(
     /* Hash all public statement elements into a 32-byte digest */
     unsigned char stmt_hash[32];
     {
-      SHA256_CTX sh;
+      EVP_MD_CTX *sh = EVP_MD_CTX_new();
       unsigned char sbuf[33];
       size_t slen;
+      if (!sh)
+      {
+        OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
+        goto cleanup;
+      }
+      if (EVP_DigestInit_ex(sh, EVP_sha256(), NULL) != 1)
+      {
+        EVP_MD_CTX_free(sh);
+        OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
+        goto cleanup;
+      }
 #define SHASH(pk_ptr)                                                          \
   do                                                                           \
   {                                                                            \
     slen = 33;                                                                 \
-    secp256k1_ec_pubkey_serialize(ctx, sbuf, &slen, pk_ptr,                    \
-                                  SECP256K1_EC_COMPRESSED);                    \
-    SHA256_Update(&sh, sbuf, 33);                                              \
+    if (!secp256k1_ec_pubkey_serialize(ctx, sbuf, &slen, pk_ptr,               \
+                                       SECP256K1_EC_COMPRESSED) ||             \
+        slen != 33)                                                            \
+    {                                                                          \
+      EVP_MD_CTX_free(sh);                                                     \
+      OPENSSL_cleanse(witness_buf, sizeof(witness_buf));                       \
+      goto cleanup;                                                            \
+    }                                                                          \
+    if (EVP_DigestUpdate(sh, sbuf, 33) != 1)                                   \
+    {                                                                          \
+      EVP_MD_CTX_free(sh);                                                     \
+      OPENSSL_cleanse(witness_buf, sizeof(witness_buf));                       \
+      goto cleanup;                                                            \
+    }                                                                          \
   } while (0)
-      SHA256_Init(&sh);
       for (size_t i = 0; i < n; i++)
         SHASH(&Pk_vec[i]);
       SHASH(pk_A);
@@ -188,8 +235,16 @@ int secp256k1_compact_standard_prove(
       SHASH(C1_rem);
       SHASH(C2_rem);
       if (context_id)
-        SHA256_Update(&sh, context_id, 32);
-      SHA256_Final(stmt_hash, &sh);
+      {
+        if (EVP_DigestUpdate(sh, context_id, 32) != 1)
+        {
+          EVP_MD_CTX_free(sh);
+          OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
+          goto cleanup;
+        }
+      }
+      EVP_DigestFinal_ex(sh, stmt_hash, NULL);
+      EVP_MD_CTX_free(sh);
 #undef SHASH
     }
 
@@ -337,12 +392,19 @@ int secp256k1_compact_standard_verify(
     const secp256k1_pubkey *C1_rem, const secp256k1_pubkey *C2_rem,
     const unsigned char *context_id)
 {
-  /* Guards */
-  if (n == 0)
-    return 0;
-  if (!ctx || !proof || !C1 || !C2_vec || !Pk_vec || !PC_m || !pk_A || !PC_b ||
-      !C1_rem || !C2_rem)
-    return 0;
+  /* n=0 would produce a proof binding no ciphertexts to any recipient,
+   * which is semantically vacuous (paper requires n >= 1). */
+  MPT_ARG_CHECK(n > 0);
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2_vec != NULL);
+  MPT_ARG_CHECK(Pk_vec != NULL);
+  MPT_ARG_CHECK(PC_m != NULL);
+  MPT_ARG_CHECK(pk_A != NULL);
+  MPT_ARG_CHECK(PC_b != NULL);
+  MPT_ARG_CHECK(C1_rem != NULL);
+  MPT_ARG_CHECK(C2_rem != NULL);
 
   unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_v[32];
   unsigned char e_prime[32], neg_e[32];

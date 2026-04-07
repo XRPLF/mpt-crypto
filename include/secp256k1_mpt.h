@@ -31,20 +31,6 @@ secp256k1_elgamal_encrypt(
 
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
- * Due to the use of a linear discrete logarithm search, this function can
- * only successfully recover plaintext amounts between 0 and 1,000,000 (inclusive).
- * If the ciphertext encrypts a value greater than 1,000,000, the search will
- * exhaust its range and the function will safely return 0 (failure).
- * * NOTE: To mitigate timing side-channels, this search executes with a fixed
- * iteration count (always looping to the maximum limit). However, because the
- * underlying libsecp256k1 curve operations are inherently variable-time, this
- * function does NOT provide a strict constant-time guarantee.
- * * Architectural Note:
- * On-chain validators and verifiers never need to perform decryption; this
- * function is provided primarily for testing and basic client-side operations.
- * Off-chain applications (like wallets) requiring decryption of larger balances
- * should implement more efficient discrete logarithm algorithms, such as
- * Baby-Step Giant-Step (BSGS) or Pollard's kangaroo method.
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt(
@@ -173,14 +159,6 @@ secp256k1_equality_plaintext_verify(
 );
 
 // ... (rest of header, #endif etc.)
-
-/*
-================================================================================
-|                                                                              |
-|           PROOF OF EQUALITY OF SECRET PLAINTEXTS                             |
-|                (Multi-Statement Chaum-Pedersen)                              |
-================================================================================
-*/
 
 /**
  * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
@@ -345,9 +323,6 @@ secp256k1_mpt_proof_equality_shared_r_size(size_t n);
 /**
  * Generates a proof that multiple ciphertexts encrypt the same amount m
  * using the SAME shared randomness r.
- *
- * n must satisfy 1 <= n <= 4 (Sender, Receiver, Issuer, Auditor).
- * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_prove_equality_shared_r(
@@ -363,9 +338,6 @@ secp256k1_mpt_prove_equality_shared_r(
 
 /**
  * Verifies the proof of equality with shared randomness.
- *
- * n must satisfy 1 <= n <= 4.
- * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_verify_equality_shared_r(
@@ -377,12 +349,6 @@ secp256k1_mpt_verify_equality_shared_r(
     secp256k1_pubkey const* Pk_vec,
     unsigned char const* context_id);
 
-/**
- * Generates an aggregated Bulletproof range proof for m values.
- *
- * m must satisfy 1 <= m <= 4 and be a power of two.
- * Returns 0 if m is out of range.
- */
 int
 secp256k1_bulletproof_prove_agg(
     secp256k1_context const* ctx,
@@ -393,13 +359,6 @@ secp256k1_bulletproof_prove_agg(
     size_t m,
     secp256k1_pubkey const* pk_base,
     unsigned char const* context_id);
-
-/**
- * Verifies an aggregated Bulletproof range proof for m values.
- *
- * m must satisfy 1 <= m <= 4 and be a power of two.
- * Returns 0 if m is out of range.
- */
 int
 secp256k1_bulletproof_verify_agg(
     secp256k1_context const* ctx,
