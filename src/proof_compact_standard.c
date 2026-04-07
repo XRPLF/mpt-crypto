@@ -44,7 +44,7 @@ static const char DOMAIN_COMPACT_STANDARD[] = "CMPT_SEND_SIGMA";
  *          || T_1 || T_{2,1}..T_{2,n} || T_m || T_b || T_{sk,1} || T_{sk,2}
  *          || context_id
  */
-static void compute_compact_std_challenge(
+static int compute_compact_std_challenge(
     const secp256k1_context *ctx, unsigned char *e_out, size_t n,
     const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *C1,
     const secp256k1_pubkey *C2_vec, const secp256k1_pubkey *PC_m,
@@ -59,9 +59,10 @@ static void compute_compact_std_challenge(
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
+  int ok = 0;
 
   if (!mdctx)
-    return;
+    return 0;
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
@@ -113,9 +114,11 @@ static void compute_compact_std_challenge(
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
+  return ok;
 }
 
 /* --- Prover --- */
@@ -331,9 +334,10 @@ int secp256k1_compact_standard_prove(
   }
 
   /* 3. Challenge */
-  compute_compact_std_challenge(ctx, e, n, Pk_vec, C1, C2_vec, PC_m, pk_A, PC_b,
-                                C1_rem, C2_rem, &T1, T2_vec, &T_PCm, &K1,
-                                &T_PCb, &K2, context_id);
+  if (!compute_compact_std_challenge(ctx, e, n, Pk_vec, C1, C2_vec, PC_m, pk_A,
+                                     PC_b, C1_rem, C2_rem, &T1, T2_vec, &T_PCm,
+                                     &K1, &T_PCb, &K2, context_id))
+    goto cleanup;
 
   /* 4. Responses */
 
@@ -543,9 +547,10 @@ int secp256k1_compact_standard_verify(
   }
 
   /* 3. Recompute challenge */
-  compute_compact_std_challenge(ctx, e_prime, n, Pk_vec, C1, C2_vec, PC_m, pk_A,
-                                PC_b, C1_rem, C2_rem, &T1, T2_vec, &T_PCm, &K1,
-                                &T_PCb, &K2, context_id);
+  if (!compute_compact_std_challenge(ctx, e_prime, n, Pk_vec, C1, C2_vec, PC_m,
+                                     pk_A, PC_b, C1_rem, C2_rem, &T1, T2_vec,
+                                     &T_PCm, &K1, &T_PCb, &K2, context_id))
+    goto cleanup;
 
   /* 4. Accept iff e' == e (constant-time comparison) */
   if (CRYPTO_memcmp(e, e_prime, 32) == 0)

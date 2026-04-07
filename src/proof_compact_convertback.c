@@ -28,7 +28,7 @@
 
 static const char DOMAIN_COMPACT_CONVERTBACK[] = "CMPT_CONVERTBACK_SIGMA";
 
-static void compute_compact_convertback_challenge(
+static int compute_compact_convertback_challenge(
     const secp256k1_context *ctx, unsigned char *e_out,
     const secp256k1_pubkey *pk_A, const secp256k1_pubkey *B1,
     const secp256k1_pubkey *B2, const secp256k1_pubkey *PC_b,
@@ -39,9 +39,10 @@ static void compute_compact_convertback_challenge(
   unsigned char buf[33];
   unsigned char h[32];
   size_t len;
+  int ok = 0;
 
   if (!mdctx)
-    return;
+    return 0;
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
@@ -83,9 +84,11 @@ static void compute_compact_convertback_challenge(
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
   secp256k1_mpt_scalar_reduce32(e_out, h);
+  ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
+  return ok;
 }
 
 /* --- Prover --- */
@@ -233,8 +236,9 @@ int secp256k1_compact_convertback_prove(
   }
 
   /* 3. Challenge */
-  compute_compact_convertback_challenge(ctx, e, pk_A, B1, B2, PC_b, &T_sk1,
-                                        &T_sk2, &T_b, context_id);
+  if (!compute_compact_convertback_challenge(ctx, e, pk_A, B1, B2, PC_b, &T_sk1,
+                                             &T_sk2, &T_b, context_id))
+    goto cleanup;
 
   /* 4. Responses */
   if (!compute_sigma_response(ctx, z_b, t_b, e, b_scalar))
@@ -354,8 +358,9 @@ int secp256k1_compact_convertback_verify(const secp256k1_context *ctx,
   }
 
   /* 3. Recompute challenge */
-  compute_compact_convertback_challenge(ctx, e_prime, pk_A, B1, B2, PC_b,
-                                        &T_sk1, &T_sk2, &T_b, context_id);
+  if (!compute_compact_convertback_challenge(ctx, e_prime, pk_A, B1, B2, PC_b,
+                                             &T_sk1, &T_sk2, &T_b, context_id))
+    return 0;
 
   /* 4. Accept iff e' == e */
   return CRYPTO_memcmp(e, e_prime, 32) == 0;
