@@ -12,43 +12,61 @@ void test_pok_sk()
   EXPECT(ctx != NULL);
 
   unsigned char sk[32], context_id[32];
-  unsigned char proof[65]; // Schnorr proof is 64 bytes + 1 byte header usually,
-                           // or just 64 depending on impl.
-  // The previous code used 65, so we keep 65.
+  unsigned char proof[SECP256K1_POK_SK_PROOF_SIZE];
   secp256k1_pubkey pk;
 
-  printf("DEBUG: Starting PoK SK Registration test...\n");
+  printf("=== Running Test: Compact PoK SK Registration (64 bytes) ===\n");
 
-  // Setup: Generate keypair and random context
   random_scalar(ctx, sk);
   EXPECT(secp256k1_ec_pubkey_create(ctx, &pk, sk));
+  random_bytes(context_id);
 
-  EXPECT(RAND_bytes(context_id, 32) == 1);
-
-  // Test 1: Generate and Verify Valid Proof
-  // Returns 1 on success
+  /* --- Positive Case --- */
   EXPECT(secp256k1_mpt_pok_sk_prove(ctx, proof, &pk, sk, context_id) == 1);
+  printf("Proof generated: %d bytes.\n", SECP256K1_POK_SK_PROOF_SIZE);
 
-  // Returns 1 on success
   EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk, context_id) == 1);
-  printf("SUCCESS: Valid PoK verified.\n");
+  printf("Proof verified successfully.\n");
 
-  // Test 2: Invalid Context
-  // Proof should bind to the specific context_id. Changing it should fail
-  // verification.
-  unsigned char wrong_context[32];
-  memcpy(wrong_context, context_id, 32);
-  wrong_context[0] ^= 0xFF; // Corrupt the context
+  /* --- Negative: Wrong context --- */
+  printf("Testing wrong context...\n");
+  {
+    unsigned char wrong_context[32];
+    memcpy(wrong_context, context_id, 32);
+    wrong_context[0] ^= 0xFF;
+    EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk, wrong_context) == 0);
+  }
+  printf("Wrong context: rejected OK.\n");
 
-  EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk, wrong_context) == 0);
-  printf("SUCCESS: Invalid context correctly rejected.\n");
+  /* --- Negative: Corrupted proof byte --- */
+  printf("Testing corrupted proof...\n");
+  {
+    unsigned char bad[SECP256K1_POK_SK_PROOF_SIZE];
+    memcpy(bad, proof, SECP256K1_POK_SK_PROOF_SIZE);
+    bad[SECP256K1_POK_SK_PROOF_SIZE - 1] ^= 0x01;
+    EXPECT(secp256k1_mpt_pok_sk_verify(ctx, bad, &pk, context_id) == 0);
+  }
+  printf("Corrupted proof: rejected OK.\n");
 
-  // Test 3: Corrupted Proof Scalar
-  // Corrupt the last byte of the proof signature/scalar
-  proof[64] ^= 0xFF;
+  /* --- Negative: Wrong public key --- */
+  printf("Testing wrong public key...\n");
+  {
+    unsigned char sk_bad[32];
+    secp256k1_pubkey pk_bad;
+    random_scalar(ctx, sk_bad);
+    EXPECT(secp256k1_ec_pubkey_create(ctx, &pk_bad, sk_bad));
+    EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk_bad, context_id) == 0);
+  }
+  printf("Wrong public key: rejected OK.\n");
 
-  EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof, &pk, context_id) == 0);
-  printf("SUCCESS: Corrupted proof correctly rejected.\n");
+  /* --- Positive: No context_id (NULL) --- */
+  printf("Testing NULL context_id...\n");
+  {
+    unsigned char proof_no_ctx[SECP256K1_POK_SK_PROOF_SIZE];
+    EXPECT(secp256k1_mpt_pok_sk_prove(ctx, proof_no_ctx, &pk, sk, NULL) == 1);
+    EXPECT(secp256k1_mpt_pok_sk_verify(ctx, proof_no_ctx, &pk, NULL) == 1);
+  }
+  printf("NULL context_id: accepted OK.\n");
 
   secp256k1_context_destroy(ctx);
 }
@@ -56,6 +74,6 @@ void test_pok_sk()
 int main()
 {
   test_pok_sk();
-  printf("ALL TESTS PASSED\n");
+  printf("ALL POK SK TESTS PASSED\n");
   return 0;
 }

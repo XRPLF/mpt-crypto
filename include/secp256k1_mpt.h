@@ -259,19 +259,23 @@ secp256k1_elgamal_verify_encryption(
     uint64_t amount,
     unsigned char const* blinding_factor);
 
-/** Proof of Knowledge of Secret Key for Registration */
-int
+/** Proof of Knowledge of Secret Key for Registration.
+ *  Compact form: (e, s) in Z_q^2 = 64 bytes.
+ *  Domain: "CMPT_POK_SK_REGISTER" */
+#define SECP256K1_POK_SK_PROOF_SIZE 64
+
+SECP256K1_API int
 secp256k1_mpt_pok_sk_prove(
     secp256k1_context const* ctx,
-    unsigned char* proof, /* Expected size: 65 bytes */
+    unsigned char* proof, /* Expected size: 64 bytes */
     secp256k1_pubkey const* pk,
     unsigned char const* sk,
     unsigned char const* context_id);
 
-int
+SECP256K1_API int
 secp256k1_mpt_pok_sk_verify(
     secp256k1_context const* ctx,
-    unsigned char const* proof, /* Expected size: 65 bytes */
+    unsigned char const* proof, /* Expected size: 64 bytes */
     secp256k1_pubkey const* pk,
     unsigned char const* context_id);
 
