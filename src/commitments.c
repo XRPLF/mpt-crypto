@@ -27,6 +27,7 @@
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.5] Linking ElGamal
  * Ciphertexts and Pedersen Commitments
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h> // For OPENSSL_cleanse
 #include <openssl/evp.h>
@@ -141,6 +142,9 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
 int secp256k1_mpt_get_h_generator(const secp256k1_context *ctx,
                                   secp256k1_pubkey *h)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(h != NULL);
+
   return secp256k1_mpt_hash_to_point_nums(ctx, h, (const unsigned char *)"H", 1,
                                           0);
 }
@@ -162,6 +166,10 @@ int secp256k1_mpt_get_generator_vector(const secp256k1_context *ctx,
                                        const unsigned char *label,
                                        size_t label_len)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(vec != NULL);
+  /* label is optional (NULL means use default NUMS derivation) */
+
   for (uint32_t i = 0; i < (uint32_t)n; i++)
   {
     if (!secp256k1_mpt_hash_to_point_nums(ctx, &vec[i], label, label_len, i))
@@ -186,6 +194,10 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
                                   secp256k1_pubkey *commitment, uint64_t amount,
                                   const unsigned char *rho)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(commitment != NULL);
+  MPT_ARG_CHECK(rho != NULL);
+
   secp256k1_pubkey mG, rH, H;
   unsigned char m_scalar[32] = {0};
   int ok = 0;

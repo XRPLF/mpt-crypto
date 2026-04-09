@@ -29,7 +29,7 @@ extern "C" {
 #define kMPT_PEDERSEN_COMMIT_SIZE 33
 
 // Proof sizes in bytes
-#define kMPT_SCHNORR_PROOF_SIZE 65
+#define kMPT_SCHNORR_PROOF_SIZE 64
 #define kMPT_EQUALITY_PROOF_SIZE 98
 #define kMPT_PEDERSEN_LINK_SIZE 195
 #define kMPT_SINGLE_BULLETPROOF_SIZE 688
@@ -235,7 +235,7 @@ mpt_decrypt_amount(
  * @param pubkey    [in]  33-byte public key of the account.
  * @param privkey   [in]  32-byte private key of the account.
  * @param ctx_hash  [in]  32-byte hash of the transaction (challenge).
- * @param out_proof [out] 65-byte buffer to store the Schnorr proof.
+ * @param out_proof [out] 64-byte buffer to store the compact Schnorr proof.
  * @return 0 on success, -1 on failure.
  */
 int
@@ -377,7 +377,7 @@ mpt_verify_revealed_amount(
  *
  * Proves that the sender possesses the private key for the provided public key.
  *
- * @param proof        [in] The 65-byte Schnorr proof.
+ * @param proof        [in] The 64-byte compact Schnorr proof.
  * @param pubkey       [in] The 33-byte compressed ElGamal public key.
  * @param context_hash [in] The 32-byte transaction context hash.
  * @return 0 on success, -1 on failure.

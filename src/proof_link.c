@@ -129,6 +129,16 @@ int secp256k1_elgamal_pedersen_link_prove(
     const unsigned char *r, const unsigned char *rho,
     const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(c1 != NULL);
+  MPT_ARG_CHECK(c2 != NULL);
+  MPT_ARG_CHECK(pk != NULL);
+  MPT_ARG_CHECK(pcm != NULL);
+  MPT_ARG_CHECK(r != NULL);
+  MPT_ARG_CHECK(rho != NULL);
+  /* context_id is optional */
+
   unsigned char km[32], kr[32], krho[32];
   unsigned char e[32];
   unsigned char sm[32], sr[32], srho[32];
@@ -267,6 +277,14 @@ int secp256k1_elgamal_pedersen_link_verify(const secp256k1_context *ctx,
                                            const secp256k1_pubkey *pcm,
                                            const unsigned char *context_id)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(c1 != NULL);
+  MPT_ARG_CHECK(c2 != NULL);
+  MPT_ARG_CHECK(pk != NULL);
+  MPT_ARG_CHECK(pcm != NULL);
+  /* context_id is optional */
+
   secp256k1_pubkey T1, T2, T3;
   secp256k1_pubkey LHS, RHS, term, mG, H;
   const secp256k1_pubkey *pts[2];

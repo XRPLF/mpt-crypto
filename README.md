@@ -124,3 +124,6 @@ Two public documents cover the design choices and integration details:
 
 - **Research Paper:** [ePrint 2026/602](https://eprint.iacr.org/2026/602)
   The paper provides a deeper dive into the cryptographic design choices and security analysis.
+
+- **Compact Sigma Proof Specification:** [`paper/cmpt-compact-sigma.pdf`](paper/cmpt-compact-sigma.pdf)
+  Formal specification and security analysis of the compact AND-composed sigma proof for standard EC-ElGamal transfers.

@@ -31,20 +31,6 @@ secp256k1_elgamal_encrypt(
 
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
- * Due to the use of a linear discrete logarithm search, this function can
- * only successfully recover plaintext amounts between 0 and 1,000,000 (inclusive).
- * If the ciphertext encrypts a value greater than 1,000,000, the search will
- * exhaust its range and the function will safely return 0 (failure).
- * * NOTE: To mitigate timing side-channels, this search executes with a fixed
- * iteration count (always looping to the maximum limit). However, because the
- * underlying libsecp256k1 curve operations are inherently variable-time, this
- * function does NOT provide a strict constant-time guarantee.
- * * Architectural Note:
- * On-chain validators and verifiers never need to perform decryption; this
- * function is provided primarily for testing and basic client-side operations.
- * Off-chain applications (like wallets) requiring decryption of larger balances
- * should implement more efficient discrete logarithm algorithms, such as
- * Baby-Step Giant-Step (BSGS) or Pollard's kangaroo method.
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt(
@@ -123,6 +109,8 @@ generate_canonical_encrypted_zero(
  * initialized for signing.
  * @param[out]  proof           A pointer to a 98-byte buffer to store the proof
  * (T1 [33 bytes] || T2 [33 bytes] || s [32 bytes]).
+ * @note Legacy uncompressed form; superseded by the compact proof APIs
+ *       (secp256k1_compact_*). Removed in PR #22.
  * @param[in]   c1              The C1 component of the ciphertext (r*G).
  * @param[in]   c2              The C2 component of the ciphertext (m*G + r*Pk).
  * @param[in]   pk_recipient    The public key used for encryption.
@@ -174,14 +162,6 @@ secp256k1_equality_plaintext_verify(
 
 // ... (rest of header, #endif etc.)
 
-/*
-================================================================================
-|                                                                              |
-|           PROOF OF EQUALITY OF SECRET PLAINTEXTS                             |
-|                (Multi-Statement Chaum-Pedersen)                              |
-================================================================================
-*/
-
 /**
  * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
  *
@@ -231,6 +211,8 @@ secp256k1_bulletproof_verify(
  * C1 = r*G, C2 = m*G + r*Pk, and PCm = m*G + rho*H.
  * * @param ctx         Pointer to a secp256k1 context object.
  * @param proof       [OUT] Pointer to 195-byte buffer for the proof output.
+ *                    Legacy Variant B format; superseded by compact proof APIs.
+ *                    Removed in PR #22.
  * @param c1          Pointer to the ElGamal C1 point (r*G).
  * @param c2          Pointer to the ElGamal C2 point (m*G + r*Pk).
  * @param pk          Pointer to the recipient's public key.
@@ -281,19 +263,23 @@ secp256k1_elgamal_verify_encryption(
     uint64_t amount,
     unsigned char const* blinding_factor);
 
-/** Proof of Knowledge of Secret Key for Registration */
-int
+/** Proof of Knowledge of Secret Key for Registration.
+ *  Compact form: (e, s) in Z_q^2 = 64 bytes.
+ *  Domain: "CMPT_POK_SK_REGISTER" */
+#define SECP256K1_POK_SK_PROOF_SIZE 64
+
+SECP256K1_API int
 secp256k1_mpt_pok_sk_prove(
     secp256k1_context const* ctx,
-    unsigned char* proof, /* Expected size: 65 bytes */
+    unsigned char* proof, /* Expected size: 64 bytes */
     secp256k1_pubkey const* pk,
     unsigned char const* sk,
     unsigned char const* context_id);
 
-int
+SECP256K1_API int
 secp256k1_mpt_pok_sk_verify(
     secp256k1_context const* ctx,
-    unsigned char const* proof, /* Expected size: 65 bytes */
+    unsigned char const* proof, /* Expected size: 64 bytes */
     secp256k1_pubkey const* pk,
     unsigned char const* context_id);
 
@@ -345,9 +331,6 @@ secp256k1_mpt_proof_equality_shared_r_size(size_t n);
 /**
  * Generates a proof that multiple ciphertexts encrypt the same amount m
  * using the SAME shared randomness r.
- *
- * n must satisfy 1 <= n <= 4 (Sender, Receiver, Issuer, Auditor).
- * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_prove_equality_shared_r(
@@ -363,9 +346,6 @@ secp256k1_mpt_prove_equality_shared_r(
 
 /**
  * Verifies the proof of equality with shared randomness.
- *
- * n must satisfy 1 <= n <= 4.
- * Returns 0 if n is out of range.
  */
 int
 secp256k1_mpt_verify_equality_shared_r(
@@ -377,12 +357,6 @@ secp256k1_mpt_verify_equality_shared_r(
     secp256k1_pubkey const* Pk_vec,
     unsigned char const* context_id);
 
-/**
- * Generates an aggregated Bulletproof range proof for m values.
- *
- * m must satisfy 1 <= m <= 4 and be a power of two.
- * Returns 0 if m is out of range.
- */
 int
 secp256k1_bulletproof_prove_agg(
     secp256k1_context const* ctx,
@@ -393,13 +367,6 @@ secp256k1_bulletproof_prove_agg(
     size_t m,
     secp256k1_pubkey const* pk_base,
     unsigned char const* context_id);
-
-/**
- * Verifies an aggregated Bulletproof range proof for m values.
- *
- * m must satisfy 1 <= m <= 4 and be a power of two.
- * Returns 0 if m is out of range.
- */
 int
 secp256k1_bulletproof_verify_agg(
     secp256k1_context const* ctx,
@@ -410,6 +377,166 @@ secp256k1_bulletproof_verify_agg(
     secp256k1_pubkey const* commitment_C_vec, /* length m */
     size_t m,
     secp256k1_pubkey const* pk_base,
+    unsigned char const* context_id);
+
+/*
+================================================================================
+|                                                                              |
+|               AND-COMPOSED COMPACT SIGMA PROOF (STANDARD EG)                |
+|                                                                              |
+================================================================================
+ *
+ * Combines ciphertext equality, Pedersen linkage, and balance verification
+ * into a single sigma protocol under a shared Fiat-Shamir challenge.
+ *
+ * Language: exists (r, m, sk_A, rho, b) in Z_q^5 such that:
+ *   C1          = r*G
+ *   C_{2,i}     = m*G + r*pk_i   for i = 1..n
+ *   PC_m        = m*G + r*H
+ *   pk_A        = sk_A*G
+ *   PC_b        = b*G + rho*H
+ *   B2 - b*G    = sk_A*B1
+ *
+ * Compact proof: (e, z_m, z_r, z_b, z_rho, z_sk) in Z_q^6 = 192 bytes.
+ * Fiat-Shamir domain: "CMPT_SEND_SIGMA"
+ */
+
+/** Serialized size of the compact standard proof in bytes. */
+#define SECP256K1_COMPACT_STANDARD_PROOF_SIZE 192
+
+/**
+ * @brief Generate a compact AND-composed sigma proof for standard EC-ElGamal.
+ *
+ * proof_out must point to a buffer of SECP256K1_COMPACT_STANDARD_PROOF_SIZE
+ * bytes. context_id is an optional 32-byte transaction context (may be NULL).
+ */
+SECP256K1_API int
+secp256k1_compact_standard_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    uint64_t balance,
+    unsigned char const* r_shared,
+    unsigned char const* sk_A,
+    unsigned char const* r_b,
+    size_t n,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2_vec,
+    secp256k1_pubkey const* Pk_vec,
+    secp256k1_pubkey const* PC_m,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* PC_b,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    unsigned char const* context_id);
+
+/**
+ * @brief Verify a compact AND-composed sigma proof for standard EC-ElGamal.
+ *
+ * Returns 1 if the proof is valid, 0 otherwise.
+ */
+SECP256K1_API int
+secp256k1_compact_standard_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    size_t n,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2_vec,
+    secp256k1_pubkey const* Pk_vec,
+    secp256k1_pubkey const* PC_m,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* PC_b,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    unsigned char const* context_id);
+
+/*
+================================================================================
+|                                                                              |
+|            COMPACT SIGMA PROOF — CLAWBACK                                   |
+|                                                                              |
+================================================================================
+ *
+ * Proves the issuer knows sk_iss consistent with the on-ledger mirror
+ * ciphertext (C1, C2) and the publicly declared amount m:
+ *   P_iss      = sk_iss * G
+ *   C2 - m*G   = sk_iss * C1
+ *
+ * Compact proof: (e, z_sk) in Z_q^2 = 64 bytes.
+ * Fiat-Shamir domain: "CMPT_CLAWBACK_SIGMA"
+ */
+
+#define SECP256K1_COMPACT_CLAWBACK_PROOF_SIZE 64
+
+SECP256K1_API int
+secp256k1_compact_clawback_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t amount,
+    unsigned char const* sk_iss,
+    secp256k1_pubkey const* P_iss,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    unsigned char const* context_id);
+
+SECP256K1_API int
+secp256k1_compact_clawback_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    uint64_t amount,
+    secp256k1_pubkey const* P_iss,
+    secp256k1_pubkey const* C1,
+    secp256k1_pubkey const* C2,
+    unsigned char const* context_id);
+
+/*
+================================================================================
+|                                                                              |
+|            COMPACT SIGMA PROOF — CONVERTBACK                                |
+|                                                                              |
+================================================================================
+ *
+ * AND-composed proof for balance linkage in a ConvertBack withdrawal.
+ * The withdrawal ciphertext (C1_w, C2_w) is verified deterministically
+ * using the publicly disclosed r_w (BlindingFactor field), so the sigma
+ * proof covers only key ownership, balance decryption, and commitment.
+ *
+ * Language: exists (b, sk_A, rho) in Z_q^3 such that:
+ *   P_A      = sk_A*G
+ *   B2 - b*G = sk_A*B1
+ *   PC_b     = b*G + rho*H
+ *
+ * Compact proof: (e, z_b, z_rho, z_sk) in Z_q^4 = 128 bytes.
+ * Fiat-Shamir domain: "CMPT_CONVERTBACK_SIGMA"
+ *
+ * The caller must separately verify the withdrawal ciphertext:
+ *   C1_w == r_w*G  and  C2_w == m*G + r_w*P_A
+ * using secp256k1_elgamal_verify_encryption() or equivalent.
+ */
+
+#define SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE 128
+
+SECP256K1_API int
+secp256k1_compact_convertback_prove(
+    secp256k1_context const* ctx,
+    unsigned char* proof_out,
+    uint64_t balance,
+    unsigned char const* sk_A,
+    unsigned char const* rho,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    secp256k1_pubkey const* PC_b,
+    unsigned char const* context_id);
+
+SECP256K1_API int
+secp256k1_compact_convertback_verify(
+    secp256k1_context const* ctx,
+    unsigned char const* proof,
+    secp256k1_pubkey const* pk_A,
+    secp256k1_pubkey const* B1,
+    secp256k1_pubkey const* B2,
+    secp256k1_pubkey const* PC_b,
     unsigned char const* context_id);
 
 #ifdef __cplusplus

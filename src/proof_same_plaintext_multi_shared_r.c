@@ -80,64 +80,45 @@ static int compute_challenge_equality_shared_r(
   int ok = 0;
 
   if (!mdctx)
-  {
-    memset(e_out, 0, 32);
     return 0;
-  }
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
   if (EVP_DigestUpdate(mdctx, domain, strlen(domain)) != 1)
     goto cleanup;
 
+#define SER(pk_ptr)                                                            \
+  do                                                                           \
+  {                                                                            \
+    len = 33;                                                                  \
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
+                                       SECP256K1_EC_COMPRESSED) ||             \
+        len != 33)                                                             \
+      goto cleanup;                                                            \
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+      goto cleanup;                                                            \
+  } while (0)
+
   /* 1. Shared C1 */
-  len = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, C1,
-                                     SECP256K1_EC_COMPRESSED) ||
-      len != 33)
-    goto cleanup;
-  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
-    goto cleanup;
+  SER(C1);
 
   /* 2. Pairs {C2_i, Pk_i} */
   for (i = 0; i < n; i++)
   {
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &C2_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto cleanup;
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
-      goto cleanup;
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Pk_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto cleanup;
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
-      goto cleanup;
+    SER(&C2_vec[i]);
+    SER(&Pk_vec[i]);
   }
 
   /* 3. Commitment Tr */
-  len = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, Tr,
-                                     SECP256K1_EC_COMPRESSED) ||
-      len != 33)
-    goto cleanup;
-  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
-    goto cleanup;
+  SER(Tr);
 
   /* 4. Commitments {Tm_i} */
   for (i = 0; i < n; i++)
   {
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &Tm_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto cleanup;
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
-      goto cleanup;
+    SER(&Tm_vec[i]);
   }
+
+#undef SER
 
   /* 5. Transaction Context */
   if (context_id)
@@ -148,15 +129,12 @@ static int compute_challenge_equality_shared_r(
 
   if (EVP_DigestFinal_ex(mdctx, h, NULL) != 1)
     goto cleanup;
+
   secp256k1_mpt_scalar_reduce32(e_out, h);
   ok = 1;
 
 cleanup:
   EVP_MD_CTX_free(mdctx);
-  if (!ok)
-  {
-    memset(e_out, 0, 32); /* Poison buffer on failure */
-  }
   return ok;
 }
 
@@ -165,14 +143,20 @@ cleanup:
 int secp256k1_mpt_prove_equality_shared_r(
     const secp256k1_context *ctx,
     unsigned char *proof_out, // Caller MUST allocate
-    // secp256k1_mpt_proof_equality_shared_r_size(n)
+                              // secp256k1_mpt_proof_equality_shared_r_size(n)
     uint64_t amount, const unsigned char *r_shared, size_t n,
     const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
-  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
-  if (n == 0 || n > 4)
-    return 0;
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof_out != NULL);
+  MPT_ARG_CHECK(r_shared != NULL);
+  MPT_ARG_CHECK(n > 0);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2_vec != NULL);
+  MPT_ARG_CHECK(Pk_vec != NULL);
+  /* context_id is optional */
+
   /* Local Variables */
   unsigned char k_m[32], k_r[32];
   unsigned char m_scalar[32] = {0};
@@ -258,8 +242,7 @@ int secp256k1_mpt_prove_equality_shared_r(
   /* Serialize Tr */
   len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tr,
-                                     SECP256K1_EC_COMPRESSED) ||
-      len != 33)
+                                     SECP256K1_EC_COMPRESSED))
     goto cleanup;
   ptr += 33;
 
@@ -268,8 +251,7 @@ int secp256k1_mpt_prove_equality_shared_r(
   {
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &len, &Tm_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+                                       SECP256K1_EC_COMPRESSED))
       goto cleanup;
     ptr += 33;
   }
@@ -297,17 +279,21 @@ cleanup:
     free(Tm_vec);
   return ok;
 }
-
 int secp256k1_mpt_verify_equality_shared_r(
     const secp256k1_context *ctx,
     const unsigned char *proof, // Caller MUST provide buffer of size:
-    // secp256k1_mpt_proof_equality_shared_r_size(n)
+                                // secp256k1_mpt_proof_equality_shared_r_size(n)
     size_t n, const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
     const secp256k1_pubkey *Pk_vec, const unsigned char *context_id)
 {
-  /* Protocol restricts n to max 4 (Sender, Receiver, Issuer, Auditor) */
-  if (n == 0 || n > 4)
-    return 0;
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(proof != NULL);
+  MPT_ARG_CHECK(n > 0);
+  MPT_ARG_CHECK(C1 != NULL);
+  MPT_ARG_CHECK(C2_vec != NULL);
+  MPT_ARG_CHECK(Pk_vec != NULL);
+  /* context_id is optional */
+
   /* Calculate expected size internally for strict checking later */
   size_t expected_len = secp256k1_mpt_proof_equality_shared_r_size(n);
 
@@ -350,10 +336,6 @@ int secp256k1_mpt_verify_equality_shared_r(
   if (!secp256k1_ec_seckey_verify(ctx, s_m))
     goto cleanup;
   if (!secp256k1_ec_seckey_verify(ctx, s_r))
-    goto cleanup;
-
-  /* Fail fast! Strict length check before heavy crypto math */
-  if ((size_t)(ptr - proof) != expected_len)
     goto cleanup;
 
   /* 2. Challenge */
@@ -413,6 +395,10 @@ int secp256k1_mpt_verify_equality_shared_r(
         goto cleanup;
     }
   }
+
+  // Strict Length Check: Ensure we read exactly what was expected
+  if ((size_t)(ptr - proof) != expected_len)
+    goto cleanup;
 
   ok = 1;
 
