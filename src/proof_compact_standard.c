@@ -125,13 +125,12 @@ cleanup:
 
 int secp256k1_compact_standard_prove(
     const secp256k1_context *ctx, unsigned char *proof_out, uint64_t amount,
-    uint64_t remainder, const unsigned char *r_shared,
-    const unsigned char *sk_A, const unsigned char *r_b, size_t n,
-    const secp256k1_pubkey *C1, const secp256k1_pubkey *C2_vec,
-    const secp256k1_pubkey *Pk_vec, const secp256k1_pubkey *PC_m,
-    const secp256k1_pubkey *pk_A, const secp256k1_pubkey *PC_b,
-    const secp256k1_pubkey *B1, const secp256k1_pubkey *B2,
-    const unsigned char *context_id)
+    uint64_t balance, const unsigned char *r_shared, const unsigned char *sk_A,
+    const unsigned char *r_b, size_t n, const secp256k1_pubkey *C1,
+    const secp256k1_pubkey *C2_vec, const secp256k1_pubkey *Pk_vec,
+    const secp256k1_pubkey *PC_m, const secp256k1_pubkey *pk_A,
+    const secp256k1_pubkey *PC_b, const secp256k1_pubkey *B1,
+    const secp256k1_pubkey *B2, const unsigned char *context_id)
 {
   /* n=0 would produce a proof binding no ciphertexts to any recipient,
    * which is semantically vacuous (paper requires n >= 1). */
@@ -150,10 +149,10 @@ int secp256k1_compact_standard_prove(
   MPT_ARG_CHECK(B1 != NULL);
   MPT_ARG_CHECK(B2 != NULL);
 
-  /* Nonces: alpha(r), beta(m), gamma(sk_A), delta(r_b), epsilon(v) */
+  /* Nonces: alpha(r), beta(m), gamma(sk_A), delta(r_b), epsilon(b) */
   unsigned char alpha[32], beta[32], gamma[32], delta[32], epsilon[32];
-  unsigned char m_scalar[32], v_scalar[32];
-  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_v[32];
+  unsigned char m_scalar[32], b_scalar[32];
+  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_b[32];
   secp256k1_pubkey T1, T_PCm, K1, T_PCb, K2;
   secp256k1_pubkey *T2_vec = NULL;
   secp256k1_pubkey H;
@@ -174,7 +173,7 @@ int secp256k1_compact_standard_prove(
   }
 
   mpt_uint64_to_scalar(m_scalar, amount);
-  mpt_uint64_to_scalar(v_scalar, remainder);
+  mpt_uint64_to_scalar(b_scalar, balance);
 
   if (!secp256k1_mpt_get_h_generator(ctx, &H))
     goto cleanup;
@@ -188,7 +187,7 @@ int secp256k1_compact_standard_prove(
     memcpy(witness_buf, sk_A, 32);
     memcpy(witness_buf + 32, r_shared, 32);
     memcpy(witness_buf + 64, m_scalar, 32);
-    memcpy(witness_buf + 96, v_scalar, 32);
+    memcpy(witness_buf + 96, b_scalar, 32);
     memcpy(witness_buf + 128, r_b, 32);
 
     /* Hash all public statement elements into a 32-byte digest */
@@ -353,15 +352,15 @@ int secp256k1_compact_standard_prove(
   /* z_rb = delta + e*r_b */
   if (!compute_sigma_response(ctx, z_rb, delta, e, r_b))
     goto cleanup;
-  /* z_v = epsilon + e*v */
-  if (!compute_sigma_response(ctx, z_v, epsilon, e, v_scalar))
+  /* z_b = epsilon + e*v */
+  if (!compute_sigma_response(ctx, z_b, epsilon, e, b_scalar))
     goto cleanup;
 
   /* 5. Serialize compact proof: e || z_m || z_r || z_b || z_rho || z_sk */
   memcpy(proof_out, e, 32);
   memcpy(proof_out + 32, z_m, 32);
   memcpy(proof_out + 64, z_r, 32);
-  memcpy(proof_out + 96, z_v, 32);
+  memcpy(proof_out + 96, z_b, 32);
   memcpy(proof_out + 128, z_rb, 32);
   memcpy(proof_out + 160, z_sk, 32);
 
@@ -374,13 +373,13 @@ cleanup:
   OPENSSL_cleanse(delta, 32);
   OPENSSL_cleanse(epsilon, 32);
   OPENSSL_cleanse(m_scalar, 32);
-  OPENSSL_cleanse(v_scalar, 32);
+  OPENSSL_cleanse(b_scalar, 32);
   OPENSSL_cleanse(e, 32);
   OPENSSL_cleanse(z_r, 32);
   OPENSSL_cleanse(z_m, 32);
   OPENSSL_cleanse(z_sk, 32);
   OPENSSL_cleanse(z_rb, 32);
-  OPENSSL_cleanse(z_v, 32);
+  OPENSSL_cleanse(z_b, 32);
   if (T2_vec)
     free(T2_vec);
   return ok;
@@ -410,7 +409,7 @@ int secp256k1_compact_standard_verify(
   MPT_ARG_CHECK(B1 != NULL);
   MPT_ARG_CHECK(B2 != NULL);
 
-  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_v[32];
+  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_b[32];
   unsigned char e_prime[32], neg_e[32];
   secp256k1_pubkey T1, T_PCm, K1, T_PCb, K2;
   secp256k1_pubkey *T2_vec = NULL;
@@ -421,10 +420,15 @@ int secp256k1_compact_standard_verify(
   memcpy(e, proof, 32);
   memcpy(z_m, proof + 32, 32);
   memcpy(z_r, proof + 64, 32);
-  memcpy(z_v, proof + 96, 32);
+  memcpy(z_b, proof + 96, 32);
   memcpy(z_rb, proof + 128, 32);
   memcpy(z_sk, proof + 160, 32);
 
+  /* secp256k1_ec_seckey_verify rejects zero scalars (returns 0 for s=0),
+   * causing a negligible (~2^{-256}) deviation from strict completeness.
+   * This is acceptable: zero response probability is cryptographically
+   * negligible and secp256k1_scalar_set_b32, which would accept zero,
+   * is not accessible via the public API in this build. */
   if (!secp256k1_ec_seckey_verify(ctx, e))
     return 0;
   if (!secp256k1_ec_seckey_verify(ctx, z_r))
@@ -435,7 +439,7 @@ int secp256k1_compact_standard_verify(
     return 0;
   if (!secp256k1_ec_seckey_verify(ctx, z_rb))
     return 0;
-  if (!secp256k1_ec_seckey_verify(ctx, z_v))
+  if (!secp256k1_ec_seckey_verify(ctx, z_b))
     return 0;
 
   if (n > 0)
@@ -514,10 +518,10 @@ int secp256k1_compact_standard_verify(
       goto cleanup;
   }
 
-  /* T_PCb = z_v*G + z_rb*H - e*PC_b */
+  /* T_PCb = z_b*G + z_rb*H - e*PC_b */
   {
     secp256k1_pubkey zvG, zrbH, ePCb;
-    if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_v))
+    if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_b))
       goto cleanup;
     zrbH = H;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrbH, z_rb))
@@ -530,13 +534,13 @@ int secp256k1_compact_standard_verify(
       goto cleanup;
   }
 
-  /* K2 = z_sk*B1 + z_v*G - e*B2 */
+  /* K2 = z_sk*B1 + z_b*G - e*B2 */
   {
     secp256k1_pubkey zskB1, zvG, eB2;
     zskB1 = *B1;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskB1, z_sk))
       goto cleanup;
-    if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_v))
+    if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_b))
       goto cleanup;
     eB2 = *B2;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eB2, neg_e))
@@ -557,6 +561,8 @@ int secp256k1_compact_standard_verify(
     ok = 1;
 
 cleanup:
+  OPENSSL_cleanse(neg_e, 32);
+  /* z_*, e, e_prime are public proof values — intentionally not cleansed */
   if (T2_vec)
     free(T2_vec);
   return ok;

@@ -109,6 +109,8 @@ generate_canonical_encrypted_zero(
  * initialized for signing.
  * @param[out]  proof           A pointer to a 98-byte buffer to store the proof
  * (T1 [33 bytes] || T2 [33 bytes] || s [32 bytes]).
+ * @note Legacy uncompressed form; superseded by the compact proof APIs
+ *       (secp256k1_compact_*). Removed in PR #22.
  * @param[in]   c1              The C1 component of the ciphertext (r*G).
  * @param[in]   c2              The C2 component of the ciphertext (m*G + r*Pk).
  * @param[in]   pk_recipient    The public key used for encryption.
@@ -209,6 +211,8 @@ secp256k1_bulletproof_verify(
  * C1 = r*G, C2 = m*G + r*Pk, and PCm = m*G + rho*H.
  * * @param ctx         Pointer to a secp256k1 context object.
  * @param proof       [OUT] Pointer to 195-byte buffer for the proof output.
+ *                    Legacy Variant B format; superseded by compact proof APIs.
+ *                    Removed in PR #22.
  * @param c1          Pointer to the ElGamal C1 point (r*G).
  * @param c2          Pointer to the ElGamal C2 point (m*G + r*Pk).
  * @param pk          Pointer to the recipient's public key.
@@ -411,7 +415,7 @@ secp256k1_compact_standard_prove(
     secp256k1_context const* ctx,
     unsigned char* proof_out,
     uint64_t amount,
-    uint64_t remainder,
+    uint64_t balance,
     unsigned char const* r_shared,
     unsigned char const* sk_A,
     unsigned char const* r_b,
