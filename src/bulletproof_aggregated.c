@@ -42,11 +42,10 @@
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.3.6 Range Proof (using
  * Bulletproofs)]
  */
+#include "mpt_internal.h"
 #include "secp256k1_mpt.h"
-#include <assert.h>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
-#include <openssl/rand.h>
 #include <secp256k1.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,43 +72,10 @@ static inline size_t bp_ipa_rounds(size_t total_bits)
   return r;
 }
 
-/** Generates a secure 32-byte random scalar.
- * Returns 1 on success, 0 on failure.
- */
-static int generate_random_scalar(const secp256k1_context *ctx,
-                                  unsigned char *scalar_bytes)
-{
-  do
-  {
-    if (RAND_bytes(scalar_bytes, 32) != 1)
-    {
-      return 0; // Randomness failure
-    }
-  } while (secp256k1_ec_seckey_verify(ctx, scalar_bytes) != 1);
-  return 1;
-}
-
-/**
- * Computes the point M = amount * G.
- * Internal helper used by commitment construction.
- */
-static int compute_amount_point(const secp256k1_context *ctx,
-                                secp256k1_pubkey *mG, uint64_t amount)
-{
-  unsigned char amount_scalar[32] = {0};
-
-  /* Zero amount is handled by the caller (no G term needed) */
-  if (amount == 0)
-  {
-    return 0;
-  }
-
-  for (int i = 0; i < 8; ++i)
-  {
-    amount_scalar[31 - i] = (amount >> (i * 8)) & 0xFF;
-  }
-  return secp256k1_ec_pubkey_create(ctx, mG, amount_scalar);
-}
+/* compute_amount_point is provided by mpt_internal.h.
+ * It returns 0 for amount == 0 because libsecp cannot represent the
+ * point at infinity.  secp256k1_mpt_pedersen_commit handles the
+ * v == 0 case explicitly before reaching this helper. */
 /**
  * Safely adds a point to an accumulator (acc += term).
  * Handles uninitialized accumulators by assignment instead of addition.
@@ -386,14 +352,6 @@ compute_delta_scalars(const secp256k1_context *ctx,
       secp256k1_mpt_scalar_mul(y_pow, y_pow, y); /* advance y^k */
     }
   }
-}
-/**
- * Compare two secp256k1 public keys for equality.
- */
-static int pubkey_equal(const secp256k1_context *ctx, const secp256k1_pubkey *a,
-                        const secp256k1_pubkey *b)
-{
-  return secp256k1_ec_pubkey_cmp(ctx, a, b) == 0;
 }
 /**
  * u_flat and uinv_flat are arrays of length (rounds * 32):
