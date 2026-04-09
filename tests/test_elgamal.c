@@ -16,7 +16,7 @@ static void test_verify_encryption(const secp256k1_context *ctx);
 static void test_decryption_boundaries(const secp256k1_context *ctx);
 
 // Main test runner
-int main()
+int main(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);

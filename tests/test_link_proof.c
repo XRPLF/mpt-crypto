@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void test_link_proof()
+void test_link_proof(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);
@@ -82,7 +82,7 @@ void test_link_proof()
   secp256k1_context_destroy(ctx);
 }
 
-int main()
+int main(void)
 {
   test_link_proof();
   printf("ALL TESTS PASSED\n");

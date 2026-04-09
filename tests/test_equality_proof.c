@@ -12,7 +12,7 @@ static void test_equality_proof_invalid_tampered(const secp256k1_context *ctx);
 static void test_equality_proof_zero_amount(const secp256k1_context *ctx);
 
 // Main test runner
-int main()
+int main(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);

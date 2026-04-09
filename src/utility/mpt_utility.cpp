@@ -1036,6 +1036,7 @@ mpt_verify_equality_proof(
     uint8_t const n_participants,
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
 {
+    (void)proof_len;
     if (!proof || !participants || !context_hash)
         return -1;
 

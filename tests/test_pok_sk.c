@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void test_pok_sk()
+void test_pok_sk(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);
@@ -53,7 +53,7 @@ void test_pok_sk()
   secp256k1_context_destroy(ctx);
 }
 
-int main()
+int main(void)
 {
   test_pok_sk();
   printf("ALL TESTS PASSED\n");

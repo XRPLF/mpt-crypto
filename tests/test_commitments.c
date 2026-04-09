@@ -5,7 +5,7 @@
 #include <string.h>
 
 /* --- Tests --- */
-void test_pedersen_commitment_basic()
+void test_pedersen_commitment_basic(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);
@@ -42,7 +42,7 @@ void test_pedersen_commitment_basic()
   secp256k1_context_destroy(ctx);
 }
 
-void test_pedersen_zero_value()
+void test_pedersen_zero_value(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);
@@ -78,7 +78,7 @@ void test_pedersen_zero_value()
   secp256k1_context_destroy(ctx);
 }
 
-void test_pedersen_homomorphic_property()
+void test_pedersen_homomorphic_property(void)
 {
   secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
                                                     SECP256K1_CONTEXT_VERIFY);
@@ -125,7 +125,7 @@ void test_pedersen_homomorphic_property()
   secp256k1_context_destroy(ctx);
 }
 
-int main()
+int main(void)
 {
   test_pedersen_commitment_basic();
   test_pedersen_zero_value();
