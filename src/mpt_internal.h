@@ -148,7 +148,6 @@ generate_deterministic_nonces(
 {
     unsigned char salt[32];
     unsigned char prk[32];
-    unsigned int prk_len = 32;
 
     if (k == 0 || k > 8)
         return 0;
