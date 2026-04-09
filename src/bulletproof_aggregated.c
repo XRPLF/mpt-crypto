@@ -2158,6 +2158,8 @@ int secp256k1_bulletproof_verify_agg(
   size_t slen;
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   int fs_ok = 0;
+  unsigned char *y_powers = NULL;
+  unsigned char *y_inv_powers = NULL;
 
   if (!mdctx)
     goto fail;
@@ -2251,8 +2253,8 @@ int secp256k1_bulletproof_verify_agg(
     goto fs_fail;
 
   /* Powers */
-  unsigned char *y_powers = (unsigned char *)malloc(n * 32);
-  unsigned char *y_inv_powers = (unsigned char *)malloc(n * 32);
+  y_powers = (unsigned char *)malloc(n * 32);
+  y_inv_powers = (unsigned char *)malloc(n * 32);
   if (!y_powers || !y_inv_powers)
   {
     free(y_powers);
