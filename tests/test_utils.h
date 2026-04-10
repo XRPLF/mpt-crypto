@@ -2,7 +2,6 @@
 #define MPT_TEST_UTILS_H
 
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 
 #include <secp256k1.h>
 #include <stdio.h>
