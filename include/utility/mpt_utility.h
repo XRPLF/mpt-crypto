@@ -141,7 +141,14 @@ mpt_get_clawback_context_hash(
     uint8_t out_hash[kMPT_HALF_SHA_SIZE]);
 
 /**
- * @brief Calculates the total size for a ConfidentialMPTSend proof.
+ * @brief Returns the total size in bytes for a ConfidentialMPTSend proof blob.
+ *
+ * The proof is now a fixed-size compact AND-composed sigma proof
+ * (SECP256K1_COMPACT_STANDARD_PROOF_SIZE = 192 bytes) concatenated with
+ * an aggregated Bulletproof range proof (kMPT_DOUBLE_BULLETPROOF_SIZE = 754 bytes),
+ * yielding 946 bytes regardless of the number of recipients.
+ *
+ * @param n_recipients Ignored; retained for API compatibility.
  */
 size_t
 get_confidential_send_proof_size(size_t n_recipients);
@@ -293,17 +300,28 @@ mpt_get_balance_linkage_proof(
 
 /**
  * @brief Generates proof for ConfidentialMPTSend.
- * @param priv.             [in] The sender's 32-byte private key.
- * @param amount            [in] The amount being sent.
- * @param recipients        [in] List of recipients (Sender, Dest, Issuer).
- * @param n_recipients      [in] Number of recipients in the list.
- * @param tx_blinding_factor [in] The ElGamal 'r' used for the transaction.
- * @param context_hash      [in] The 32-byte context hash.
- * @param amount_params     [in] Linkage params for the transaction amount.
- * @param balance_params    [in] Linkage params for the sender's balance.
- * @param out_proof         [out] Pointer to the buffer to be filled with the hex/bytes.
- * @param out_len           [in/out] In: Size of the buffer. Out: Actual bytes written.
- * @return 0 on success, -1 on failure (e.g., buffer too small or math error).
+ *
+ * Produces a compact AND-composed sigma proof (192 bytes) that simultaneously
+ * proves ciphertext equality, Pedersen commitment linkage, and balance ownership
+ * under a single Fiat-Shamir challenge, followed by an aggregated Bulletproof
+ * range proof (754 bytes). Total proof size is fixed at 946 bytes.
+ *
+ * PC_m must be computed as m*G + r*H (i.e. with tx_blinding_factor as the
+ * blinding factor, not an independent scalar).  amount_params->blinding_factor
+ * is not used; only amount_params->pedersen_commitment (PC_m) is read.
+ *
+ * @param priv               [in] The sender's 32-byte private key.
+ * @param amount             [in] The amount being sent.
+ * @param recipients         [in] List of recipients (Sender, Dest, Issuer[, Auditor]).
+ * @param n_recipients       [in] Number of recipients (3 or 4).
+ * @param tx_blinding_factor [in] The ElGamal randomness r (also blinding factor for PC_m).
+ * @param context_hash       [in] The 32-byte context hash.
+ * @param amount_params      [in] Must have pedersen_commitment set to PC_m = m*G + r*H.
+ * @param balance_params     [in] Must have pedersen_commitment (PC_b), amount (balance),
+ *                                blinding_factor (rho), and ciphertext (B1||B2).
+ * @param out_proof          [out] Buffer to receive the proof blob.
+ * @param out_len            [in/out] In: capacity (must be >= 946). Out: bytes written.
+ * @return 0 on success, -1 on failure.
  */
 int
 mpt_get_confidential_send_proof(
@@ -414,20 +432,19 @@ mpt_verify_convert_back_proof(
 /**
  * @brief Verify proof for ConfidentialMPTSend.
  *
- * Validates equality, Amount/Balance linkage, and range proofs.
- * Equality proof: Proves the same value is encrypted for the sender, receiver, issuer, and auditor.
- * Amount linkage: Proves the send amount in the ElGamal ciphertext matches the amount Pedersen
- * commitment. Balance linkage: Proves the sender's encrypted balance matches the balance Pedersen
- * commitment. Range proof: Proves the transfer amount and the remaining balance are within range
- * from 0 to 2^64-1.
+ * Verifies the compact AND-composed sigma proof (first 192 bytes) that proves
+ * ciphertext correctness, Pedersen commitment linkage, and balance ownership,
+ * followed by an aggregated Bulletproof range proof (next 754 bytes).
+ * Expected proof_len is exactly 946 bytes.
  *
- * @param proof                      [in] Concatenated equality, linkage and range proofs.
- * @param proof_len                  [in] Total length of the proof blob.
+ * @param proof                      [in] 946-byte proof blob (compact sigma || Bulletproof).
+ * @param proof_len                  [in] Must be exactly 946.
  * @param participants               [in] List of participants' public keys and ciphertexts.
- * @param n_participants             [in] Number of participants.
- * @param sender_spending_ciphertext [in] The ciphertext for the sender's balance.
- * @param amount_commitment          [in] Pedersen commitment to the send amount.
- * @param balance_commitment         [in] Pedersen commitment to the sender's balance.
+ *                                        participants[0] is the sender.
+ * @param n_participants             [in] Number of participants (3 or 4).
+ * @param sender_spending_ciphertext [in] The sender's on-ledger balance ciphertext (B1||B2).
+ * @param amount_commitment          [in] Pedersen commitment PC_m to the transfer amount.
+ * @param balance_commitment         [in] Pedersen commitment PC_b to the sender's balance.
  * @param context_hash               [in] The 32-byte transaction context hash.
  * @return 0 on success, -1 on failure.
  */

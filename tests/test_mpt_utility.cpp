@@ -76,10 +76,136 @@ test_mpt_confidential_convert()
     EXPECT(mpt_verify_convert_proof(proof, pub, tx_hash) == 0);
 }
 
-void
-test_mpt_confidential_send()
+// Helper: build a fully-initialised set of send fixtures and return the proof.
+// Callers may mutate the returned proof or parameters to exercise rejection paths.
+struct SendFixture
 {
-    // Setup mock account, issuance and transaction details
+    // Participants
+    uint8_t sender_priv[kMPT_PRIVKEY_SIZE];
+    uint8_t sender_pub[kMPT_PUBKEY_SIZE];
+    uint8_t dest_pub[kMPT_PUBKEY_SIZE];
+    uint8_t issuer_pub[kMPT_PUBKEY_SIZE];
+    uint8_t auditor_pub[kMPT_PUBKEY_SIZE];
+
+    // Transaction ciphertexts (shared r)
+    uint8_t shared_bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t sender_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t dest_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t issuer_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t auditor_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+
+    // Commitments
+    uint8_t amount_comm[kMPT_PEDERSEN_COMMIT_SIZE];   // PC_m = m*G + r*H
+    uint8_t balance_comm[kMPT_PEDERSEN_COMMIT_SIZE];  // PC_b = b*G + rho*H
+    uint8_t balance_bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];  // sender's spending-balance ciphertext (B1||B2)
+
+    // Context
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+
+    // Proof params
+    mpt_pedersen_proof_params amt_params;
+    mpt_pedersen_proof_params bal_params;
+
+    // Participants list (n=4: sender, dest, issuer, auditor)
+    std::vector<mpt_confidential_participant> participants;
+
+    // Generated proof
+    std::vector<uint8_t> proof;
+    size_t proof_len = 0;
+};
+
+static SendFixture
+make_send_fixture(size_t n_recipients = 3)
+{
+    SendFixture f;
+
+    uint64_t amount_to_send = 100;
+    uint64_t prev_balance = 2000;
+
+    account_id sender_acc = create_mock_id<account_id>(0x11);
+    account_id dest_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xBB);
+    uint32_t seq = 54321;
+    uint32_t version = 1;
+
+    // Keypairs — only the sender's private key is needed by the prover
+    uint8_t tmp_priv[kMPT_PRIVKEY_SIZE];
+    EXPECT(mpt_generate_keypair(f.sender_priv, f.sender_pub) == 0);
+    EXPECT(mpt_generate_keypair(tmp_priv, f.dest_pub) == 0);
+    EXPECT(mpt_generate_keypair(tmp_priv, f.issuer_pub) == 0);
+    EXPECT(mpt_generate_keypair(tmp_priv, f.auditor_pub) == 0);
+
+    // Shared ciphertext randomness r — also used as PC_m blinding factor (spec §3.3)
+    EXPECT(mpt_generate_blinding_factor(f.shared_bf) == 0);
+    EXPECT(mpt_encrypt_amount(amount_to_send, f.sender_pub, f.shared_bf, f.sender_ct) == 0);
+    EXPECT(mpt_encrypt_amount(amount_to_send, f.dest_pub, f.shared_bf, f.dest_ct) == 0);
+    EXPECT(mpt_encrypt_amount(amount_to_send, f.issuer_pub, f.shared_bf, f.issuer_ct) == 0);
+    EXPECT(mpt_encrypt_amount(amount_to_send, f.auditor_pub, f.shared_bf, f.auditor_ct) == 0);
+
+    // PC_m = m*G + r*H  (r == shared_bf, per spec §3.3)
+    EXPECT(mpt_get_pedersen_commitment(amount_to_send, f.shared_bf, f.amount_comm) == 0);
+
+    // PC_b = b*G + rho*H  (independent blinding factor)
+    EXPECT(mpt_generate_blinding_factor(f.balance_bf) == 0);
+    EXPECT(mpt_get_pedersen_commitment(prev_balance, f.balance_bf, f.balance_comm) == 0);
+
+    // Sender's on-ledger spending-balance ciphertext (B1||B2)
+    uint8_t bal_bf[kMPT_BLINDING_FACTOR_SIZE];
+    EXPECT(mpt_generate_blinding_factor(bal_bf) == 0);
+    EXPECT(mpt_encrypt_amount(prev_balance, f.sender_pub, bal_bf, f.bal_ct) == 0);
+
+    // Context hash
+    EXPECT(
+        mpt_get_send_context_hash(sender_acc, issuance, seq, dest_acc, version, f.ctx_hash) == 0);
+
+    // Amount params — only pedersen_commitment (PC_m) is read by the new compact prover
+    f.amt_params.amount = amount_to_send;
+    std::memcpy(f.amt_params.blinding_factor, f.shared_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(f.amt_params.pedersen_commitment, f.amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::memcpy(f.amt_params.ciphertext, f.sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+
+    // Balance params
+    f.bal_params.amount = prev_balance;
+    std::memcpy(f.bal_params.blinding_factor, f.balance_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(f.bal_params.pedersen_commitment, f.balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::memcpy(f.bal_params.ciphertext, f.bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+
+    // Build participant list
+    auto add = [&](uint8_t* pub, uint8_t* ct) {
+        mpt_confidential_participant p;
+        std::memcpy(p.pubkey, pub, kMPT_PUBKEY_SIZE);
+        std::memcpy(p.ciphertext, ct, kMPT_ELGAMAL_TOTAL_SIZE);
+        f.participants.push_back(p);
+    };
+    add(f.sender_pub, f.sender_ct);
+    add(f.dest_pub, f.dest_ct);
+    add(f.issuer_pub, f.issuer_ct);
+    if (n_recipients == 4)
+        add(f.auditor_pub, f.auditor_ct);
+
+    // Generate proof
+    f.proof_len = get_confidential_send_proof_size(n_recipients);
+    f.proof.resize(f.proof_len);
+    EXPECT(
+        mpt_get_confidential_send_proof(
+            f.sender_priv,
+            amount_to_send,
+            f.participants.data(),
+            n_recipients,
+            f.shared_bf,
+            f.ctx_hash,
+            &f.amt_params,
+            &f.bal_params,
+            f.proof.data(),
+            &f.proof_len) == 0);
+
+    return f;
+}
+
+void
+test_mpt_confidential_send_integrate()
+{
     account_id sender_acc = create_mock_id<account_id>(0x11);
     account_id dest_acc = create_mock_id<account_id>(0x22);
     mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xBB);
@@ -88,28 +214,26 @@ test_mpt_confidential_send()
     uint64_t prev_balance = 2000;
     uint32_t version = 1;
 
-    // Generate Keypairs for all parties
+    // Keypairs
     uint8_t sender_priv[kMPT_PRIVKEY_SIZE], sender_pub[kMPT_PUBKEY_SIZE];
-    uint8_t dest_priv[kMPT_PRIVKEY_SIZE], dest_pub[kMPT_PUBKEY_SIZE];
-    uint8_t issuer_priv[kMPT_PRIVKEY_SIZE], issuer_pub[kMPT_PUBKEY_SIZE];
-
+    uint8_t dest_pub[kMPT_PUBKEY_SIZE], issuer_pub[kMPT_PUBKEY_SIZE];
+    uint8_t tmp_priv[kMPT_PRIVKEY_SIZE];
     EXPECT(mpt_generate_keypair(sender_priv, sender_pub) == 0);
-    EXPECT(mpt_generate_keypair(dest_priv, dest_pub) == 0);
-    EXPECT(mpt_generate_keypair(issuer_priv, issuer_pub) == 0);
+    EXPECT(mpt_generate_keypair(tmp_priv, dest_pub) == 0);
+    EXPECT(mpt_generate_keypair(tmp_priv, issuer_pub) == 0);
 
-    // Encrypt for all participants (using same shared blinding factor for link proof)
+    // Transaction ciphertexts — all encrypted with the same shared r
     uint8_t shared_bf[kMPT_BLINDING_FACTOR_SIZE];
     EXPECT(mpt_generate_blinding_factor(shared_bf) == 0);
 
     uint8_t sender_ct[kMPT_ELGAMAL_TOTAL_SIZE];
     uint8_t dest_ct[kMPT_ELGAMAL_TOTAL_SIZE];
     uint8_t issuer_ct[kMPT_ELGAMAL_TOTAL_SIZE];
-
     EXPECT(mpt_encrypt_amount(amount_to_send, sender_pub, shared_bf, sender_ct) == 0);
     EXPECT(mpt_encrypt_amount(amount_to_send, dest_pub, shared_bf, dest_ct) == 0);
     EXPECT(mpt_encrypt_amount(amount_to_send, issuer_pub, shared_bf, issuer_ct) == 0);
 
-    // Prepare participants that is expected by the confidential send proof function
+    // Participants list (sender first)
     std::vector<mpt_confidential_participant> participants;
     auto add_participant = [&](uint8_t* p, uint8_t* c) {
         mpt_confidential_participant r;
@@ -121,27 +245,32 @@ test_mpt_confidential_send()
     add_participant(dest_pub, dest_ct);
     add_participant(issuer_pub, issuer_ct);
 
-    // Generate pedersen commitments for amount and balance
-    uint8_t amount_bf[kMPT_BLINDING_FACTOR_SIZE];
+    // PC_m = m*G + r*H — reuses shared_bf (= r) as blinding factor (spec §3.3)
     uint8_t amount_comm[kMPT_PEDERSEN_COMMIT_SIZE];
-    EXPECT(mpt_generate_blinding_factor(amount_bf) == 0);
-    EXPECT(mpt_get_pedersen_commitment(amount_to_send, amount_bf, amount_comm) == 0);
+    EXPECT(mpt_get_pedersen_commitment(amount_to_send, shared_bf, amount_comm) == 0);
 
+    // PC_b = b*G + rho*H — independent blinding factor for the balance commitment
     uint8_t balance_bf[kMPT_BLINDING_FACTOR_SIZE];
     uint8_t balance_comm[kMPT_PEDERSEN_COMMIT_SIZE];
     EXPECT(mpt_generate_blinding_factor(balance_bf) == 0);
     EXPECT(mpt_get_pedersen_commitment(prev_balance, balance_bf, balance_comm) == 0);
 
-    // Generate context hash for the transaction
+    // Sender's on-ledger spending-balance ciphertext (B1||B2)
+    uint8_t prev_bal_bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t prev_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_blinding_factor(prev_bal_bf) == 0);
+    EXPECT(mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct) == 0);
+
+    // Context hash
     uint8_t send_ctx_hash[kMPT_HALF_SHA_SIZE];
     EXPECT(
         mpt_get_send_context_hash(sender_acc, issuance, seq, dest_acc, version, send_ctx_hash) ==
         0);
 
-    // Prepare pedersen proof params for both amount and balance linkage proofs
+    // Pedersen proof params
     mpt_pedersen_proof_params amt_params;
     amt_params.amount = amount_to_send;
-    std::memcpy(amt_params.blinding_factor, amount_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(amt_params.blinding_factor, shared_bf, kMPT_BLINDING_FACTOR_SIZE);
     std::memcpy(amt_params.pedersen_commitment, amount_comm, kMPT_PEDERSEN_COMMIT_SIZE);
     std::memcpy(amt_params.ciphertext, sender_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
@@ -149,14 +278,9 @@ test_mpt_confidential_send()
     bal_params.amount = prev_balance;
     std::memcpy(bal_params.blinding_factor, balance_bf, kMPT_BLINDING_FACTOR_SIZE);
     std::memcpy(bal_params.pedersen_commitment, balance_comm, kMPT_PEDERSEN_COMMIT_SIZE);
-
-    uint8_t prev_bal_bf[kMPT_BLINDING_FACTOR_SIZE];
-    uint8_t prev_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
-    EXPECT(mpt_generate_blinding_factor(prev_bal_bf) == 0);
-    EXPECT(mpt_encrypt_amount(prev_balance, sender_pub, prev_bal_bf, prev_bal_ct) == 0);
     std::memcpy(bal_params.ciphertext, prev_bal_ct, kMPT_ELGAMAL_TOTAL_SIZE);
 
-    // Generate the confidential send proof
+    // Prove
     size_t proof_len = get_confidential_send_proof_size(participants.size());
     std::vector<uint8_t> proof(proof_len);
     EXPECT(
@@ -172,7 +296,7 @@ test_mpt_confidential_send()
             proof.data(),
             &proof_len) == 0);
 
-    // Verify the confidential send proof
+    // Verify
     EXPECT(
         mpt_verify_send_proof(
             proof.data(),
@@ -183,6 +307,150 @@ test_mpt_confidential_send()
             amt_params.pedersen_commitment,
             bal_params.pedersen_commitment,
             send_ctx_hash) == 0);
+}
+
+void
+test_mpt_confidential_send()
+{
+    // --- Happy path: n=3 (sender, dest, issuer) ---
+    {
+        SendFixture f = make_send_fixture(3);
+
+        // Proof size must be exactly 192 (compact sigma) + 754 (bulletproof)
+        EXPECT(f.proof_len == SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE);
+
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) == 0);
+    }
+
+    // --- Valid (sender, dest, issuer, auditor) ---
+    {
+        SendFixture f = make_send_fixture(4);
+        EXPECT(f.proof_len == SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE);
+
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) == 0);
+    }
+
+    // Invalid: single corrupted proof byte
+    {
+        SendFixture f = make_send_fixture(3);
+        f.proof[0] ^= 0xFF;
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) != 0);
+    }
+
+    // Invalid: single corrupted proof byte
+    {
+        SendFixture f = make_send_fixture(3);
+        uint8_t bad_ctx[kMPT_HALF_SHA_SIZE] = {0};
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                bad_ctx) != 0);
+    }
+
+    // Invalid: wrong amount commitment (pc_m mismatch)
+    {
+        SendFixture f = make_send_fixture(3);
+        uint8_t bad_amt_comm[kMPT_PEDERSEN_COMMIT_SIZE];
+        uint8_t bad_bf[kMPT_BLINDING_FACTOR_SIZE];
+        EXPECT(mpt_generate_blinding_factor(bad_bf) == 0);
+        EXPECT(mpt_get_pedersen_commitment(f.amt_params.amount, bad_bf, bad_amt_comm) == 0);
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                bad_amt_comm,
+                f.balance_comm,
+                f.ctx_hash) != 0);
+    }
+
+    // Invalid: wrong balance ciphertext (b1/b2 mismatch)
+    {
+        SendFixture f = make_send_fixture(3);
+        uint8_t bad_bal_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+        uint8_t bad_bf[kMPT_BLINDING_FACTOR_SIZE];
+        EXPECT(mpt_generate_blinding_factor(bad_bf) == 0);
+        EXPECT(mpt_encrypt_amount(f.bal_params.amount, f.sender_pub, bad_bf, bad_bal_ct) == 0);
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                bad_bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) != 0);
+    }
+
+    // Invalid: wrong balance commitment (pc_b mismatch)
+    {
+        SendFixture f = make_send_fixture(3);
+        uint8_t bad_bal_comm[kMPT_PEDERSEN_COMMIT_SIZE];
+        uint8_t bad_bf[kMPT_BLINDING_FACTOR_SIZE];
+        EXPECT(mpt_generate_blinding_factor(bad_bf) == 0);
+        EXPECT(mpt_get_pedersen_commitment(f.bal_params.amount, bad_bf, bad_bal_comm) == 0);
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                bad_bal_comm,
+                f.ctx_hash) != 0);
+    }
+
+    // Invalid: wrong proof length
+    {
+        SendFixture f = make_send_fixture(3);
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.proof_len - 1,
+                f.participants.data(),
+                static_cast<uint8_t>(f.participants.size()),
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) != 0);
+    }
 }
 
 void
@@ -276,6 +544,7 @@ main()
 {
     test_encryption_decryption();
     test_mpt_confidential_convert();
+    test_mpt_confidential_send_integrate();
     test_mpt_confidential_send();
     test_mpt_convert_back();
     test_mpt_clawback();

@@ -220,10 +220,9 @@ mpt_add_common_zkp_fields(
 
 extern "C" {
 size_t
-get_confidential_send_proof_size(size_t n_recipients)
+get_confidential_send_proof_size(size_t /* n_recipients */)
 {
-    return secp256k1_mpt_proof_equality_shared_r_size(n_recipients) +
-        (kMPT_PEDERSEN_LINK_SIZE * 2) + kMPT_DOUBLE_BULLETPROOF_SIZE;
+    return SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE;
 }
 
 bool
@@ -618,6 +617,11 @@ mpt_get_confidential_send_proof(
     if (!ctx)
         return -1;
 
+    size_t const total_required =
+        SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE;
+    if (*out_len < total_required)
+        return -1;
+
     secp256k1_pubkey c1;
     std::vector<secp256k1_pubkey> c2_vec(n_recipients);
     std::vector<secp256k1_pubkey> pk_vec(n_recipients);
@@ -633,7 +637,6 @@ mpt_get_confidential_send_proof(
         }
         else
         {
-            // All participant's ciphertext must have the same C1.
             if (!std::equal(
                     rec.ciphertext,
                     rec.ciphertext + kMPT_ELGAMAL_CIPHER_SIZE,
@@ -652,67 +655,67 @@ mpt_get_confidential_send_proof(
             return -1;
     }
 
-    size_t size_equality = secp256k1_mpt_proof_equality_shared_r_size(n_recipients);
-    size_t totalRequired =
-        size_equality + kMPT_PEDERSEN_LINK_SIZE * 2 + kMPT_DOUBLE_BULLETPROOF_SIZE;
-
-    if (*out_len < totalRequired)
+    // Derive sender's public key from private key.
+    secp256k1_pubkey pk;
+    if (secp256k1_ec_pubkey_create(ctx, &pk, priv) != 1)
         return -1;
 
-    // Get the multi-ciphertext equality proof with shared r
-    if (secp256k1_mpt_prove_equality_shared_r(
+    secp256k1_pubkey pc_m;
+    if (secp256k1_ec_pubkey_parse(
+            ctx, &pc_m, amount_params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey pc_b;
+    if (secp256k1_ec_pubkey_parse(
+            ctx, &pc_b, balance_params->pedersen_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey b1, b2;
+    if (!mpt_make_ec_pair(balance_params->ciphertext, &b1, &b2))
+        return -1;
+
+    if (secp256k1_compact_standard_prove(
             ctx,
             out_proof,
             amount,
+            balance_params->amount,
             tx_blinding_factor,
+            priv,
+            balance_params->blinding_factor,
             n_recipients,
             &c1,
             c2_vec.data(),
             pk_vec.data(),
+            &pc_m,
+            &pk,
+            &pc_b,
+            &b1,
+            &b2,
             context_hash) != 1)
     {
         return -1;
     }
 
-    // Amount Linkage Proof
-    uint8_t* amt_ptr = out_proof + size_equality;
-    if (mpt_get_amount_linkage_proof(
-            recipients[0].pubkey, tx_blinding_factor, context_hash, amount_params, amt_ptr) != 0)
-    {
-        return -1;
-    }
-
-    // Balance Linkage Proof
-    uint8_t* bal_ptr = amt_ptr + kMPT_PEDERSEN_LINK_SIZE;
-    if (mpt_get_balance_linkage_proof(
-            priv, recipients[0].pubkey, context_hash, balance_params, bal_ptr) != 0)
-    {
-        return -1;
-    }
-
-    uint8_t* bp_ptr = bal_ptr + kMPT_PEDERSEN_LINK_SIZE;
-
-    // Values to prove: [amount being sent, remaining balance] for range proof
     if (amount > balance_params->amount)
         return -1;  // prevent underflow
 
     uint64_t const remaining_balance = balance_params->amount - amount;
-    uint64_t bp_values[2] = {amount, remaining_balance};
+    uint64_t const bp_values[2] = {amount, remaining_balance};
 
-    // Blinding factors: [rho_amount, rho_balance - rho_amount]
+    uint8_t neg_r[32];
+    secp256k1_mpt_scalar_negate(neg_r, tx_blinding_factor);
     uint8_t rho_rem[32];
-    uint8_t neg_rho_m[32];
-    secp256k1_mpt_scalar_negate(neg_rho_m, amount_params->blinding_factor);
-    secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_rho_m);
+    secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_r);
 
-    uint8_t const* bp_blinding_ptrs[2] = {amount_params->blinding_factor, rho_rem};
+    uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
+    uint8_t* bp_ptr = out_proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE;
     size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
 
     if (mpt_get_bulletproof_agg(
             bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
         return -1;
 
-    *out_len = size_equality + (kMPT_PEDERSEN_LINK_SIZE * 2) + actual_bp_len;
+    *out_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + actual_bp_len;
 
     return 0;
 }
@@ -1058,7 +1061,7 @@ mpt_verify_equality_proof(
         }
         else
         {
-            // All participants must share the exact same C1 bytes
+            // All participants must share the exact same c1 bytes
             if (!std::equal(
                     participants[i].ciphertext,
                     participants[i].ciphertext + kMPT_ELGAMAL_CIPHER_SIZE,
@@ -1139,7 +1142,7 @@ mpt_verify_send_range_proof(
             ctx, &pc_balance, balance_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
         return -1;
 
-    // Negate PC_amount point to get -PC_amount
+    // Negate pc_amount point to get -pc_amount
     if (secp256k1_ec_pubkey_negate(ctx, &pc_amount) != 1)
         return -1;
 
@@ -1177,66 +1180,98 @@ mpt_verify_send_proof(
     uint8_t const balance_commitment[kMPT_PEDERSEN_COMMIT_SIZE],
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
 {
-    if (!proof || proof_len == 0 || !participants || !context_hash)
+    if (!proof || proof_len == 0 || !participants || !sender_spending_ciphertext ||
+        !amount_commitment || !balance_commitment || !context_hash)
         return -1;
 
     if (n_participants != 3 && n_participants != 4)
+        return -1;
+
+    size_t const total_required =
+        SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE;
+    if (proof_len != total_required)
         return -1;
 
     secp256k1_context* ctx = mpt_secp256k1_context();
     if (!ctx)
         return -1;
 
-    size_t const eq_len = secp256k1_mpt_proof_equality_shared_r_size(n_participants);
-    size_t current_offset = 0;
+    secp256k1_pubkey c1;
+    std::vector<secp256k1_pubkey> c2_vec(n_participants);
+    std::vector<secp256k1_pubkey> pk_vec(n_participants);
 
-    // Verify the length of the proof
-    size_t const total_required =
-        eq_len + (2 * kMPT_PEDERSEN_LINK_SIZE) + kMPT_DOUBLE_BULLETPROOF_SIZE;
-    if (proof_len != total_required)
+    for (uint8_t i = 0; i < n_participants; ++i)
+    {
+        if (i == 0)
+        {
+            if (secp256k1_ec_pubkey_parse(
+                    ctx, &c1, participants[i].ciphertext, kMPT_ELGAMAL_CIPHER_SIZE) != 1)
+                return -1;
+        }
+        else
+        {
+            // All participants must share the same c1 bytes.
+            if (!std::equal(
+                    participants[i].ciphertext,
+                    participants[i].ciphertext + kMPT_ELGAMAL_CIPHER_SIZE,
+                    participants[0].ciphertext))
+                return -1;
+        }
+
+        if (secp256k1_ec_pubkey_parse(
+                ctx,
+                &c2_vec[i],
+                participants[i].ciphertext + kMPT_ELGAMAL_CIPHER_SIZE,
+                kMPT_ELGAMAL_CIPHER_SIZE) != 1)
+            return -1;
+
+        if (secp256k1_ec_pubkey_parse(ctx, &pk_vec[i], participants[i].pubkey, kMPT_PUBKEY_SIZE) !=
+            1)
+            return -1;
+    }
+
+    secp256k1_pubkey pk;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, participants[0].pubkey, kMPT_PUBKEY_SIZE) != 1)
         return -1;
 
-    // Track validity via a boolean flag instead of returning early.
-    // this prevents leaking which specific proof failed through execution time differences.
+    secp256k1_pubkey pc_m;
+    if (secp256k1_ec_pubkey_parse(ctx, &pc_m, amount_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey pc_b;
+    if (secp256k1_ec_pubkey_parse(ctx, &pc_b, balance_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey b1, b2;
+    if (!mpt_make_ec_pair(sender_spending_ciphertext, &b1, &b2))
+        return -1;
+
+    // Track validity via boolean flag to prevent timing attacks.
     bool valid = true;
 
-    // Verify Equality Proof
-    if (mpt_verify_equality_proof(
-            ctx, proof + current_offset, eq_len, participants, n_participants, context_hash) != 0)
-    {
-        valid = false;
-    }
-
-    current_offset += eq_len;
-
-    // Verify Amount Linkage
-    if (mpt_verify_amount_linkage(
+    if (secp256k1_compact_standard_verify(
             ctx,
-            proof + current_offset,
-            participants[0].ciphertext,
-            participants[0].pubkey,
-            amount_commitment,
-            context_hash) != 0)
+            proof,
+            n_participants,
+            &c1,
+            c2_vec.data(),
+            pk_vec.data(),
+            &pc_m,
+            &pk,
+            &pc_b,
+            &b1,
+            &b2,
+            context_hash) != 1)
     {
         valid = false;
     }
-    current_offset += kMPT_PEDERSEN_LINK_SIZE;
 
-    // Verify Balance Linkage
-    if (mpt_verify_balance_linkage(
-            proof + current_offset,
-            sender_spending_ciphertext,
-            participants[0].pubkey,
+    if (mpt_verify_send_range_proof(
+            ctx,
+            proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE,
+            amount_commitment,
             balance_commitment,
             context_hash) != 0)
-    {
-        valid = false;
-    }
-    current_offset += kMPT_PEDERSEN_LINK_SIZE;
-
-    // Verify Range Proof
-    if (mpt_verify_send_range_proof(
-            ctx, proof + current_offset, amount_commitment, balance_commitment, context_hash) != 0)
     {
         valid = false;
     }
