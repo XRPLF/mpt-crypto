@@ -2,6 +2,7 @@
 #define MPT_UTILITY_H
 
 #include <secp256k1.h>
+#include <secp256k1_mpt.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -338,14 +339,21 @@ mpt_get_confidential_send_proof(
 
 /**
  * @brief Generates proof for ConfidentialMPTConvertBack.
- * @param priv          [in] The holder's 32-byte private key.
- * @param pub           [in] The holder's 33-byte public key.
- * @param context_hash  [in] The 32-byte context hash binding the proof to the transaction.
- * @param amount        [in] The amount to convert back.
- * @param params        [in] Pedersen commitment parameters.
- * @param out_proof     [out] The 883-byte buffer to be filled with the Pedersen linkage proof and
- * range proof.
- * @return 0 on success, -1 on failure (e.g., math error or invalid parameters).
+ *
+ * Produces a compact AND-composed sigma proof (128 bytes) over the balance
+ * witness (b, rho, sk_A), followed by a single Bulletproof range proof (688
+ * bytes) over the remainder commitment PC_rem = PC_b - m*G.
+ * Total proof size: 816 bytes (SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE +
+ * kMPT_SINGLE_BULLETPROOF_SIZE).
+ *
+ * @param priv         [in] The holder's 32-byte private key (sk_A).
+ * @param pub          [in] The holder's 33-byte public key (P_A).
+ * @param context_hash [in] The 32-byte context hash binding the proof to the transaction.
+ * @param amount       [in] The publicly revealed conversion amount m.
+ * @param params       [in] Must have: pedersen_commitment (PC_b), blinding_factor (rho),
+ *                          amount (balance b), and ciphertext (B1||B2).
+ * @param out_proof    [out] 816-byte buffer for the compact sigma proof || range proof.
+ * @return 0 on success, -1 on failure.
  */
 int
 mpt_get_convert_back_proof(
@@ -354,7 +362,7 @@ mpt_get_convert_back_proof(
     uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
     uint64_t const amount,
     mpt_pedersen_proof_params const* params,
-    uint8_t out_proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE]);
+    uint8_t out_proof[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE]);
 
 /**
  * @brief Generates proof for ConfidentialMPTClawback.
@@ -412,17 +420,17 @@ mpt_verify_convert_proof(
  * Proves that the hidden balance matches the commitment and that
  * subtracting the transparent amount results in a non-negative balance.
  *
- * @param proof              [in] Concatenated linkage and range proofs.
- * @param pubkey             [in] The sender's ElGamal public key.
- * @param ciphertext         [in] The ElGamal ciphertext of the balance.
- * @param balance_commitment [in] The Pedersen commitment of the balance.
- * @param amount             [in] The amount being converted back to public.
+ * @param proof              [in] 816-byte proof blob (compact sigma || Bulletproof).
+ * @param pubkey             [in] The holder's 33-byte ElGamal public key.
+ * @param ciphertext         [in] The holder's 66-byte balance ciphertext.
+ * @param balance_commitment [in] The 33-byte Pedersen commitment to the balance.
+ * @param amount             [in] The publicly revealed conversion amount m.
  * @param context_hash       [in] The 32-byte transaction context hash.
  * @return 0 on success, -1 on failure.
  */
 int
 mpt_verify_convert_back_proof(
-    uint8_t const proof[kMPT_PEDERSEN_LINK_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE],
+    uint8_t const proof[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE],
     uint8_t const pubkey[kMPT_PUBKEY_SIZE],
     uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const balance_commitment[kMPT_PEDERSEN_COMMIT_SIZE],
