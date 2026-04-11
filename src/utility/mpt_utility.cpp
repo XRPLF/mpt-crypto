@@ -1,11 +1,11 @@
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <openssl/sha.h>
 #include <utility/mpt_utility.h>
 
 #include <secp256k1_mpt.h>
 
 #include <cstring>
-#include <iostream>
 #include <vector>
 
 // Platform endianness support for serialization
@@ -94,28 +94,35 @@ mpt_get_bulletproof_agg(
     secp256k1_context const* ctx = mpt_secp256k1_context();
 
     uint8_t blindings_flat[64];
+    int rc = -1;
+
     for (size_t i = 0; i < m; ++i)
     {
         if (!blinding_ptrs[i])
-            return -1;
+            goto bp_cleanup;
         std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
     }
 
-    secp256k1_pubkey pk_base;
-    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
-        return -1;
-
-    if (secp256k1_bulletproof_prove_agg(
-            ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
     {
-        return -1;
+        secp256k1_pubkey pk_base;
+        if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+            goto bp_cleanup;
+
+        if (secp256k1_bulletproof_prove_agg(
+                ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
+            goto bp_cleanup;
+
+        size_t const expected =
+            (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+        if (*out_len != expected)
+            goto bp_cleanup;
+
+        rc = 0;
     }
 
-    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
-    if (*out_len != expected)
-        return -1;
-
-    return 0;
+bp_cleanup:
+    OPENSSL_cleanse(blindings_flat, sizeof(blindings_flat));
+    return rc;
 }
 
 /**
@@ -196,12 +203,16 @@ struct Serializer
     }
 };
 
-void
+static int
 sha512_half(uint8_t const* data, size_t len, uint8_t* out)
 {
-    uint8_t full_hash[SHA512_DIGEST_LENGTH];
-    SHA512(data, len, full_hash);
-    memcpy(out, full_hash, SHA512_DIGEST_LENGTH / 2);
+    uint8_t full_hash[64];
+    unsigned int digest_len = 0;
+    if (EVP_Digest(data, len, full_hash, &digest_len, EVP_sha512(), NULL) != 1)
+        return -1;
+    memcpy(out, full_hash, 32);
+    OPENSSL_cleanse(full_hash, sizeof(full_hash));
+    return 0;
 }
 
 void
@@ -284,8 +295,7 @@ mpt_get_convert_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -306,8 +316,7 @@ mpt_get_convert_back_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -329,8 +338,7 @@ mpt_get_send_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -351,8 +359,7 @@ mpt_get_clawback_context_hash(
     if (!s.isValid())
         return -1;
 
-    sha512_half(buf, s.offset, out_hash);
-    return 0;
+    return sha512_half(buf, s.offset, out_hash);
 }
 
 int
@@ -602,21 +609,29 @@ mpt_get_confidential_send_proof(
     uint64_t const bp_values[2] = {amount, remaining_balance};
 
     uint8_t neg_r[32];
-    secp256k1_mpt_scalar_negate(neg_r, tx_blinding_factor);
     uint8_t rho_rem[32];
+    int rc = -1;
+
+    secp256k1_mpt_scalar_negate(neg_r, tx_blinding_factor);
     secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_r);
 
-    uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
-    uint8_t* bp_ptr = out_proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE;
-    size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
+    {
+        uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
+        uint8_t* bp_ptr = out_proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE;
+        size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
 
-    if (mpt_get_bulletproof_agg(
-            bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
-        return -1;
+        if (mpt_get_bulletproof_agg(
+                bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
+            goto send_cleanup;
 
-    *out_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + actual_bp_len;
+        *out_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + actual_bp_len;
+        rc = 0;
+    }
 
-    return 0;
+send_cleanup:
+    OPENSSL_cleanse(neg_r, sizeof(neg_r));
+    OPENSSL_cleanse(rho_rem, sizeof(rho_rem));
+    return rc;
 }
 
 int
@@ -873,7 +888,7 @@ mpt_verify_convert_back_proof(
     if (secp256k1_ec_pubkey_parse(ctx, &pc_b, balance_commitment, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
         return -1;
 
-    // Track validity via boolean flag to prevent timing attacks
+    // Accumulate validity to avoid leaking which proof component failed
     bool valid = true;
 
     // Verify compact sigma proof (first 128 bytes)
@@ -1015,7 +1030,7 @@ mpt_verify_send_proof(
     if (!mpt_make_ec_pair(sender_spending_ciphertext, &b1, &b2))
         return -1;
 
-    // Track validity via boolean flag to prevent timing attacks
+    // Accumulate validity to avoid leaking which proof component failed
     bool valid = true;
 
     if (secp256k1_compact_standard_verify(
