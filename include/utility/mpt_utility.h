@@ -338,6 +338,29 @@ mpt_get_clawback_proof(
     uint8_t out_proof[SECP256K1_COMPACT_CLAWBACK_PROOF_SIZE]);
 
 /* ============================================================================
+ * Non-ZKP Validation
+ * ============================================================================ */
+
+/**
+ * @brief Verifies that the ElGamal ciphertexts held by all participants encrypt
+ * the same revealed plaintext amount under the given blinding factor.
+ *
+ * @param amount          [in] Actual numeric amount to verify against.
+ * @param blinding_factor [in] The ElGamal randomness r used to produce all ciphertexts.
+ * @param holder          [in] Holder's public key and ciphertext.
+ * @param issuer          [in] Issuer's public key and ciphertext.
+ * @param auditor         [in] Auditor's public key and ciphertext, optional.
+ * @return 0 on success, -1 on failure.
+ */
+int
+mpt_verify_revealed_amount(
+    uint64_t const amount,
+    uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
+    mpt_confidential_participant const* holder,
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor);
+
+/* ============================================================================
  * ZKProof Verifications for Each Transaction
  * ============================================================================ */
 
