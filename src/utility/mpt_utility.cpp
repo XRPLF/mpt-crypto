@@ -443,6 +443,58 @@ mpt_decrypt_amount(
     return 0;
 }
 
+static int
+mpt_internal_verify_single(
+    secp256k1_context* ctx,
+    uint64_t amount,
+    uint8_t const bf[kMPT_BLINDING_FACTOR_SIZE],
+    mpt_confidential_participant const* recipient)
+{
+    if (!ctx)
+        return -1;
+    secp256k1_pubkey pk, c1, c2;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, recipient->pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (!mpt_make_ec_pair(recipient->ciphertext, &c1, &c2))
+        return -1;
+
+    if (secp256k1_elgamal_verify_encryption(ctx, &c1, &c2, &pk, amount, bf) != 1)
+        return -1;
+
+    return 0;
+}
+
+int
+mpt_verify_revealed_amount(
+    uint64_t const amount,
+    uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
+    mpt_confidential_participant const* holder,
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor)
+{
+    if (!blinding_factor || !holder || !issuer)
+        return -1;
+
+    secp256k1_context* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    int status = 0;
+
+    status |= mpt_internal_verify_single(ctx, amount, blinding_factor, holder);
+
+    status |= mpt_internal_verify_single(ctx, amount, blinding_factor, issuer);
+
+    if (auditor)
+    {
+        status |= mpt_internal_verify_single(ctx, amount, blinding_factor, auditor);
+    }
+
+    return (status == 0) ? 0 : -1;
+}
+
 int
 mpt_get_convert_proof(
     uint8_t const pubkey[kMPT_PUBKEY_SIZE],
