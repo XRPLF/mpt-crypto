@@ -1352,18 +1352,13 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       goto fs_cleanup;
     }
 
-    // y = H(domain || context || V* || A || S)
+    // y = H(domain || V* || A || S || context)
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
     if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    {
-      fs_ok = 0;
-      goto fs_cleanup;
-    }
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1404,6 +1399,11 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       fs_ok = 0;
       goto fs_cleanup;
     }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
     if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
     {
       fs_ok = 0;
@@ -1411,18 +1411,13 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     }
     secp256k1_mpt_scalar_reduce32(y, y);
 
-    // z = H(domain || context || V* || A || S || y)
+    // z = H(domain || V* || A || S || y || context)
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
     if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    {
-      fs_ok = 0;
-      goto fs_cleanup;
-    }
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1464,6 +1459,11 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       goto fs_cleanup;
     }
     if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1617,7 +1617,7 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
   }
 
   /* ---- 9. Challenge x ---- */
-  /* x = H(context_id || A || S || y || z || T1 || T2) */
+  /* x = H(A || S || y || z || T1 || T2 || context_id) */
   {
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
     size_t len;
@@ -1650,8 +1650,6 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto fs_x_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-      goto fs_x_cleanup;
     if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
       goto fs_x_cleanup;
     if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
@@ -1663,6 +1661,8 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
       goto fs_x_cleanup;
     if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_x_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
       goto fs_x_cleanup;
     if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
       goto fs_x_cleanup;
@@ -1738,7 +1738,7 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
    *  - Use only public elements that both sides already know.
    *  - Do NOT depend on internal intermediate buffers.
    *
-   * Minimal, safe choice: context_id || A||S||T1||T2 || y||z||x || t_hat
+   * Minimal, safe choice: A||S||T1||T2 || y||z||x || t_hat || context_id
    * (All points are serialized compressed 33 bytes.)
    */
   {
@@ -1777,8 +1777,6 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto fs_ipa_cleanup;
 
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-      goto fs_ipa_cleanup;
     if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
       goto fs_ipa_cleanup;
     if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
@@ -1794,6 +1792,8 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     if (EVP_DigestUpdate(mdctx, x, 32) != 1)
       goto fs_ipa_cleanup;
     if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto fs_ipa_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
       goto fs_ipa_cleanup;
 
     if (EVP_DigestFinal_ex(mdctx, ipa_transcript, NULL) != 1)
@@ -2186,13 +2186,11 @@ int secp256k1_bulletproof_verify_agg(
       slen != 33)
     goto fs_fail;
 
-  /* ---------------- y = H(domain || context || C_i || A || S) ----------------
+  /* ---------------- y = H(domain || C_i || A || S || context) ----------------
    */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     goto fs_fail;
 
   for (size_t i = 0; i < m; i++)
@@ -2211,18 +2209,18 @@ int secp256k1_bulletproof_verify_agg(
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
     goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
     goto fs_fail;
 
   secp256k1_mpt_scalar_reduce32(y, y);
 
-  /* ---------------- z = H(domain || context || C_i || A || S || y)
+  /* ---------------- z = H(domain || C_i || A || S || y || context)
    * ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     goto fs_fail;
 
   for (size_t i = 0; i < m; i++)
@@ -2242,6 +2240,8 @@ int secp256k1_bulletproof_verify_agg(
   if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
     goto fs_fail;
@@ -2267,11 +2267,9 @@ int secp256k1_bulletproof_verify_agg(
   secp256k1_mpt_scalar_inverse(y_inv, y);
   scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
 
-  /* ---------------- x = H(context || A || S || y || z || T1 || T2)
+  /* ---------------- x = H(A || S || y || z || T1 || T2 || context)
    * ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
     goto fs_fail;
@@ -2284,6 +2282,8 @@ int secp256k1_bulletproof_verify_agg(
   if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    goto fs_fail;
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
     goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
     goto fs_fail;
@@ -2564,8 +2564,6 @@ fs_fail:
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto ipa_tid_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-      goto ipa_tid_cleanup;
     if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
       goto ipa_tid_cleanup;
     if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
@@ -2581,6 +2579,8 @@ fs_fail:
     if (EVP_DigestUpdate(mdctx, x, 32) != 1)
       goto ipa_tid_cleanup;
     if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+      goto ipa_tid_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
       goto ipa_tid_cleanup;
     if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1)
       goto ipa_tid_cleanup;
