@@ -91,77 +91,6 @@ generate_canonical_encrypted_zero(
     unsigned char const* mpt_issuance_id  // 24 bytes
 );
 
-// ... (includes and previous ElGamal declarations) ...
-
-/*
-================================================================================
-|                                                                              |
-|           PROOF OF KNOWLEDGE OF PLAINTEXT AND RANDOMNESS                     |
-|                (Chaum-Pedersen Equality Proof)                               |
-================================================================================
-*/
-
-/**
- * @brief Generates a proof that an ElGamal ciphertext correctly encrypts a
- * known plaintext `m` and that the prover knows the randomness `r`.
- *
- * @param[in]   ctx             A pointer to a valid secp256k1 context object,
- * initialized for signing.
- * @param[out]  proof           A pointer to a 98-byte buffer to store the proof
- * (T1 [33 bytes] || T2 [33 bytes] || s [32 bytes]).
- * @note Legacy uncompressed form; superseded by the compact proof APIs
- *       (secp256k1_compact_*). Removed in PR #22.
- * @param[in]   c1              The C1 component of the ciphertext (r*G).
- * @param[in]   c2              The C2 component of the ciphertext (m*G + r*Pk).
- * @param[in]   pk_recipient    The public key used for encryption.
- * @param[in]   amount          The known plaintext value `m`.
- * @param[in]   randomness_r    The 32-byte secret random scalar `r` used in encryption.
- * @param[in]   tx_context_id   A 32-byte unique identifier for the transaction context.
- *
- * @return 1 on success, 0 on failure.
- */
-SECP256K1_API int
-secp256k1_equality_plaintext_prove(
-    secp256k1_context const* ctx,
-    unsigned char* proof,  // Output: 98 bytes
-    secp256k1_pubkey const* c1,
-    secp256k1_pubkey const* c2,
-    secp256k1_pubkey const* pk_recipient,
-    uint64_t amount,
-    unsigned char const* randomness_r,  // Secret input
-    unsigned char const* tx_context_id  // 32 bytes
-);
-
-/**
- * @brief Verifies a proof of knowledge of plaintext and randomness.
- *
- * Checks if the proof correctly demonstrates that (C1, C2) encrypts `m`
- * under `pk_recipient`.
- *
- * @param[in]   ctx             A pointer to a valid secp256k1 context object,
- * initialized for verification.
- * @param[in]   proof           A pointer to the 98-byte proof to verify.
- * @param[in]   c1              The C1 component of the ciphertext.
- * @param[in]   c2              The C2 component of the ciphertext.
- * @param[in]   pk_recipient    The public key used for encryption.
- * @param[in]   amount          The known plaintext value `m`.
- * @param[in]   tx_context_id   A 32-byte unique identifier for the transaction context.
- *
- * @return 1 if the proof is valid, 0 otherwise.
- */
-SECP256K1_API int
-secp256k1_equality_plaintext_verify(
-    secp256k1_context const* ctx,
-    unsigned char const* proof,  // Input: 98 bytes
-    secp256k1_pubkey const* c1,
-    secp256k1_pubkey const* c2,
-    secp256k1_pubkey const* pk_recipient,
-    uint64_t amount,
-    unsigned char const* tx_context_id  // 32 bytes
-);
-
-// ... (rest of header, #endif etc.)
-
 /**
  * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
  *
@@ -205,51 +134,6 @@ secp256k1_bulletproof_verify(
     secp256k1_pubkey const* commitment_C,
     secp256k1_pubkey const* pk_base, /* This is generator H */
     unsigned char const* context_id);
-/**
- * @brief Proves the link between an ElGamal ciphertext and a Pedersen commitment.
- * * Formal Statement: Knowledge of (m, r, rho) such that:
- * C1 = r*G, C2 = m*G + r*Pk, and PCm = m*G + rho*H.
- * * @param ctx         Pointer to a secp256k1 context object.
- * @param proof       [OUT] Pointer to 195-byte buffer for the proof output.
- *                    Legacy Variant B format; superseded by compact proof APIs.
- *                    Removed in PR #22.
- * @param c1          Pointer to the ElGamal C1 point (r*G).
- * @param c2          Pointer to the ElGamal C2 point (m*G + r*Pk).
- * @param pk          Pointer to the recipient's public key.
- * @param pcm         Pointer to the Pedersen Commitment (m*G + rho*H).
- * @param amount      The plaintext amount (m).
- * @param r           The 32-byte secret ElGamal blinding factor.
- * @param rho         The 32-byte secret Pedersen blinding factor.
- * @param context_id  32-byte unique transaction context identifier.
- * @return 1 on success, 0 on failure.
- */
-int
-secp256k1_elgamal_pedersen_link_prove(
-    secp256k1_context const* ctx,
-    unsigned char* proof,
-    secp256k1_pubkey const* c1,
-    secp256k1_pubkey const* c2,
-    secp256k1_pubkey const* pk,
-    secp256k1_pubkey const* pcm,
-    uint64_t amount,
-    unsigned char const* r,
-    unsigned char const* rho,
-    unsigned char const* context_id);
-
-/**
- * @brief Verifies the link proof between ElGamal and Pedersen commitments.
- * * @return 1 if the proof is valid, 0 otherwise.
- */
-int
-secp256k1_elgamal_pedersen_link_verify(
-    secp256k1_context const* ctx,
-    unsigned char const* proof,
-    secp256k1_pubkey const* c1,
-    secp256k1_pubkey const* c2,
-    secp256k1_pubkey const* pk,
-    secp256k1_pubkey const* pcm,
-    unsigned char const* context_id);
-
 /**
  * Verifies that (c1, c2) is a valid ElGamal encryption of 'amount'
  * for 'pubkey_Q' using the revealed 'blinding_factor'.
@@ -320,42 +204,6 @@ void
 secp256k1_mpt_scalar_negate(unsigned char* res, unsigned char const* in);
 void
 secp256k1_mpt_scalar_reduce32(unsigned char out32[32], unsigned char const in32[32]);
-
-/**
- * Returns the size of the serialized proof for N recipients.
- * Size: (1 + N) * 33 bytes for points + 2 * 32 bytes for scalars.
- */
-size_t
-secp256k1_mpt_proof_equality_shared_r_size(size_t n);
-
-/**
- * Generates a proof that multiple ciphertexts encrypt the same amount m
- * using the SAME shared randomness r.
- */
-int
-secp256k1_mpt_prove_equality_shared_r(
-    secp256k1_context const* ctx,
-    unsigned char* proof_out,
-    uint64_t amount,
-    unsigned char const* r_shared,
-    size_t n,
-    secp256k1_pubkey const* C1,
-    secp256k1_pubkey const* C2_vec,
-    secp256k1_pubkey const* Pk_vec,
-    unsigned char const* context_id);
-
-/**
- * Verifies the proof of equality with shared randomness.
- */
-int
-secp256k1_mpt_verify_equality_shared_r(
-    secp256k1_context const* ctx,
-    unsigned char const* proof,
-    size_t n,
-    secp256k1_pubkey const* C1,
-    secp256k1_pubkey const* C2_vec,
-    secp256k1_pubkey const* Pk_vec,
-    unsigned char const* context_id);
 
 int
 secp256k1_bulletproof_prove_agg(

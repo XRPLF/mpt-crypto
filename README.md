@@ -21,8 +21,7 @@ The library is built on top of `libsecp256k1` for elliptic curve arithmetic and 
 
 ### 3. Zero-Knowledge Proofs (Sigma Protocols)
 
-- **Plaintext Equality:** Proves two or more ciphertexts encrypt the same amount under different keys.
-- **Linkage Proof:** Proves consistency between an ElGamal ciphertext (used for transfer) and a Pedersen Commitment (used for the range proof).
+- **Compact AND-Composed Sigma Proofs:** Proves ciphertext equality, Pedersen commitment linkage, and balance ownership under a single Fiat-Shamir challenge. Three variants cover the standard send, convert-back, and clawback transaction types.
 - **Proof of Knowledge (PoK):** Proves ownership of the secret key during account registration to prevent rogue key attacks.
 
 ## Building and Testing
@@ -103,17 +102,14 @@ The following tests should pass:
 
 - `test_bulletproof_agg` - Aggregated Bulletproof range proofs
 - `test_commitments` - Pedersen commitments
+- `test_compact_clawback` - Compact sigma proof for clawback
+- `test_compact_convertback` - Compact sigma proof for convert-back
+- `test_compact_standard` - Compact sigma proof for standard send
 - `test_elgamal` - ElGamal encryption/decryption
 - `test_elgamal_verify` - ElGamal verification
-- `test_equality_proof` - Equality proofs
 - `test_ipa` - Inner Product Argument (IPA) Core Logic
-- `test_link_proof` - Linkage proofs
+- `test_mpt_utility` - End-to-end utility layer (send, convert, convert-back, clawback)
 - `test_pok_sk` - Proof of knowledge of secret key
-- `test_same_plaintext` - Same plaintext proofs
-- `test_same_plaintext_multi` - Multi-recipient same plaintext proofs
-- `test_same_plaintext_multi_shared_r` - Shared randomness variant
-
-**Note:** `test_bulletproof.c` is excluded from the build because the aggregated implementation (bulletproof_aggregated.c) is fully general; verifying the m=1 case is now covered by test_bulletproof_agg.c.
 
 ## Documentation
 

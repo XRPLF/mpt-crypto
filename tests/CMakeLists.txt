@@ -34,14 +34,6 @@ endfunction()
 
 add_mpt_test(test_elgamal test_elgamal.c DEPENDENCIES mpt-crypto)
 
-add_mpt_test(test_equality_proof test_equality_proof.c DEPENDENCIES mpt-crypto)
-
-add_mpt_test(
-    test_link_proof
-    test_link_proof.c
-    DEPENDENCIES mpt-crypto secp256k1 OpenSSL::Crypto
-)
-
 add_mpt_test(
     test_elgamal_verify
     test_elgamal_verify.c
@@ -57,12 +49,6 @@ add_mpt_test(
 )
 
 add_mpt_test(test_ipa test_ipa.c DEPENDENCIES mpt-crypto secp256k1)
-
-add_mpt_test(
-    test_same_plaintext_multi_shared_r
-    test_same_plaintext_multi_shared_r.c
-    DEPENDENCIES mpt-crypto secp256k1
-)
 
 add_mpt_test(
     test_bulletproof_agg
