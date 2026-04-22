@@ -30,7 +30,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build and attach binaries to (must already have a
+        description: 
+          "Release tag to build and attach binaries to (must already have a
           published GitHub release)"
         required: true
         type: string
