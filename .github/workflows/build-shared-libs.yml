@@ -12,7 +12,9 @@
 # attempt at full portability (no musl, no MT CRT).
 #
 # The output artifacts use CMake's natural library names under per-platform
-# subdirectories (OS × arch):
+# subdirectories (OS × arch), plus the public headers shared across platforms:
+#   include/secp256k1_mpt.h             (public API)
+#   include/utility/mpt_utility.h       (public API)
 #   darwin-aarch64/libmpt-crypto.dylib  (macOS ARM64)
 #   darwin-x86-64/libmpt-crypto.dylib   (macOS x86_64)
 #   linux-aarch64/libmpt-crypto.so      (Linux ARM64)
@@ -33,16 +35,6 @@ name: Build Shared Libraries
 
 on:
   workflow_call:
-    inputs:
-      ref:
-        description:
-          "Git ref (tag or SHA) to check out and build. Passed directly to
-          actions/checkout."
-        required: true
-        type: string
-
-permissions:
-  contents: read
 
 jobs:
   build:
@@ -80,8 +72,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.ref }}
 
       # ── Set up build tools ──
       - name: Set up Python
@@ -104,114 +94,70 @@ jobs:
           conan profile show
           conan remote add --index 0 --force xrplf https://conan.ripplex.io
 
-      # ── Install dependencies via Conan ──
-      - name: Install dependencies (Unix)
-        if: runner.os != 'Windows'
+      - name: Install dependencies
         shell: bash
         run: |
-          conan install . \
-            -of build \
-            --build=missing \
-            -s build_type=Release \
-            -o "&:shared=True" \
-            -o "&:tests=True" \
-            -o "secp256k1/*:shared=False" \
-            -o "secp256k1/*:fPIC=True" \
-            -o "openssl/*:shared=False" \
-            -o "openssl/*:fPIC=True"
-
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          conan install . \
-            -of build \
-            --build=missing \
-            -s build_type=Release \
-            -o "&:shared=True" \
-            -o "&:tests=True" \
-            -o "secp256k1/*:shared=False" \
+          CONAN_ARGS=(
+            -of build
+            --build=missing
+            -s build_type=Release
+            -o "&:shared=True"
+            -o "&:tests=True"
+            -o "secp256k1/*:shared=False"
             -o "openssl/*:shared=False"
+          )
+          if [[ "${RUNNER_OS}" != "Windows" ]]; then
+            CONAN_ARGS+=(-o "secp256k1/*:fPIC=True" -o "openssl/*:fPIC=True")
+          fi
+          conan install . "${CONAN_ARGS[@]}"
 
-      # ── Configure CMake ──
-      - name: Configure CMake (Unix)
-        if: runner.os != 'Windows'
+      - name: Configure CMake
         shell: bash
         run: |
-          TOOLCHAIN=$(find build -name "conan_toolchain.cmake" -print -quit)
-          if [ -z "${TOOLCHAIN}" ]; then
-            echo "ERROR: Could not find conan_toolchain.cmake under build/"
-            find build -type f -name "*.cmake" | head -20
-            exit 1
+          CMAKE_ARGS=(
+            -B build
+            -S .
+            -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
+          )
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            CMAKE_ARGS+=(
+              -G "Visual Studio 17 2022"
+              -A x64
+              -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON
+            )
+          else
+            CMAKE_ARGS+=(
+              -G Ninja
+              -DCMAKE_BUILD_TYPE=Release
+            )
           fi
-          echo "==> Using toolchain: ${TOOLCHAIN}"
+          cmake "${CMAKE_ARGS[@]}"
 
-          cmake -B build -S . \
-            -G Ninja \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN}" \
-            -DCMAKE_BUILD_TYPE=Release
-
-      - name: Configure CMake (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          TOOLCHAIN=$(find build -name "conan_toolchain.cmake" -print -quit)
-          if [ -z "${TOOLCHAIN}" ]; then
-            echo "ERROR: Could not find conan_toolchain.cmake under build/"
-            find build -type f -name "*.cmake" | head -20
-            exit 1
-          fi
-          echo "==> Using toolchain: ${TOOLCHAIN}"
-
-          cmake -B build -S . \
-            -G "Visual Studio 17 2022" \
-            -A x64 \
-            -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN}" \
-            -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON
-
-      # ── Build ──
       - name: Build shared library
         shell: bash
         run: cmake --build build --config Release
 
       # ── Test ──
-      - name: Run tests (Unix)
-        if: runner.os != 'Windows'
+      - name: Run tests
         shell: bash
-        run: ctest --output-on-failure
         working-directory: build
-
-      - name: Run tests (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
         run: |
-          export PATH="$(pwd)/Release:${PATH}"
-          ctest -C Release --output-on-failure
-        working-directory: build
+          CTEST_ARGS=(--output-on-failure)
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            export PATH="$(pwd)/Release:${PATH}"
+            CTEST_ARGS+=(-C Release)
+          fi
+          ctest "${CTEST_ARGS[@]}"
 
       # ── Stage ──
-      # Locate the built library (path varies by generator: build/ for Ninja,
-      # build/Release/ for Visual Studio) and place it under output/<platform>/
-      # so upload-artifact preserves the platform subdirectory.
       - name: Stage shared library under output/<platform>/
         shell: bash
+        env:
+          LIB_DIR: ${{ runner.os == 'Windows' && 'build/Release' || 'build' }}
         run: |
-          mkdir -p output/${{ matrix.platform }}
+          mkdir -p "output/${{ matrix.platform }}"
+          cp "${LIB_DIR}/${{ matrix.lib_filename }}" "output/${{ matrix.platform }}/"
 
-          BUILT_LIB=$(find build -maxdepth 2 -name "${{ matrix.lib_filename }}" -print -quit)
-
-          if [ -z "${BUILT_LIB}" ]; then
-            echo "ERROR: Could not find ${{ matrix.lib_filename }} in build/"
-            echo "Build directory contents:"
-            find build -type f \( -name "*.dylib" -o -name "*.so" -o -name "*.dll" \) 2>/dev/null
-            exit 1
-          fi
-
-          echo "==> Found: ${BUILT_LIB}"
-          cp "${BUILT_LIB}" "output/${{ matrix.platform }}/"
-          echo "==> Packaged: output/${{ matrix.platform }}/${{ matrix.lib_filename }}"
-
-      # ── Upload per-platform artifact ──
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -219,20 +165,17 @@ jobs:
           path: output/
           if-no-files-found: error
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # Bundle all platform artifacts into a single downloadable archive.
-  #   darwin-aarch64/libmpt-crypto.dylib
-  #   darwin-x86-64/libmpt-crypto.dylib
-  #   linux-aarch64/libmpt-crypto.so
-  #   linux-x86-64/libmpt-crypto.so
-  #   win32-x86-64/mpt-crypto.dll
-  #
-  # ──────────────────────────────────────────────────────────────────────────
   bundle:
     name: Bundle platform artifacts
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: Check out repo (for public headers)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: include
+          sparse-checkout-cone-mode: false
+
       - name: Download all platform artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -240,19 +183,14 @@ jobs:
           path: natives/
           merge-multiple: true
 
-      - name: Display bundled structure
+      - name: Stage public headers
         run: |
-          echo "==> Bundled native libraries:"
-          find natives/ -type f | sort
-          echo ""
-          echo "==> File sizes:"
-          find natives/ -type f -exec ls -lh {} \;
+          mkdir -p natives/include
+          cp -R include/. natives/include/
 
       - name: Create combined archive
         run: |
           tar -czf mpt-crypto-natives.tar.gz -C natives .
-          echo "==> Created mpt-crypto-natives.tar.gz"
-          ls -lh mpt-crypto-natives.tar.gz
 
       - name: Upload combined bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

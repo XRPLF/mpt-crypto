@@ -96,16 +96,11 @@ jobs:
         run: ctest --output-on-failure
         working-directory: ${{ env.BUILD_DIR }}
 
-  # ──────────────────────────────────────────────────────────────────────────
   # Build the shared-library bundle (per-platform .so/.dylib/.dll) by calling
-  # the reusable workflow. Runs on every PR, main push, and tag push — so the
-  # native-binary build path is always exercised, not just at release time.
-  # ──────────────────────────────────────────────────────────────────────────
+  # the reusable workflow.
   native-binaries:
     name: Build native shared libraries
     uses: ./.github/workflows/build-shared-libs.yml
-    with:
-      ref: ${{ github.sha }}
 
   # On tag push only: publish a GitHub release and attach the native bundle.
   release:
