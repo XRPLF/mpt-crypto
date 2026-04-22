@@ -6,27 +6,6 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef _WIN32
-/* MSVC's <time.h> has struct timespec but not CLOCK_MONOTONIC / clock_gettime.
- * Shim them with QueryPerformanceCounter so the benchmark timing below works
- * on Windows without touching the call sites. */
-#include <windows.h>
-#ifndef CLOCK_MONOTONIC
-#define CLOCK_MONOTONIC 0
-#endif
-static int clock_gettime(int clk_id, struct timespec *ts)
-{
-  (void)clk_id;
-  LARGE_INTEGER freq, count;
-  QueryPerformanceFrequency(&freq);
-  QueryPerformanceCounter(&count);
-  ts->tv_sec = (time_t)(count.QuadPart / freq.QuadPart);
-  ts->tv_nsec =
-      (long)(((count.QuadPart % freq.QuadPart) * 1000000000LL) / freq.QuadPart);
-  return 0;
-}
-#endif
-
 #define BP_VALUE_BITS 64
 #define BP_TOTAL_BITS(m) ((size_t)(BP_VALUE_BITS * (m)))
 #define VERIFY_RUNS 5
@@ -78,26 +57,26 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   size_t proof_len = sizeof(proof);
 
   struct timespec t_p_start, t_p_end;
-  clock_gettime(CLOCK_MONOTONIC, &t_p_start);
+  timespec_get(&t_p_start, TIME_UTC);
 
   EXPECT(secp256k1_bulletproof_prove_agg(ctx, proof, &proof_len, values,
                                          (const unsigned char *)blindings,
                                          num_values, &pk_base, context_id));
 
-  clock_gettime(CLOCK_MONOTONIC, &t_p_end);
+  timespec_get(&t_p_end, TIME_UTC);
   printf("  Proof size: %zu bytes\n", proof_len);
   if (run_benchmarks)
     printf("  [BENCH] Proving time: %.3f ms\n", elapsed_ms(t_p_start, t_p_end));
 
   /* ---- Verify ---- */
   struct timespec t_v_start, t_v_end;
-  clock_gettime(CLOCK_MONOTONIC, &t_v_start);
+  timespec_get(&t_v_start, TIME_UTC);
 
   int ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
                                             commitments, num_values, &pk_base,
                                             context_id);
 
-  clock_gettime(CLOCK_MONOTONIC, &t_v_end);
+  timespec_get(&t_v_end, TIME_UTC);
   EXPECT(ok);
   printf("  PASSED (Verification)\n");
   if (run_benchmarks)
@@ -111,11 +90,11 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
     for (int i = 0; i < VERIFY_RUNS; i++)
     {
       struct timespec ts, te;
-      clock_gettime(CLOCK_MONOTONIC, &ts);
+      timespec_get(&ts, TIME_UTC);
       ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
                                             commitments, num_values, &pk_base,
                                             context_id);
-      clock_gettime(CLOCK_MONOTONIC, &te);
+      timespec_get(&te, TIME_UTC);
       EXPECT(ok);
       total_ms += elapsed_ms(ts, te);
     }
