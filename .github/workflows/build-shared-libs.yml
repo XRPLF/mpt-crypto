@@ -114,7 +114,7 @@ jobs:
             --build=missing \
             -s build_type=Release \
             -o "&:shared=True" \
-            -o "&:tests=False" \
+            -o "&:tests=True" \
             -o "secp256k1/*:shared=False" \
             -o "secp256k1/*:fPIC=True" \
             -o "openssl/*:shared=False" \
@@ -129,7 +129,7 @@ jobs:
             --build=missing \
             -s build_type=Release \
             -o "&:shared=True" \
-            -o "&:tests=False" \
+            -o "&:tests=True" \
             -o "secp256k1/*:shared=False" \
             -o "openssl/*:shared=False"
 
@@ -173,6 +173,21 @@ jobs:
       - name: Build shared library
         shell: bash
         run: cmake --build build --config Release
+
+      # ── Test ──
+      - name: Run tests (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: ctest --output-on-failure
+        working-directory: build
+
+      - name: Run tests (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          export PATH="$(pwd)/Release:${PATH}"
+          ctest -C Release --output-on-failure
+        working-directory: build
 
       # ── Stage ──
       # Locate the built library (path varies by generator: build/ for Ninja,
