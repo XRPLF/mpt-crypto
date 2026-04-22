@@ -14,6 +14,10 @@ concurrency:
 
 jobs:
   build-and-test:
+    # The matrix depends on XRPLF's self-hosted runners (heavy, heavy-arm64,
+    # macos15), which aren't shared with forks. Skip on forks so workflow
+    # changes can be iterated on without stalling in the runner queue.
+    if: github.repository_owner == 'XRPLF'
     strategy:
       fail-fast: false
       matrix:
@@ -106,7 +110,14 @@ jobs:
   # On tag push only: publish a GitHub release and attach the native bundle.
   release:
     name: Publish release
-    if: github.ref_type == 'tag'
+    # Run on tag push when native-binaries succeeded, and either build-and-test
+    # passed (upstream) or was skipped (fork). `!failure() && !cancelled()`
+    # is the GH Actions idiom to override the default "skip if any need was
+    # skipped" behavior without also running on real failures.
+    if: >-
+      !failure() && !cancelled() &&
+      github.ref_type == 'tag' &&
+      needs.native-binaries.result == 'success'
     needs: [build-and-test, native-binaries]
     runs-on: ubuntu-latest
     permissions:
