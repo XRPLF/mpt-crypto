@@ -8,9 +8,11 @@
 # without any system-level installs on the consumer's machine.
 #
 # Triggers:
-#   - workflow_dispatch ONLY, and the selected ref MUST be a tag that already
-#     has a published GitHub release (release notes generated). The guard job
-#     below enforces both preconditions and fails fast otherwise.
+#   - workflow_dispatch ONLY. Dispatch from the branch that hosts this YAML
+#     (so the workflow definition is picked up), and pass the release `tag`
+#     as an input. The guard job below fails fast unless a GitHub release
+#     already exists for that tag (release notes generated). The build jobs
+#     check out the tag — so the YAML ref and the built source are decoupled.
 #
 # The output artifacts follow the JNA platform-naming convention (also
 # compatible with Python ctypes lookups):
@@ -20,15 +22,20 @@
 #   linux-x86-64/libmptcrypto.so        (Linux x86_64)
 #   win32-x86-64/mptcrypto.dll          (Windows x86_64)
 #
-# Binaries are attached to the existing GitHub release as assets (per-platform
-# tarballs + a combined bundle). Re-running on the same tag overwrites the
-# previously-uploaded assets of the same name via `gh release upload --clobber`.
+# A single combined archive (mptcrypto-natives-<tag>.tar.gz) is attached to
+# the release. Re-running on the same tag overwrites the previously-uploaded
+# asset via `gh release upload --clobber`.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Build Native Binaries for Client Libraries
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach binaries to (must already have a published GitHub release)"
+        required: true
+        type: string
 
 # Default to read-only; the bundle job escalates to contents: write so it can
 # attach assets to the release via `gh release upload`.
@@ -37,34 +44,37 @@ permissions:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
-  # Gate: only proceed when dispatched from a tag ref that already has a
-  # published GitHub release. workflow_dispatch lets users pick any
-  # branch/tag/SHA from the UI, so we enforce both preconditions explicitly.
+  # Gate: verify the `tag` input points at a real tag with a published
+  # GitHub release. The workflow YAML is loaded from whatever branch the
+  # user dispatched from (typically the branch hosting this file); the tag
+  # identifies what source gets built and where assets get attached.
   # ──────────────────────────────────────────────────────────────────────────
   guard:
     name: Verify tag + release exist
     runs-on: ubuntu-latest
     steps:
-      - name: Require tag ref
+      - name: Require tag exists in repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.ref }}" != refs/tags/* ]]; then
-            echo "ERROR: This workflow must be dispatched from a tag."
-            echo "Got ref: ${{ github.ref }}"
+          if ! gh api "repos/${{ github.repository }}/git/ref/tags/${{ inputs.tag }}" \
+              >/dev/null 2>&1; then
+            echo "ERROR: Tag '${{ inputs.tag }}' does not exist in ${{ github.repository }}."
             exit 1
           fi
-          echo "==> Dispatched from tag: ${{ github.ref_name }}"
+          echo "==> Tag exists: ${{ inputs.tag }}"
 
       - name: Require published release for tag
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if ! gh release view "${{ github.ref_name }}" \
+          if ! gh release view "${{ inputs.tag }}" \
               --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "ERROR: No GitHub release found for tag '${{ github.ref_name }}'."
+            echo "ERROR: No GitHub release found for tag '${{ inputs.tag }}'."
             echo "Generate the release (and release notes) before running this workflow."
             exit 1
           fi
-          echo "==> Release exists for tag: ${{ github.ref_name }}"
+          echo "==> Release exists for tag: ${{ inputs.tag }}"
 
   build:
     needs: guard
@@ -108,8 +118,12 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      # ── Checkout the ref that triggered this workflow ──
+      # ── Checkout the tag being released (NOT the dispatch ref) ──
+      # The workflow YAML is loaded from the dispatch ref, but the built
+      # source must come from the tag the user is releasing.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.tag }}
 
       # ── Set up build tools ──
       - name: Set up Python
@@ -326,7 +340,7 @@ jobs:
       - name: Create combined archive
         id: archive
         run: |
-          ARCHIVE="mptcrypto-natives-${{ github.ref_name }}.tar.gz"
+          ARCHIVE="mptcrypto-natives-${{ inputs.tag }}.tar.gz"
           tar -czf "${ARCHIVE}" -C natives .
           echo "==> Created ${ARCHIVE}"
           ls -lh "${ARCHIVE}"
@@ -338,7 +352,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
+          gh release upload "${{ inputs.tag }}" \
             "${{ steps.archive.outputs.archive }}" \
             --repo "${{ github.repository }}" \
             --clobber
