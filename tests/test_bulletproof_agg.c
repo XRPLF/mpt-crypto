@@ -6,6 +6,27 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+/* MSVC's <time.h> has struct timespec but not CLOCK_MONOTONIC / clock_gettime.
+ * Shim them with QueryPerformanceCounter so the benchmark timing below works
+ * on Windows without touching the call sites. */
+#include <windows.h>
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC 0
+#endif
+static int clock_gettime(int clk_id, struct timespec *ts)
+{
+  (void)clk_id;
+  LARGE_INTEGER freq, count;
+  QueryPerformanceFrequency(&freq);
+  QueryPerformanceCounter(&count);
+  ts->tv_sec = (time_t)(count.QuadPart / freq.QuadPart);
+  ts->tv_nsec =
+      (long)(((count.QuadPart % freq.QuadPart) * 1000000000LL) / freq.QuadPart);
+  return 0;
+}
+#endif
+
 #define BP_VALUE_BITS 64
 #define BP_TOTAL_BITS(m) ((size_t)(BP_VALUE_BITS * (m)))
 #define VERIFY_RUNS 5

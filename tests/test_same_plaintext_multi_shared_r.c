@@ -62,7 +62,8 @@ int main(void)
 
   // 4. Generate Proof
   size_t proof_len = secp256k1_mpt_proof_equality_shared_r_size(N_RECIPIENTS);
-  unsigned char proof[proof_len];
+  unsigned char *proof = malloc(proof_len);
+  EXPECT(proof != NULL);
 
   int res = secp256k1_mpt_prove_equality_shared_r(
       ctx, proof, amount, r, N_RECIPIENTS, &C1, C2s, pks, tx_context);
@@ -111,6 +112,7 @@ int main(void)
   /* ---------------------------------------------------------------- */
 
   printf("Test passed!\n");
+  free(proof);
   secp256k1_context_destroy(ctx);
   return 0;
 }
