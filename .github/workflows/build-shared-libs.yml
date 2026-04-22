@@ -11,7 +11,6 @@
 # on macOS, glibc/libstdc++ on Linux, Universal CRT on Windows) — there is no
 # attempt at full portability (no musl, no MT CRT).
 #
-#
 # The output artifacts use CMake's natural library names under per-platform
 # subdirectories (OS × arch):
 #   darwin-aarch64/libmpt-crypto.dylib  (macOS ARM64)
@@ -20,19 +19,25 @@
 #   linux-x86-64/libmpt-crypto.so       (Linux x86_64)
 #   win32-x86-64/mpt-crypto.dll         (Windows x86_64)
 #
-# A single combined archive (mpt-crypto-natives-<tag>.tar.gz) is attached to
-# the release.
+# This workflow is invoked via `workflow_call` from build.yml — on every PR
+# and push to main (so the native-binary build path is exercised before a
+# release), and on tag push (so build.yml can cut a release with the bundle
+# attached atomically).
+#
+# The `bundle` job uploads the combined archive as a workflow artifact named
+# `mpt-crypto-natives-bundle`, which the caller downloads and attaches to the
+# GitHub release.
 # ──────────────────────────────────────────────────────────────────────────────
 
 name: Build Shared Libraries
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      tag:
+      ref:
         description:
-          "Release tag to build and attach binaries to (must already have a
-          published GitHub release)"
+          "Git ref (tag or SHA) to check out and build. Passed directly to
+          actions/checkout."
         required: true
         type: string
 
@@ -40,35 +45,7 @@ permissions:
   contents: read
 
 jobs:
-  guard:
-    name: Verify tag + release exist
-    runs-on: ubuntu-latest
-    steps:
-      - name: Require tag exists in repo
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if ! gh api "repos/${{ github.repository }}/git/ref/tags/${{ inputs.tag }}" \
-              >/dev/null 2>&1; then
-            echo "ERROR: Tag '${{ inputs.tag }}' does not exist in ${{ github.repository }}."
-            exit 1
-          fi
-          echo "==> Tag exists: ${{ inputs.tag }}"
-
-      - name: Require published release for tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if ! gh release view "${{ inputs.tag }}" \
-              --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            echo "ERROR: No GitHub release found for tag '${{ inputs.tag }}'."
-            echo "Generate the release (and release notes) before running this workflow."
-            exit 1
-          fi
-          echo "==> Release exists for tag: ${{ inputs.tag }}"
-
   build:
-    needs: guard
     name: Build ${{ matrix.platform }}
     strategy:
       fail-fast: false
@@ -104,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.ref }}
 
       # ── Set up build tools ──
       - name: Set up Python
@@ -234,13 +211,12 @@ jobs:
   #   linux-aarch64/libmpt-crypto.so
   #   linux-x86-64/libmpt-crypto.so
   #   win32-x86-64/mpt-crypto.dll
+  #
   # ──────────────────────────────────────────────────────────────────────────
   bundle:
-    name: Bundle and attach to release
+    name: Bundle platform artifacts
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download all platform artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -258,20 +234,14 @@ jobs:
           find natives/ -type f -exec ls -lh {} \;
 
       - name: Create combined archive
-        id: archive
         run: |
-          ARCHIVE="mpt-crypto-natives-${{ inputs.tag }}.tar.gz"
-          tar -czf "${ARCHIVE}" -C natives .
-          echo "==> Created ${ARCHIVE}"
-          ls -lh "${ARCHIVE}"
-          echo "archive=${ARCHIVE}" >> "${GITHUB_OUTPUT}"
+          tar -czf mpt-crypto-natives.tar.gz -C natives .
+          echo "==> Created mpt-crypto-natives.tar.gz"
+          ls -lh mpt-crypto-natives.tar.gz
 
-      # Attach the combined bundle to the existing GitHub release.
-      - name: Upload to GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "${{ inputs.tag }}" \
-            "${{ steps.archive.outputs.archive }}" \
-            --repo "${{ github.repository }}" \
-            --clobber
+      - name: Upload combined bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mpt-crypto-natives-bundle
+          path: mpt-crypto-natives.tar.gz
+          if-no-files-found: error

@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["[0-9]*.[0-9]*.[0-9]*"]
   workflow_dispatch:
 
 concurrency:
@@ -90,3 +91,45 @@ jobs:
       - name: Run tests
         run: ctest --output-on-failure
         working-directory: ${{ env.BUILD_DIR }}
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Build the shared-library bundle (per-platform .so/.dylib/.dll) by calling
+  # the reusable workflow. Runs on every PR, main push, and tag push — so the
+  # native-binary build path is always exercised, not just at release time.
+  # ──────────────────────────────────────────────────────────────────────────
+  native-binaries:
+    name: Build native shared libraries
+    uses: ./.github/workflows/build-shared-libs.yml
+    with:
+      ref: ${{ github.sha }}
+
+  # On tag push only: publish a GitHub release and attach the native bundle.
+  release:
+    name: Publish release
+    if: github.ref_type == 'tag'
+    needs: [build-and-test, native-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download native bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mpt-crypto-natives-bundle
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f mpt-crypto-natives.tar.gz ]; then
+            echo "ERROR: mpt-crypto-natives.tar.gz not found in downloaded bundle"
+            ls -la
+            exit 1
+          fi
+          ARCHIVE="mpt-crypto-natives-${GITHUB_REF_NAME}.tar.gz"
+          mv mpt-crypto-natives.tar.gz "${ARCHIVE}"
+          echo "==> Publishing release ${GITHUB_REF_NAME} with ${ARCHIVE}"
+          gh release create "${GITHUB_REF_NAME}" \
+            "${ARCHIVE}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --generate-notes
