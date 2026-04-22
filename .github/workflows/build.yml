@@ -1,4 +1,4 @@
-name: Build and Test
+name: Build, Test and Release
 
 on:
   pull_request:
@@ -105,14 +105,7 @@ jobs:
   # On tag push only: publish a GitHub release and attach the native bundle.
   release:
     name: Publish release
-    # Run on tag push when native-binaries succeeded, and either build-and-test
-    # passed (upstream) or was skipped (fork). `!failure() && !cancelled()`
-    # is the GH Actions idiom to override the default "skip if any need was
-    # skipped" behavior without also running on real failures.
-    if: >-
-      !failure() && !cancelled() &&
-      github.ref_type == 'tag' &&
-      needs.native-binaries.result == 'success'
+    if: github.ref_type == 'tag'
     needs: [build-and-test, native-binaries]
     runs-on: ubuntu-latest
     permissions:
@@ -127,14 +120,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ ! -f mpt-crypto-natives.tar.gz ]; then
-            echo "ERROR: mpt-crypto-natives.tar.gz not found in downloaded bundle"
-            ls -la
-            exit 1
-          fi
           ARCHIVE="mpt-crypto-natives-${GITHUB_REF_NAME}.tar.gz"
           mv mpt-crypto-natives.tar.gz "${ARCHIVE}"
-          echo "==> Publishing release ${GITHUB_REF_NAME} with ${ARCHIVE}"
           gh release create "${GITHUB_REF_NAME}" \
             "${ARCHIVE}" \
             --repo "${GITHUB_REPOSITORY}" \
