@@ -1,11 +1,4 @@
 #!/usr/bin/env bash
-# .github/scripts/build-shared-lib.sh
-#
-# Builds libmpt-crypto as a shared library with tests, via Conan + CMake.
-# Invoked by .github/workflows/build-shared-libs.yml — either directly on
-# a GitHub-hosted runner (Linux / macOS / Windows) or inside a
-# --platform linux/<arch> Docker container for platforms without native
-# runners (currently s390x via QEMU user-mode emulation).
 set -euo pipefail
 
 conan profile detect --force

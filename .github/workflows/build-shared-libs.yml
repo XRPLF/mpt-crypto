@@ -89,32 +89,32 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up QEMU
-        if: matrix.docker_platform
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        if: matrix.docker_platform != ''
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
         with:
           platforms: ${{ matrix.docker_platform }}
 
       - name: Set up Python
-        if: ${{ !matrix.docker_platform }}
+        if: matrix.docker_platform == ''
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
       - name: Install Conan and Ninja
-        if: ${{ !matrix.docker_platform }}
-        run: pip install "conan>=2.0.0" ninja
+        if: matrix.docker_platform == ''
+        run: pip install conan ninja
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
 
       - name: Build and test
-        if: ${{ !matrix.docker_platform }}
+        if: matrix.docker_platform == ''
         shell: bash
         run: ./.github/scripts/build-shared-lib.sh
 
       - name: Build and test in ${{ matrix.docker_platform }} container
-        if: matrix.docker_platform
+        if: matrix.docker_platform != ''
         run: |
           docker run --rm --platform ${{ matrix.docker_platform }} \
             -v "${PWD}:/work" -w /work \
@@ -126,7 +126,7 @@ jobs:
                 python3 python3-pip \
                 cmake ninja-build \
                 build-essential pkg-config ca-certificates git
-              pip install --break-system-packages "conan>=2.0.0"
+              pip install --break-system-packages conan
               ./.github/scripts/build-shared-lib.sh
             '
 
