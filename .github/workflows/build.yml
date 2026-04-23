@@ -18,6 +18,8 @@ jobs:
     # macos15), which aren't shared with forks. Skip on forks so workflow
     # changes can be iterated on without stalling in the runner queue.
     if: github.repository_owner == 'XRPLF'
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -100,6 +102,8 @@ jobs:
   # the reusable workflow.
   native-binaries:
     name: Build native shared libraries
+    permissions:
+      contents: read
     uses: ./.github/workflows/build-shared-libs.yml
 
   # On tag push only: publish a GitHub release and attach the native bundle.
