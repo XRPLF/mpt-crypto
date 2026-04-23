@@ -150,8 +150,7 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
     goto cleanup;
 
   /* 4. Response: s = k + e*sk */
-  if (!compute_sigma_response(ctx, s, k, e, sk))
-    goto cleanup;
+  compute_sigma_response(s, k, e, sk);
 
   /* 5. Serialize: e || s */
   memcpy(proof_out, e, 32);

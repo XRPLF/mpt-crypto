@@ -341,20 +341,15 @@ int secp256k1_compact_standard_prove(
   /* 4. Responses */
 
   /* z_r = alpha + e*r */
-  if (!compute_sigma_response(ctx, z_r, alpha, e, r_shared))
-    goto cleanup;
+  compute_sigma_response(z_r, alpha, e, r_shared);
   /* z_m = beta + e*m */
-  if (!compute_sigma_response(ctx, z_m, beta, e, m_scalar))
-    goto cleanup;
+  compute_sigma_response(z_m, beta, e, m_scalar);
   /* z_sk = gamma + e*sk_A */
-  if (!compute_sigma_response(ctx, z_sk, gamma, e, sk_A))
-    goto cleanup;
+  compute_sigma_response(z_sk, gamma, e, sk_A);
   /* z_rb = delta + e*r_b */
-  if (!compute_sigma_response(ctx, z_rb, delta, e, r_b))
-    goto cleanup;
+  compute_sigma_response(z_rb, delta, e, r_b);
   /* z_b = epsilon + e*v */
-  if (!compute_sigma_response(ctx, z_b, epsilon, e, b_scalar))
-    goto cleanup;
+  compute_sigma_response(z_b, epsilon, e, b_scalar);
 
   /* 5. Serialize compact proof: e || z_m || z_r || z_b || z_rho || z_sk */
   memcpy(proof_out, e, 32);
