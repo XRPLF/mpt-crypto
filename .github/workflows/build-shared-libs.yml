@@ -19,7 +19,13 @@
 #   darwin-x86-64/libmpt-crypto.dylib   (macOS x86_64)
 #   linux-aarch64/libmpt-crypto.so      (Linux ARM64)
 #   linux-x86-64/libmpt-crypto.so       (Linux x86_64)
+#   linux-s390x/libmpt-crypto.so        (Linux s390x, IBM Z — QEMU-built)
 #   win32-x86-64/mpt-crypto.dll         (Windows x86_64)
+#
+# Platforms without a native GitHub-hosted runner (s390x) are built inside a
+# --platform linux/<arch> Docker container via QEMU user-mode emulation.
+# The same .github/scripts/build-shared-lib.sh drives both the native and
+# the emulated builds — the workflow just decides where to run it.
 #
 # This workflow is invoked via `workflow_call` from build.yml — on every PR
 # and push to main (so the native-binary build path is exercised before a
@@ -65,89 +71,80 @@ jobs:
             platform: linux-x86-64
             lib_filename: libmpt-crypto.so
 
+          # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
+          # No native GHA runner exists for s390x. Builds and tests run
+          # inside a --platform linux/s390x container; QEMU emulates each
+          # instruction, so expect ~10-50x slower than native. Catches
+          # endianness bugs (s390x is big-endian) on every PR.
+          - os: ubuntu-latest
+            platform: linux-s390x
+            lib_filename: libmpt-crypto.so
+            docker_platform: linux/s390x
+            docker_image: s390x/ubuntu:24.04
+
           # ── Windows x86_64 ──
           - os: windows-latest
             platform: win32-x86-64
             lib_filename: mpt-crypto.dll
 
     runs-on: ${{ matrix.os }}
+    # Generous upper bound for the emulated s390x job (~30-60 min under
+    # QEMU when Conan has to build OpenSSL/secp256k1 from source).
+    # Native jobs finish in ~5-10 min and are unaffected.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      # ── QEMU for non-native Linux targets (s390x today) ──
+      - name: Set up QEMU
+        if: matrix.docker_platform
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
+        with:
+          platforms: ${{ matrix.docker_platform }}
+
+      # ── Toolchain setup for native runners. Skipped for Docker builds,
+      # which install the same tooling inside the container below. ──
       - name: Set up Python
+        if: ${{ !matrix.docker_platform }}
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
           python-version: "3.12"
 
       - name: Install Conan and Ninja
+        if: ${{ !matrix.docker_platform }}
         run: pip install "conan>=2.0.0" ninja
 
       - name: Set up MSVC environment
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
 
-      - name: Configure Conan
+      # ── Build + test on the native runner (Linux/macOS/Windows) ──
+      - name: Build and test
+        if: ${{ !matrix.docker_platform }}
         shell: bash
-        run: |
-          conan profile detect --force
-          echo "==> Detected Conan profile:"
-          conan profile show
-          conan remote add --index 0 --force xrplf https://conan.ripplex.io
+        run: ./.github/scripts/build-shared-lib.sh
 
-      - name: Install dependencies
-        shell: bash
+      # ── Build + test inside a QEMU-emulated Linux container ──
+      # Everything — apt, pip, conan, cmake, ninja, the compiled binary,
+      # the test executables under ctest — runs translated through QEMU.
+      # Host/runner sees real big-endian ELF output under ./build/.
+      - name: Build and test in ${{ matrix.docker_platform }} container
+        if: matrix.docker_platform
         run: |
-          CONAN_ARGS=(
-            -of build
-            --build=missing
-            -s build_type=Release
-            -o "&:shared=True"
-            -o "&:tests=True"
-            -o "secp256k1/*:shared=False"
-            -o "openssl/*:shared=False"
-          )
-          if [[ "${RUNNER_OS}" != "Windows" ]]; then
-            CONAN_ARGS+=(-o "secp256k1/*:fPIC=True" -o "openssl/*:fPIC=True")
-          fi
-          conan install . "${CONAN_ARGS[@]}"
-
-      - name: Configure CMake
-        shell: bash
-        run: |
-          CMAKE_ARGS=(
-            -B build
-            -S .
-            -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
-          )
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            CMAKE_ARGS+=(
-              -G "Visual Studio 17 2022"
-              -A x64
-              -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON
-            )
-          else
-            CMAKE_ARGS+=(
-              -G Ninja
-              -DCMAKE_BUILD_TYPE=Release
-            )
-          fi
-          cmake "${CMAKE_ARGS[@]}"
-
-      - name: Build shared library
-        shell: bash
-        run: cmake --build build --config Release
-
-      - name: Run tests
-        shell: bash
-        working-directory: build
-        run: |
-          CTEST_ARGS=(--output-on-failure)
-          if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            export PATH="$(pwd)/Release:${PATH}"
-            CTEST_ARGS+=(-C Release)
-          fi
-          ctest "${CTEST_ARGS[@]}"
+          docker run --rm --platform ${{ matrix.docker_platform }} \
+            -v "${PWD}:/work" -w /work \
+            ${{ matrix.docker_image }} \
+            bash -c '
+              set -eux
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -qq -y \
+                python3 python3-pip \
+                cmake ninja-build \
+                build-essential pkg-config ca-certificates git
+              pip install --break-system-packages "conan>=2.0.0"
+              ./.github/scripts/build-shared-lib.sh
+            '
 
       - name: Stage shared library under output/<platform>/
         shell: bash
