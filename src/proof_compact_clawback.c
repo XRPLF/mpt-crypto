@@ -31,12 +31,39 @@
 
 static const char DOMAIN_COMPACT_CLAWBACK[] = "CMPT_CLAWBACK_SIGMA";
 
+/* Feed m*G into an SHA-256 stream as 33 compressed bytes. When amount == 0,
+ * libsecp256k1 cannot represent (and therefore cannot serialize) the point
+ * at infinity, so we substitute 33 zero bytes. 33 zeros is not a valid
+ * compressed-point encoding (the valid prefixes are 0x02 and 0x03), so the
+ * sentinel is unambiguous and cannot collide with a real m*G. Prover and
+ * verifier must both use this helper so the transcript stays consistent. */
+static int digest_update_amount_point(const secp256k1_context *ctx,
+                                      EVP_MD_CTX *mdctx, uint64_t amount)
+{
+  unsigned char buf[33];
+  if (amount == 0)
+  {
+    memset(buf, 0, 33);
+  }
+  else
+  {
+    secp256k1_pubkey mG;
+    size_t len = 33;
+    if (!compute_amount_point(ctx, &mG, amount))
+      return 0;
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &mG,
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      return 0;
+  }
+  return EVP_DigestUpdate(mdctx, buf, 33);
+}
+
 static int compute_compact_clawback_challenge(
     const secp256k1_context *ctx, unsigned char *e_out,
     const secp256k1_pubkey *P_iss, const secp256k1_pubkey *C1,
-    const secp256k1_pubkey *C2, const secp256k1_pubkey *mG,
-    const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
-    const unsigned char *context_id)
+    const secp256k1_pubkey *C2, uint64_t amount, const secp256k1_pubkey *T1,
+    const secp256k1_pubkey *T2, const unsigned char *context_id)
 {
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   unsigned char buf[33];
@@ -65,11 +92,12 @@ static int compute_compact_clawback_challenge(
       goto cleanup;                                                            \
   } while (0)
 
-  /* Statement: P_iss || C1 || C2 || m*G */
+  /* Statement: P_iss || C1 || C2 || m*G (33 zero bytes when amount=0) */
   SER(P_iss);
   SER(C1);
   SER(C2);
-  SER(mG);
+  if (!digest_update_amount_point(ctx, mdctx, amount))
+    goto cleanup;
 
   /* Commitments: T1 || T2 */
   SER(T1);
@@ -112,15 +140,11 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
 
   unsigned char t_sk[32];
   unsigned char e[32], z_sk[32];
-  secp256k1_pubkey mG, T1, T2;
+  secp256k1_pubkey T1, T2;
   int ok = 0;
 
   if (!secp256k1_ec_seckey_verify(ctx, sk_iss))
     return 0;
-
-  /* Compute m*G as a group element */
-  if (!compute_amount_point(ctx, &mG, amount))
-    goto cleanup;
 
   /* 1. Deterministic nonce */
   {
@@ -165,7 +189,12 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
       SHASH(P_iss);
       SHASH(C1);
       SHASH(C2);
-      SHASH(&mG);
+      if (!digest_update_amount_point(ctx, sh, amount))
+      {
+        EVP_MD_CTX_free(sh);
+        OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
+        goto cleanup;
+      }
       if (context_id)
       {
         if (EVP_DigestUpdate(sh, context_id, 32) != 1)
@@ -202,8 +231,8 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
     goto cleanup;
 
   /* 3. Challenge */
-  if (!compute_compact_clawback_challenge(ctx, e, P_iss, C1, C2, &mG, &T1, &T2,
-                                          context_id))
+  if (!compute_compact_clawback_challenge(ctx, e, P_iss, C1, C2, amount, &T1,
+                                          &T2, context_id))
     goto cleanup;
 
   /* 4. Response: z_sk = t_sk + e*sk_iss */
@@ -237,7 +266,7 @@ int secp256k1_compact_clawback_verify(
   MPT_ARG_CHECK(C2 != NULL);
 
   unsigned char e[32], z_sk[32], e_prime[32], neg_e[32];
-  secp256k1_pubkey mG, T1, T2;
+  secp256k1_pubkey T1, T2;
 
   /* 1. Deserialize: e || z_sk */
   memcpy(e, proof, 32);
@@ -246,10 +275,6 @@ int secp256k1_compact_clawback_verify(
   if (!secp256k1_ec_seckey_verify(ctx, e))
     return 0;
   if (!secp256k1_ec_seckey_verify(ctx, z_sk))
-    return 0;
-
-  /* Compute m*G as a group element */
-  if (!compute_amount_point(ctx, &mG, amount))
     return 0;
 
   secp256k1_mpt_scalar_negate(neg_e, e);
@@ -269,21 +294,31 @@ int secp256k1_compact_clawback_verify(
       return 0;
   }
 
-  /* T2 = z_sk*C1 - e*(C2 - m*G) */
+  /* T2 = z_sk*C1 - e*(C2 - m*G); when amount=0 the -m*G term is the point
+   * at infinity, so C2 - m*G collapses to C2 and we skip the subtraction. */
   {
     secp256k1_pubkey zskC1, eTarget;
-    /* Compute C2 - m*G */
-    unsigned char neg_one[32];
-    unsigned char one[32] = {0};
-    one[31] = 1;
-    secp256k1_mpt_scalar_negate(neg_one, one);
-    secp256k1_pubkey neg_mG = mG;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &neg_mG, neg_one))
-      return 0;
     secp256k1_pubkey C2_minus_mG;
-    const secp256k1_pubkey *sub_pts[2] = {C2, &neg_mG};
-    if (!secp256k1_ec_pubkey_combine(ctx, &C2_minus_mG, sub_pts, 2))
-      return 0;
+    if (amount == 0)
+    {
+      C2_minus_mG = *C2;
+    }
+    else
+    {
+      secp256k1_pubkey mG;
+      if (!compute_amount_point(ctx, &mG, amount))
+        return 0;
+      unsigned char neg_one[32];
+      unsigned char one[32] = {0};
+      one[31] = 1;
+      secp256k1_mpt_scalar_negate(neg_one, one);
+      secp256k1_pubkey neg_mG = mG;
+      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &neg_mG, neg_one))
+        return 0;
+      const secp256k1_pubkey *sub_pts[2] = {C2, &neg_mG};
+      if (!secp256k1_ec_pubkey_combine(ctx, &C2_minus_mG, sub_pts, 2))
+        return 0;
+    }
 
     zskC1 = *C1;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskC1, z_sk))
@@ -297,8 +332,8 @@ int secp256k1_compact_clawback_verify(
   }
 
   /* 3. Recompute challenge */
-  if (!compute_compact_clawback_challenge(ctx, e_prime, P_iss, C1, C2, &mG, &T1,
-                                          &T2, context_id))
+  if (!compute_compact_clawback_challenge(ctx, e_prime, P_iss, C1, C2, amount,
+                                          &T1, &T2, context_id))
     return 0;
 
   /* 4. Accept iff e' == e */
