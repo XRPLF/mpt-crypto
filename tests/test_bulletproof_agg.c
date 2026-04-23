@@ -102,7 +102,12 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
            total_ms / VERIFY_RUNS);
   }
 
-  /* ---- Negative Test (Tamper) ---- */
+  /* ---- Negative Test A: tampered value ----
+   * Creates a fake commitment to (value ± 1) in the last slot and verifies the
+   * proof still rejects. The explicit `ok == 0` assertion addresses the ToB
+   * fix-review caveat (April 2026, p. 66): negative-path tests should assert
+   * a specific return code for the unavoidable-infinity paths triggered by
+   * value=0 and value=UINT64_MAX, not just absence of crash. */
   secp256k1_pubkey *bad_commitments =
       malloc(num_values * sizeof(*bad_commitments));
   EXPECT(bad_commitments != NULL);
@@ -111,7 +116,8 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   unsigned char bad_blinding[32];
   random_scalar(ctx, bad_blinding);
 
-  /* Create fake commitment to (value + 1) */
+  /* Create fake commitment to (value + 1), or (value - 1) when value =
+   * UINT64_MAX. */
   EXPECT(secp256k1_bulletproof_create_commitment(
       ctx, &bad_commitments[num_values - 1],
       (values[num_values - 1] == UINT64_MAX) ? values[num_values - 1] - 1
@@ -121,13 +127,30 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
                                         bad_commitments, num_values, &pk_base,
                                         context_id);
+  EXPECT(ok == 0);
+  printf("  PASSED (Rejected tampered-value proof)\n");
 
-  if (ok)
+  /* ---- Negative Test B: same value, different blinding ----
+   * Replaces the last commitment with a commitment to the SAME value but a
+   * fresh blinding factor. The verifier should reject with return code 0,
+   * exercising the rejection path even when the value witness itself is 0
+   * (i.e. no G-term was included in the original commitment). */
+  memcpy(bad_commitments, commitments, sizeof(*commitments) * num_values);
+  unsigned char alt_blinding[32];
+  do
   {
-    fprintf(stderr, "FAILED: Accepted invalid proof!\n");
-    exit(EXIT_FAILURE);
-  }
-  printf("  PASSED (Rejected invalid proof)\n");
+    random_scalar(ctx, alt_blinding);
+  } while (memcmp(alt_blinding, blindings[num_values - 1], 32) == 0);
+
+  EXPECT(secp256k1_bulletproof_create_commitment(
+      ctx, &bad_commitments[num_values - 1], values[num_values - 1],
+      alt_blinding, &pk_base));
+
+  ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
+                                        bad_commitments, num_values, &pk_base,
+                                        context_id);
+  EXPECT(ok == 0);
+  printf("  PASSED (Rejected same-value/different-blinding proof)\n");
 
   free(bad_commitments);
   free(commitments);
