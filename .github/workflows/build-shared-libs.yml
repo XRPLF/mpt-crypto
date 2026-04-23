@@ -72,10 +72,6 @@ jobs:
             lib_filename: libmpt-crypto.so
 
           # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
-          # No native GHA runner exists for s390x. Builds and tests run
-          # inside a --platform linux/s390x container; QEMU emulates each
-          # instruction, so expect ~10-50x slower than native. Catches
-          # endianness bugs (s390x is big-endian) on every PR.
           - os: ubuntu-latest
             platform: linux-s390x
             lib_filename: libmpt-crypto.so
@@ -88,23 +84,16 @@ jobs:
             lib_filename: mpt-crypto.dll
 
     runs-on: ${{ matrix.os }}
-    # Generous upper bound for the emulated s390x job (~30-60 min under
-    # QEMU when Conan has to build OpenSSL/secp256k1 from source).
-    # Native jobs finish in ~5-10 min and are unaffected.
-    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # ── QEMU for non-native Linux targets (s390x today) ──
       - name: Set up QEMU
         if: matrix.docker_platform
         uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3.6.0
         with:
           platforms: ${{ matrix.docker_platform }}
 
-      # ── Toolchain setup for native runners. Skipped for Docker builds,
-      # which install the same tooling inside the container below. ──
       - name: Set up Python
         if: ${{ !matrix.docker_platform }}
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
@@ -119,16 +108,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
 
-      # ── Build + test on the native runner (Linux/macOS/Windows) ──
       - name: Build and test
         if: ${{ !matrix.docker_platform }}
         shell: bash
         run: ./.github/scripts/build-shared-lib.sh
 
-      # ── Build + test inside a QEMU-emulated Linux container ──
-      # Everything — apt, pip, conan, cmake, ninja, the compiled binary,
-      # the test executables under ctest — runs translated through QEMU.
-      # Host/runner sees real big-endian ELF output under ./build/.
       - name: Build and test in ${{ matrix.docker_platform }} container
         if: matrix.docker_platform
         run: |

@@ -6,17 +6,11 @@
 # a GitHub-hosted runner (Linux / macOS / Windows) or inside a
 # --platform linux/<arch> Docker container for platforms without native
 # runners (currently s390x via QEMU user-mode emulation).
-#
-# Preconditions: python3, conan, cmake, ninja (and MSVC on Windows) are
-# on PATH, and the cwd is the repo root. RUNNER_OS is read to decide
-# Windows-vs-POSIX behaviour; it's unset inside emulated containers, so
-# we default to Linux.
 set -euo pipefail
 
 conan profile detect --force
 conan remote add --index 0 --force xrplf https://conan.ripplex.io
 
-# fPIC is a POSIX-only concept; MSVC rejects it.
 CONAN_ARGS=(
   -of build
   --build=missing
@@ -31,8 +25,6 @@ if [[ "${RUNNER_OS:-Linux}" != "Windows" ]]; then
 fi
 conan install . "${CONAN_ARGS[@]}"
 
-# Windows uses the Visual Studio multi-config generator; everything else
-# uses Ninja (single-config, so CMAKE_BUILD_TYPE is baked in here).
 CMAKE_ARGS=(
   -B build
   -S .
@@ -54,9 +46,6 @@ cmake "${CMAKE_ARGS[@]}"
 
 cmake --build build --config Release
 
-# Windows has no rpath — test executables need the DLL's directory on
-# PATH. With the VS generator the DLL lands at build/Release/, so prepend
-# that. -C Release selects the VS multi-config build.
 pushd build > /dev/null
 CTEST_ARGS=(--output-on-failure)
 if [[ "${RUNNER_OS:-Linux}" == "Windows" ]]; then
