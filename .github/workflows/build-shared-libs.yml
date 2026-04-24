@@ -1,0 +1,182 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Build Shared Libraries
+#
+# Builds the mpt-crypto C library as a shared library (.dylib / .so / .dll)
+# for each supported platform, producing binaries that client libraries
+# (xrpl4j via JNA, xrpl-py via ctypes, etc.) can load directly at runtime.
+#
+# secp256k1 and OpenSSL are linked statically INTO the shared library, so
+# consumers do not need either installed on the target machine. The shared
+# library itself still has the usual OS-level dynamic dependencies (libSystem
+# on macOS, glibc/libstdc++ on Linux, Universal CRT on Windows) — there is no
+# attempt at full portability (no musl, no MT CRT).
+#
+# The output artifacts use CMake's natural library names under per-platform
+# subdirectories (OS × arch), plus the public headers shared across platforms:
+#   include/secp256k1_mpt.h             (public API)
+#   include/utility/mpt_utility.h       (public API)
+#   darwin-aarch64/libmpt-crypto.dylib  (macOS ARM64)
+#   darwin-x86-64/libmpt-crypto.dylib   (macOS x86_64)
+#   linux-aarch64/libmpt-crypto.so      (Linux ARM64)
+#   linux-x86-64/libmpt-crypto.so       (Linux x86_64)
+#   linux-s390x/libmpt-crypto.so        (Linux s390x, IBM Z — QEMU-built)
+#   win32-x86-64/mpt-crypto.dll         (Windows x86_64)
+#
+# Platforms without a native GitHub-hosted runner (s390x) are built inside a
+# --platform linux/<arch> Docker container via QEMU user-mode emulation.
+# The same .github/scripts/build-shared-lib.sh drives both the native and
+# the emulated builds — the workflow just decides where to run it.
+#
+# This workflow is invoked via `workflow_call` from build.yml — on every PR
+# and push to main (so the native-binary build path is exercised before a
+# release), and on tag push (so build.yml can cut a release with the bundle
+# attached atomically).
+#
+# The `bundle` job uploads the combined archive as a workflow artifact named
+# `mpt-crypto-natives-bundle`, which the caller downloads and attaches to the
+# GitHub release.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Build Shared Libraries
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── macOS ARM64 (Apple Silicon) ──
+          - os: macos-14
+            platform: darwin-aarch64
+            lib_filename: libmpt-crypto.dylib
+
+          # ── macOS x86_64 (Intel) ──
+          - os: macos-15-intel
+            platform: darwin-x86-64
+            lib_filename: libmpt-crypto.dylib
+
+          # ── Linux ARM64 ──
+          - os: ubuntu-24.04-arm
+            platform: linux-aarch64
+            lib_filename: libmpt-crypto.so
+
+          # ── Linux x86_64 ──
+          - os: ubuntu-latest
+            platform: linux-x86-64
+            lib_filename: libmpt-crypto.so
+
+          # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
+          - os: ubuntu-latest
+            platform: linux-s390x
+            lib_filename: libmpt-crypto.so
+            docker_platform: linux/s390x
+            docker_image: s390x/ubuntu:24.04
+
+          # ── Windows x86_64 ──
+          - os: windows-latest
+            platform: win32-x86-64
+            lib_filename: mpt-crypto.dll
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up QEMU
+        if: matrix.docker_platform != ''
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        with:
+          platforms: ${{ matrix.docker_platform }}
+
+      - name: Set up Python
+        if: matrix.docker_platform == ''
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Conan and Ninja
+        if: matrix.docker_platform == ''
+        run: pip install conan ninja
+
+      - name: Set up MSVC environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
+
+      - name: Build and test
+        if: matrix.docker_platform == ''
+        shell: bash
+        run: ./.github/scripts/build-shared-lib.sh
+
+      - name: Build and test in ${{ matrix.docker_platform }} container
+        if: matrix.docker_platform != ''
+        run: |
+          docker run --rm --platform ${{ matrix.docker_platform }} \
+            -v "${PWD}:/work" -w /work \
+            ${{ matrix.docker_image }} \
+            bash -c '
+              set -eux
+              apt-get update -qq
+              DEBIAN_FRONTEND=noninteractive apt-get install -qq -y \
+                python3 python3-pip \
+                cmake ninja-build \
+                build-essential pkg-config ca-certificates git
+              pip install --break-system-packages conan
+              ./.github/scripts/build-shared-lib.sh
+            '
+
+      - name: Stage shared library under output/<platform>/
+        shell: bash
+        env:
+          LIB_DIR: ${{ runner.os == 'Windows' && 'build/Release' || 'build' }}
+        run: |
+          mkdir -p "output/${{ matrix.platform }}"
+          cp "${LIB_DIR}/${{ matrix.lib_filename }}" "output/${{ matrix.platform }}/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mpt-crypto-${{ matrix.platform }}
+          path: output/
+          if-no-files-found: error
+
+  bundle:
+    name: Bundle platform artifacts
+    needs: build
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo (for public headers)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: include
+          sparse-checkout-cone-mode: false
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mpt-crypto-*
+          path: natives/
+          merge-multiple: true
+
+      - name: Stage public headers
+        run: |
+          mkdir -p natives/include
+          cp -R include/. natives/include/
+
+      - name: Create combined archive
+        run: |
+          tar -czf mpt-crypto-natives.tar.gz -C natives .
+
+      - name: Upload combined bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mpt-crypto-natives-bundle
+          path: mpt-crypto-natives.tar.gz
+          if-no-files-found: error

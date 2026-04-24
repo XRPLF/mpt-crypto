@@ -39,57 +39,61 @@ add_mpt_test(test_equality_proof test_equality_proof.c DEPENDENCIES mpt-crypto)
 add_mpt_test(
     test_link_proof
     test_link_proof.c
-    DEPENDENCIES mpt-crypto secp256k1 OpenSSL::Crypto
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1 OpenSSL::Crypto
 )
 
 add_mpt_test(
     test_elgamal_verify
     test_elgamal_verify.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
-add_mpt_test(test_pok_sk test_pok_sk.c DEPENDENCIES mpt-crypto secp256k1)
+add_mpt_test(
+    test_pok_sk
+    test_pok_sk.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
 
 add_mpt_test(
     test_commitments
     test_commitments.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
-add_mpt_test(test_ipa test_ipa.c DEPENDENCIES mpt-crypto secp256k1)
+add_mpt_test(test_ipa test_ipa.c DEPENDENCIES mpt-crypto secp256k1::secp256k1)
 
 add_mpt_test(
     test_same_plaintext_multi_shared_r
     test_same_plaintext_multi_shared_r.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
 add_mpt_test(
     test_bulletproof_agg
     test_bulletproof_agg.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
 add_mpt_test(
     test_mpt_utility
     test_mpt_utility.cpp
-    DEPENDENCIES mpt-crypto secp256k1 OpenSSL::Crypto
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1 OpenSSL::Crypto
 )
 
 add_mpt_test(
     test_compact_standard
     test_compact_standard.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
 add_mpt_test(
     test_compact_clawback
     test_compact_clawback.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
 add_mpt_test(
     test_compact_convertback
     test_compact_convertback.c
-    DEPENDENCIES mpt-crypto secp256k1
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
