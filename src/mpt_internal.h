@@ -187,7 +187,13 @@ generate_deterministic_nonces(
         EVP_MAC_free(mac);
     }
 
-    /* Expand: nonce_i = HMAC-SHA256(PRK, prev || counter) */
+    /* Expand: nonce_i = HMAC-SHA256(PRK, prev || counter [|| sub_counter])
+     *
+     * If the reduced output happens to be 0 mod n (negligible ~1/2^256), retry
+     * by appending an extra sub_counter byte to the MAC input and re-deriving.
+     * sub_counter == 0 skips the extra update so the no-retry path is byte-
+     * identical to the prior derivation. Cap retries at 256 (~1/2^65536) before
+     * giving up. */
     {
         unsigned char prev[32];
         memset(prev, 0, 32);
@@ -196,41 +202,59 @@ generate_deterministic_nonces(
         {
             unsigned char counter = (unsigned char)(i + 1);
             unsigned char out[32];
+            int sub_counter;
+            int accepted = 0;
 
-            EVP_MAC* mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
-            if (!mac)
+            for (sub_counter = 0; sub_counter < 256; sub_counter++)
             {
-                OPENSSL_cleanse(prk, 32);
-                OPENSSL_cleanse(nonces_out, k * 32);
-                return 0;
-            }
-            EVP_MAC_CTX* mctx = EVP_MAC_CTX_new(mac);
-            if (!mctx)
-            {
+                EVP_MAC* mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
+                if (!mac)
+                {
+                    OPENSSL_cleanse(prk, 32);
+                    OPENSSL_cleanse(nonces_out, k * 32);
+                    return 0;
+                }
+                EVP_MAC_CTX* mctx = EVP_MAC_CTX_new(mac);
+                if (!mctx)
+                {
+                    EVP_MAC_free(mac);
+                    OPENSSL_cleanse(prk, 32);
+                    OPENSSL_cleanse(nonces_out, k * 32);
+                    return 0;
+                }
+                OSSL_PARAM params[] = {
+                    OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0),
+                    OSSL_PARAM_construct_end()};
+                EVP_MAC_init(mctx, prk, 32, params);
+                if (i > 0)
+                    EVP_MAC_update(mctx, prev, 32);
+                EVP_MAC_update(mctx, &counter, 1);
+                if (sub_counter > 0)
+                {
+                    unsigned char sub = (unsigned char)sub_counter;
+                    EVP_MAC_update(mctx, &sub, 1);
+                }
+                size_t mac_len = 32;
+                EVP_MAC_final(mctx, out, &mac_len, 32);
+                EVP_MAC_CTX_free(mctx);
                 EVP_MAC_free(mac);
-                OPENSSL_cleanse(prk, 32);
-                OPENSSL_cleanse(nonces_out, k * 32);
-                return 0;
-            }
-            OSSL_PARAM params[] = {
-                OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0),
-                OSSL_PARAM_construct_end()};
-            EVP_MAC_init(mctx, prk, 32, params);
-            if (i > 0)
-                EVP_MAC_update(mctx, prev, 32);
-            EVP_MAC_update(mctx, &counter, 1);
-            size_t mac_len = 32;
-            EVP_MAC_final(mctx, out, &mac_len, 32);
-            EVP_MAC_CTX_free(mctx);
-            EVP_MAC_free(mac);
 
-            secp256k1_mpt_scalar_reduce32(out, out);
-            if (!secp256k1_ec_seckey_verify(ctx, out))
+                secp256k1_mpt_scalar_reduce32(out, out);
+                if (secp256k1_ec_seckey_verify(ctx, out))
+                {
+                    accepted = 1;
+                    break;
+                }
+            }
+
+            if (!accepted)
             {
+                OPENSSL_cleanse(out, 32);
                 OPENSSL_cleanse(prk, 32);
                 OPENSSL_cleanse(nonces_out, k * 32);
                 return 0;
             }
+
             memcpy(nonces_out + i * 32, out, 32);
             memcpy(prev, out, 32);
             OPENSSL_cleanse(out, 32);
