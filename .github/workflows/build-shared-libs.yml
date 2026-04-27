@@ -74,7 +74,7 @@ jobs:
             container: '{ "image": "ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696" }'
 
           # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
-          - os: heavy
+          - os: ubuntu-latest
             platform: linux-s390x
             lib_filename: libmpt-crypto.so
             docker_platform: linux/s390x
@@ -95,18 +95,11 @@ jobs:
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Register QEMU binfmt handlers
+      - name: Set up QEMU
         if: matrix.docker_platform != ''
-        run: |
-          PLATFORM='${{ matrix.docker_platform }}'
-          ARCH="${PLATFORM##*/}"
-          docker run --rm --privileged tonistiigi/binfmt:latest --install "${ARCH}"
-          if [ ! -f "/proc/sys/fs/binfmt_misc/qemu-${ARCH}" ]; then
-            echo "ERROR: qemu-${ARCH} binfmt handler not registered"
-            ls /proc/sys/fs/binfmt_misc/ 2>&1 || true
-            exit 1
-          fi
-          echo "qemu-${ARCH} binfmt handler registered"
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        with:
+          platforms: ${{ matrix.docker_platform }}
 
       - name: Prepare runner
         if: matrix.docker_platform == ''
