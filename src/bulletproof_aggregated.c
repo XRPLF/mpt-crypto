@@ -1574,46 +1574,54 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     goto cleanup;
 
   /* ---- 8. Commit T1, T2 ---- */
-  /* T1 = t1*G + tau1*Base   where G = G_vec[0] */
+  /* T1 = t1*G + tau1*Base   where G = G_vec[0].
+   * When t1 == 0 the t1*G term is the point at infinity (which libsecp256k1
+   * cannot emit), so commit T1 = tau1*Base directly. */
   {
     secp256k1_pubkey tG, tB;
     const secp256k1_pubkey *pts[2];
-
-    if (memcmp(t1, zero, 32) == 0)
-      goto cleanup; /* prototype guard */
-    /* tG = t1 * (curve base generator) */
-    if (!secp256k1_ec_pubkey_create(ctx, &tG, t1))
-      goto cleanup;
 
     tB = *pk_base;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, tau1))
       goto cleanup;
 
-    pts[0] = &tG;
-    pts[1] = &tB;
-    if (!secp256k1_ec_pubkey_combine(ctx, &T1, pts, 2))
-      goto cleanup;
+    if (memcmp(t1, zero, 32) == 0)
+    {
+      T1 = tB;
+    }
+    else
+    {
+      if (!secp256k1_ec_pubkey_create(ctx, &tG, t1))
+        goto cleanup;
+      pts[0] = &tG;
+      pts[1] = &tB;
+      if (!secp256k1_ec_pubkey_combine(ctx, &T1, pts, 2))
+        goto cleanup;
+    }
   }
 
-  /* T2 = t2*G + tau2*Base */
+  /* T2 = t2*G + tau2*Base. Same t2==0 short-circuit as above. */
   {
     secp256k1_pubkey tG, tB;
     const secp256k1_pubkey *pts[2];
-
-    if (memcmp(t2, zero, 32) == 0)
-      goto cleanup; /* prototype guard */
-    /* tG = t2 * (curve base generator) */
-    if (!secp256k1_ec_pubkey_create(ctx, &tG, t2))
-      goto cleanup;
 
     tB = *pk_base;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, tau2))
       goto cleanup;
 
-    pts[0] = &tG;
-    pts[1] = &tB;
-    if (!secp256k1_ec_pubkey_combine(ctx, &T2, pts, 2))
-      goto cleanup;
+    if (memcmp(t2, zero, 32) == 0)
+    {
+      T2 = tB;
+    }
+    else
+    {
+      if (!secp256k1_ec_pubkey_create(ctx, &tG, t2))
+        goto cleanup;
+      pts[0] = &tG;
+      pts[1] = &tB;
+      if (!secp256k1_ec_pubkey_combine(ctx, &T2, pts, 2))
+        goto cleanup;
+    }
   }
 
   /* ---- 9. Challenge x ---- */
