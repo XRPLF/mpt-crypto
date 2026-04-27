@@ -94,15 +94,11 @@ jobs:
         with:
           platforms: ${{ matrix.docker_platform }}
 
-      - name: Set up Python
+      - name: Prepare runner
         if: matrix.docker_platform == ''
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: XRPLF/actions/prepare-runner@2cbf481018d930656e9276fcc20dc0e3a0be5b6d
         with:
-          python-version: "3.12"
-
-      - name: Install Conan and Ninja
-        if: matrix.docker_platform == ''
-        run: pip install conan ninja
+          enable_ccache: false
 
       - name: Build and test
         if: matrix.docker_platform == ''
