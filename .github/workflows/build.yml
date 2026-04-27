@@ -102,6 +102,7 @@ jobs:
   # the reusable workflow.
   native-binaries:
     name: Build native shared libraries
+    if: github.repository_owner == 'XRPLF'
     permissions:
       contents: read
     uses: ./.github/workflows/build-shared-libs.yml

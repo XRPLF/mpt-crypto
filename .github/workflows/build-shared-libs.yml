@@ -62,24 +62,24 @@ jobs:
             lib_filename: libmpt-crypto.dylib
 
           # ── Linux ARM64 ──
-          - os: ubuntu-24.04-arm
+          - os: heavy-arm64
             platform: linux-aarch64
             lib_filename: libmpt-crypto.so
 
           # ── Linux x86_64 ──
-          - os: ubuntu-latest
+          - os: heavy
             platform: linux-x86-64
             lib_filename: libmpt-crypto.so
 
           # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
-          - os: ubuntu-latest
+          - os: heavy
             platform: linux-s390x
             lib_filename: libmpt-crypto.so
             docker_platform: linux/s390x
             docker_image: s390x/ubuntu:24.04
 
           # ── Windows x86_64 ──
-          - os: windows-latest
+          - os: windows
             platform: win32-x86-64
             lib_filename: mpt-crypto.dll
 
@@ -103,10 +103,6 @@ jobs:
       - name: Install Conan and Ninja
         if: matrix.docker_platform == ''
         run: pip install conan ninja
-
-      - name: Set up MSVC environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
 
       - name: Build and test
         if: matrix.docker_platform == ''
