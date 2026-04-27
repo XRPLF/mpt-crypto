@@ -85,6 +85,15 @@ void secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in)
 {
   secp256k1_scalar s;
   secp256k1_scalar_set_b32(&s, in, NULL);
+  /* libsecp256k1's scalar_inverse returns 0 on zero input. Make that
+   * contract explicit here so callers can't accidentally rely on
+   * unspecified internal behaviour: zero in -> zero out. */
+  if (secp256k1_scalar_is_zero(&s))
+  {
+    memset(res, 0, 32);
+    OPENSSL_cleanse(&s, sizeof(s));
+    return;
+  }
   secp256k1_scalar_inverse(&s, &s);
   secp256k1_scalar_get_b32(res, &s);
 
