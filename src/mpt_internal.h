@@ -29,9 +29,13 @@
             return 0;       \
     } while (0)
 
-/* Forward-declare secp256k1_mpt helpers used in nonce generation. */
+/* Forward-declare secp256k1_mpt scalar helpers. */
 void
 secp256k1_mpt_scalar_reduce32(unsigned char out32[32], unsigned char const in32[32]);
+void
+secp256k1_mpt_scalar_add(unsigned char* res, unsigned char const* a, unsigned char const* b);
+void
+secp256k1_mpt_scalar_mul(unsigned char* res, unsigned char const* a, unsigned char const* b);
 
 /** Returns 1 if pk1 == pk2, 0 otherwise. */
 static inline int
@@ -89,30 +93,29 @@ compute_amount_point(secp256k1_context const* ctx, secp256k1_pubkey* mG, uint64_
 }
 
 /** Compute a sigma-protocol response: z = nonce + e * secret (mod order).
- *  Cleanses the intermediate product. Returns 1 on success, 0 on failure. */
-static inline int
+ *
+ *  Uses direct scalar-field arithmetic rather than
+ *  secp256k1_ec_seckey_tweak_mul/add, which reject zero operands via
+ *  seckey_verify. Zero secrets occur with probability 1 in legitimate
+ *  states (e.g. amount=0 or balance=0 inputs to compact sigma proofs),
+ *  so the sigma-response computation must not abort on them.
+ *
+ *  The output z is a response scalar (nonce + e*secret) that is
+ *  transmitted in the proof; 0 is a cryptographically negligible output
+ *  given random nonce. Hence no failure mode: the function is void.
+ *
+ *  Cleanses the intermediate product. */
+static inline void
 compute_sigma_response(
-    secp256k1_context const* ctx,
     unsigned char* z_out,
     unsigned char const* nonce,
     unsigned char const* e,
     unsigned char const* secret)
 {
     unsigned char term[32];
-    memcpy(z_out, nonce, 32);
-    memcpy(term, secret, 32);
-    if (!secp256k1_ec_seckey_tweak_mul(ctx, term, e))
-    {
-        OPENSSL_cleanse(term, 32);
-        return 0;
-    }
-    if (!secp256k1_ec_seckey_tweak_add(ctx, z_out, term))
-    {
-        OPENSSL_cleanse(term, 32);
-        return 0;
-    }
+    secp256k1_mpt_scalar_mul(term, e, secret);
+    secp256k1_mpt_scalar_add(z_out, nonce, term);
     OPENSSL_cleanse(term, 32);
-    return 1;
 }
 
 /**

@@ -207,8 +207,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
     goto cleanup;
 
   /* 4. Response: z_sk = t_sk + e*sk_iss */
-  if (!compute_sigma_response(ctx, z_sk, t_sk, e, sk_iss))
-    goto cleanup;
+  compute_sigma_response(z_sk, t_sk, e, sk_iss);
 
   /* 5. Serialize: e || z_sk */
   memcpy(proof_out, e, 32);

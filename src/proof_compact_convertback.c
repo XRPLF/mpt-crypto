@@ -241,12 +241,9 @@ int secp256k1_compact_convertback_prove(
     goto cleanup;
 
   /* 4. Responses */
-  if (!compute_sigma_response(ctx, z_b, t_b, e, b_scalar))
-    goto cleanup;
-  if (!compute_sigma_response(ctx, z_sk, t_sk, e, sk_A))
-    goto cleanup;
-  if (!compute_sigma_response(ctx, z_rho, t_rho, e, rho))
-    goto cleanup;
+  compute_sigma_response(z_b, t_b, e, b_scalar);
+  compute_sigma_response(z_sk, t_sk, e, sk_A);
+  compute_sigma_response(z_rho, t_rho, e, rho);
 
   /* 5. Serialize: e || z_b || z_rho || z_sk */
   memcpy(proof_out, e, 32);
