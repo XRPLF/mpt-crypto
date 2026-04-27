@@ -52,7 +52,7 @@ jobs:
       matrix:
         include:
           # ── macOS ARM64 (Apple Silicon) ──
-          - os: macos-14
+          - os: macos15
             platform: darwin-aarch64
             lib_filename: libmpt-crypto.dylib
 
@@ -89,13 +89,24 @@ jobs:
     container: ${{ matrix.container != '' && fromJson(matrix.container) || null }}
 
     steps:
+      - name: Cleanup workspace
+        if: matrix.os == 'macos15'
+        uses: XRPLF/actions/cleanup-workspace@c7d9ce5ebb03c752a354889ecd870cadfc2b1cd4
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up QEMU
+      - name: Register QEMU binfmt handlers
         if: matrix.docker_platform != ''
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
-        with:
-          platforms: ${{ matrix.docker_platform }}
+        run: |
+          PLATFORM='${{ matrix.docker_platform }}'
+          ARCH="${PLATFORM##*/}"
+          docker run --rm --privileged tonistiigi/binfmt:latest --install "${ARCH}"
+          if [ ! -f "/proc/sys/fs/binfmt_misc/qemu-${ARCH}" ]; then
+            echo "ERROR: qemu-${ARCH} binfmt handler not registered"
+            ls /proc/sys/fs/binfmt_misc/ 2>&1 || true
+            exit 1
+          fi
+          echo "qemu-${ARCH} binfmt handler registered"
 
       - name: Prepare runner
         if: matrix.docker_platform == ''
