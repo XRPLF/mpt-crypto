@@ -568,6 +568,39 @@ test_mpt_confidential_send()
                 bad_bal_comm,
                 f.ctx_hash) != 0);
     }
+
+    // invalid: n_participants = 2 (below minimum of 3)
+    {
+        SendFixture f = make_send_fixture(3);
+
+        // Prover should reject n=2
+        size_t proof_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + kMPT_DOUBLE_BULLETPROOF_SIZE;
+        std::vector<uint8_t> proof(proof_len);
+        EXPECT(
+            mpt_get_confidential_send_proof(
+                f.sender_priv,
+                f.sender_pub,
+                100,
+                f.participants.data(),
+                2,
+                f.shared_bf,
+                f.ctx_hash,
+                f.amount_comm,
+                &f.bal_params,
+                proof.data(),
+                &proof_len) != 0);
+
+        // Verifier should reject n=2
+        EXPECT(
+            mpt_verify_send_proof(
+                f.proof.data(),
+                f.participants.data(),
+                2,
+                f.bal_ct,
+                f.amount_comm,
+                f.balance_comm,
+                f.ctx_hash) != 0);
+    }
 }
 
 void
