@@ -39,24 +39,6 @@ extern "C" {
 // MPTokenIssuance ID size in bytes
 #define kMPT_ISSUANCE_ID_SIZE 24
 
-/**
- * @brief Represents a unique 24-byte MPT issuance ID.
- */
-typedef struct
-{
-    uint8_t bytes[kMPT_ISSUANCE_ID_SIZE];
-} mpt_issuance_id;
-
-/**
- * @brief Represents a 20-byte account ID.
- *
- * - bytes: Raw 20-byte array containing the AccountID.
- */
-typedef struct account_id
-{
-    uint8_t bytes[kMPT_ACCOUNT_ID_SIZE];
-} account_id;
-
 #ifdef __cplusplus
 }
 #endif
