@@ -1264,10 +1264,10 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
 
   /* ---- 3. Generator vectors ---- */
   if (!secp256k1_mpt_get_generator_vector(ctx, G_vec, n,
-                                          (const unsigned char *)"G", 1))
+                                          (const unsigned char *)"BP_G", 4))
     goto cleanup;
   if (!secp256k1_mpt_get_generator_vector(ctx, H_vec, n,
-                                          (const unsigned char *)"H", 1))
+                                          (const unsigned char *)"BP_H", 4))
     goto cleanup;
   {
     secp256k1_pubkey U_arr[1];

@@ -870,10 +870,12 @@ mpt_verify_aggregated_bulletproof(
     std::vector<secp256k1_pubkey> G_vec(n);
     std::vector<secp256k1_pubkey> H_vec(n);
 
-    if (secp256k1_mpt_get_generator_vector(ctx, G_vec.data(), n, (unsigned char const*)"G", 1) != 1)
+    if (secp256k1_mpt_get_generator_vector(ctx, G_vec.data(), n, (unsigned char const*)"BP_G", 4) !=
+        1)
         return -1;
 
-    if (secp256k1_mpt_get_generator_vector(ctx, H_vec.data(), n, (unsigned char const*)"H", 1) != 1)
+    if (secp256k1_mpt_get_generator_vector(ctx, H_vec.data(), n, (unsigned char const*)"BP_H", 4) !=
+        1)
         return -1;
 
     secp256k1_pubkey pk_base;

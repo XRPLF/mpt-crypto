@@ -48,9 +48,9 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   EXPECT(G_vec && H_vec);
 
   EXPECT(secp256k1_mpt_get_generator_vector(ctx, G_vec, n,
-                                            (const unsigned char *)"G", 1));
+                                            (const unsigned char *)"BP_G", 4));
   EXPECT(secp256k1_mpt_get_generator_vector(ctx, H_vec, n,
-                                            (const unsigned char *)"H", 1));
+                                            (const unsigned char *)"BP_H", 4));
 
   /* ---- Prove ---- */
   unsigned char proof[4096];
