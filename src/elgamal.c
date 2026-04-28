@@ -142,13 +142,13 @@ static int secp256k1_solve_dlp_small_range_fixed(
     return 1;
   }
 
-  unsigned char one[32] = {0};
-  one[31] = 1;
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  one[kMPT_SCALAR_SIZE - 1] = 1;
 
   secp256k1_pubkey G_point;
   if (!secp256k1_ec_pubkey_create(ctx, &G_point, one))
   {
-    OPENSSL_cleanse(one, 32);
+    OPENSSL_cleanse(one, kMPT_SCALAR_SIZE);
     return 0;
   }
 
@@ -219,7 +219,7 @@ static int secp256k1_solve_dlp_small_range_fixed(
   }
 
   OPENSSL_cleanse(current_M_ser, 33);
-  OPENSSL_cleanse(one, 32);
+  OPENSSL_cleanse(one, kMPT_SCALAR_SIZE);
 
   if (global_ser_error != 0)
   {
@@ -412,7 +412,7 @@ int generate_canonical_encrypted_zero(
   MPT_ARG_CHECK(account_id != NULL);
   MPT_ARG_CHECK(mpt_issuance_id != NULL);
 
-  unsigned char deterministic_scalar[32];
+  unsigned char deterministic_scalar[kMPT_SCALAR_SIZE];
   unsigned char hash_input[51]; // 7 ("EncZero") + 20 + 24
   const char *domain = "EncZero";
   int ret;
@@ -444,7 +444,7 @@ int generate_canonical_encrypted_zero(
   ret = secp256k1_elgamal_encrypt(ctx, enc_zero_c1, enc_zero_c2, pubkey, 0,
                                   deterministic_scalar);
 
-  OPENSSL_cleanse(deterministic_scalar, 32); // Secure cleanup
+  OPENSSL_cleanse(deterministic_scalar, kMPT_SCALAR_SIZE); // Secure cleanup
   return ret;
 }
 

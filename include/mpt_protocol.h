@@ -19,6 +19,10 @@ extern "C" {
 #define kMPT_PUBKEY_SIZE 33
 #define kMPT_PRIVKEY_SIZE 32
 #define kMPT_BLINDING_FACTOR_SIZE 32
+// secp256k1 scalar (challenge / response / nonce) size in bytes.
+// Numerically equal to kMPT_HALF_SHA_SIZE; use this name when the value is a
+// scalar in Z_q rather than a hash output.
+#define kMPT_SCALAR_SIZE 32
 
 // ElGamal & Pedersen primitive sizes in bytes
 #define kMPT_ELGAMAL_CIPHER_SIZE 33

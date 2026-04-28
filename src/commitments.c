@@ -203,7 +203,7 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
   MPT_ARG_CHECK(rho != NULL);
 
   secp256k1_pubkey mG, rH, H;
-  unsigned char m_scalar[32] = {0};
+  unsigned char m_scalar[kMPT_SCALAR_SIZE] = {0};
   int ok = 0;
 
   /* 0. Input Check */
@@ -247,6 +247,6 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
 
 cleanup:
   /* Securely clear the amount scalar from stack */
-  OPENSSL_cleanse(m_scalar, 32);
+  OPENSSL_cleanse(m_scalar, kMPT_SCALAR_SIZE);
   return ok;
 }

@@ -150,9 +150,13 @@ int secp256k1_compact_standard_prove(
   MPT_ARG_CHECK(B2 != NULL);
 
   /* Nonces: alpha(r), beta(m), gamma(sk_A), delta(r_b), epsilon(b) */
-  unsigned char alpha[32], beta[32], gamma[32], delta[32], epsilon[32];
-  unsigned char m_scalar[32], b_scalar[32];
-  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_b[32];
+  unsigned char alpha[kMPT_SCALAR_SIZE], beta[kMPT_SCALAR_SIZE];
+  unsigned char gamma[kMPT_SCALAR_SIZE], delta[kMPT_SCALAR_SIZE];
+  unsigned char epsilon[kMPT_SCALAR_SIZE];
+  unsigned char m_scalar[kMPT_SCALAR_SIZE], b_scalar[kMPT_SCALAR_SIZE];
+  unsigned char e[kMPT_SCALAR_SIZE], z_r[kMPT_SCALAR_SIZE];
+  unsigned char z_m[kMPT_SCALAR_SIZE], z_sk[kMPT_SCALAR_SIZE];
+  unsigned char z_rb[kMPT_SCALAR_SIZE], z_b[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T1, T_PCm, K1, T_PCb, K2;
   secp256k1_pubkey *T2_vec = NULL;
   secp256k1_pubkey H;
@@ -180,12 +184,12 @@ int secp256k1_compact_standard_prove(
    *    Binds nonces to both witness and public statement.              */
   {
     /* Witness in canonical order: sk_A, r, m, b, rho */
-    unsigned char witness_buf[5 * 32];
-    memcpy(witness_buf, sk_A, 32);
-    memcpy(witness_buf + 32, r_shared, 32);
-    memcpy(witness_buf + 64, m_scalar, 32);
-    memcpy(witness_buf + 96, b_scalar, 32);
-    memcpy(witness_buf + 128, r_b, 32);
+    unsigned char witness_buf[5 * kMPT_SCALAR_SIZE];
+    memcpy(witness_buf, sk_A, kMPT_SCALAR_SIZE);
+    memcpy(witness_buf + 32, r_shared, kMPT_SCALAR_SIZE);
+    memcpy(witness_buf + 64, m_scalar, kMPT_SCALAR_SIZE);
+    memcpy(witness_buf + 96, b_scalar, kMPT_SCALAR_SIZE);
+    memcpy(witness_buf + 128, r_b, kMPT_SCALAR_SIZE);
 
     /* Hash all public statement elements into a 32-byte digest */
     unsigned char stmt_hash[kMPT_HALF_SHA_SIZE];
@@ -247,7 +251,7 @@ int secp256k1_compact_standard_prove(
 #undef SHASH
     }
 
-    unsigned char nonces[5 * 32];
+    unsigned char nonces[5 * kMPT_SCALAR_SIZE];
     if (!generate_deterministic_nonces(
             ctx, nonces, 5, witness_buf, sizeof(witness_buf), stmt_hash,
             DOMAIN_COMPACT_STANDARD, strlen(DOMAIN_COMPACT_STANDARD)))
@@ -255,11 +259,11 @@ int secp256k1_compact_standard_prove(
       OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
       goto cleanup;
     }
-    memcpy(alpha, nonces, 32);
-    memcpy(beta, nonces + 32, 32);
-    memcpy(gamma, nonces + 64, 32);
-    memcpy(delta, nonces + 96, 32);
-    memcpy(epsilon, nonces + 128, 32);
+    memcpy(alpha, nonces, kMPT_SCALAR_SIZE);
+    memcpy(beta, nonces + 32, kMPT_SCALAR_SIZE);
+    memcpy(gamma, nonces + 64, kMPT_SCALAR_SIZE);
+    memcpy(delta, nonces + 96, kMPT_SCALAR_SIZE);
+    memcpy(epsilon, nonces + 128, kMPT_SCALAR_SIZE);
     OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
     OPENSSL_cleanse(nonces, sizeof(nonces));
   }
@@ -349,29 +353,29 @@ int secp256k1_compact_standard_prove(
   compute_sigma_response(z_b, epsilon, e, b_scalar);
 
   /* 5. Serialize compact proof: e || z_m || z_r || z_b || z_rb || z_sk */
-  memcpy(proof_out, e, 32);
-  memcpy(proof_out + 32, z_m, 32);
-  memcpy(proof_out + 64, z_r, 32);
-  memcpy(proof_out + 96, z_b, 32);
-  memcpy(proof_out + 128, z_rb, 32);
-  memcpy(proof_out + 160, z_sk, 32);
+  memcpy(proof_out, e, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 32, z_m, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 64, z_r, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 96, z_b, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 128, z_rb, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 160, z_sk, kMPT_SCALAR_SIZE);
 
   ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(alpha, 32);
-  OPENSSL_cleanse(beta, 32);
-  OPENSSL_cleanse(gamma, 32);
-  OPENSSL_cleanse(delta, 32);
-  OPENSSL_cleanse(epsilon, 32);
-  OPENSSL_cleanse(m_scalar, 32);
-  OPENSSL_cleanse(b_scalar, 32);
-  OPENSSL_cleanse(e, 32);
-  OPENSSL_cleanse(z_r, 32);
-  OPENSSL_cleanse(z_m, 32);
-  OPENSSL_cleanse(z_sk, 32);
-  OPENSSL_cleanse(z_rb, 32);
-  OPENSSL_cleanse(z_b, 32);
+  OPENSSL_cleanse(alpha, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(beta, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(gamma, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(delta, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(epsilon, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(m_scalar, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(b_scalar, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(e, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_r, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_m, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_sk, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_rb, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_b, kMPT_SCALAR_SIZE);
   free(T2_vec);
   return ok;
 }
@@ -400,20 +404,22 @@ int secp256k1_compact_standard_verify(
   MPT_ARG_CHECK(B1 != NULL);
   MPT_ARG_CHECK(B2 != NULL);
 
-  unsigned char e[32], z_r[32], z_m[32], z_sk[32], z_rb[32], z_b[32];
-  unsigned char e_prime[32], neg_e[32];
+  unsigned char e[kMPT_SCALAR_SIZE], z_r[kMPT_SCALAR_SIZE];
+  unsigned char z_m[kMPT_SCALAR_SIZE], z_sk[kMPT_SCALAR_SIZE];
+  unsigned char z_rb[kMPT_SCALAR_SIZE], z_b[kMPT_SCALAR_SIZE];
+  unsigned char e_prime[kMPT_SCALAR_SIZE], neg_e[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T1, T_PCm, K1, T_PCb, K2;
   secp256k1_pubkey *T2_vec = NULL;
   secp256k1_pubkey H;
   int ok = 0;
 
   /* 1. Deserialize: e || z_m || z_r || z_b || z_rb || z_sk */
-  memcpy(e, proof, 32);
-  memcpy(z_m, proof + 32, 32);
-  memcpy(z_r, proof + 64, 32);
-  memcpy(z_b, proof + 96, 32);
-  memcpy(z_rb, proof + 128, 32);
-  memcpy(z_sk, proof + 160, 32);
+  memcpy(e, proof, kMPT_SCALAR_SIZE);
+  memcpy(z_m, proof + 32, kMPT_SCALAR_SIZE);
+  memcpy(z_r, proof + 64, kMPT_SCALAR_SIZE);
+  memcpy(z_b, proof + 96, kMPT_SCALAR_SIZE);
+  memcpy(z_rb, proof + 128, kMPT_SCALAR_SIZE);
+  memcpy(z_sk, proof + 160, kMPT_SCALAR_SIZE);
 
   /* secp256k1_ec_seckey_verify rejects zero scalars (returns 0 for s=0),
    * causing a negligible (~2^{-256}) deviation from strict completeness.
@@ -545,11 +551,11 @@ int secp256k1_compact_standard_verify(
     goto cleanup;
 
   /* 4. Accept iff e' == e (constant-time comparison) */
-  if (CRYPTO_memcmp(e, e_prime, 32) == 0)
+  if (CRYPTO_memcmp(e, e_prime, kMPT_SCALAR_SIZE) == 0)
     ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(neg_e, 32);
+  OPENSSL_cleanse(neg_e, kMPT_SCALAR_SIZE);
   /* z_*, e, e_prime are public proof values — intentionally not cleansed */
   free(T2_vec);
   return ok;

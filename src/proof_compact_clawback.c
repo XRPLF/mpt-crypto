@@ -138,8 +138,8 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
   MPT_ARG_CHECK(C1 != NULL);
   MPT_ARG_CHECK(C2 != NULL);
 
-  unsigned char t_sk[32];
-  unsigned char e[32], z_sk[32];
+  unsigned char t_sk[kMPT_SCALAR_SIZE];
+  unsigned char e[kMPT_SCALAR_SIZE], z_sk[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T1, T2;
   int ok = 0;
 
@@ -148,8 +148,8 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
 
   /* 1. Deterministic nonce */
   {
-    unsigned char witness_buf[32];
-    memcpy(witness_buf, sk_iss, 32);
+    unsigned char witness_buf[kMPT_SCALAR_SIZE];
+    memcpy(witness_buf, sk_iss, kMPT_SCALAR_SIZE);
 
     unsigned char stmt_hash[kMPT_HALF_SHA_SIZE];
     {
@@ -209,7 +209,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
 #undef SHASH
     }
 
-    unsigned char nonces[32];
+    unsigned char nonces[kMPT_SCALAR_SIZE];
     if (!generate_deterministic_nonces(
             ctx, nonces, 1, witness_buf, sizeof(witness_buf), stmt_hash,
             DOMAIN_COMPACT_CLAWBACK, strlen(DOMAIN_COMPACT_CLAWBACK)))
@@ -217,7 +217,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
       OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
       goto cleanup;
     }
-    memcpy(t_sk, nonces, 32);
+    memcpy(t_sk, nonces, kMPT_SCALAR_SIZE);
     OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
     OPENSSL_cleanse(nonces, sizeof(nonces));
   }
@@ -239,15 +239,15 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
   compute_sigma_response(z_sk, t_sk, e, sk_iss);
 
   /* 5. Serialize: e || z_sk */
-  memcpy(proof_out, e, 32);
-  memcpy(proof_out + 32, z_sk, 32);
+  memcpy(proof_out, e, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 32, z_sk, kMPT_SCALAR_SIZE);
 
   ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(t_sk, 32);
-  OPENSSL_cleanse(e, 32);
-  OPENSSL_cleanse(z_sk, 32);
+  OPENSSL_cleanse(t_sk, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(e, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_sk, kMPT_SCALAR_SIZE);
   return ok;
 }
 
@@ -264,12 +264,13 @@ int secp256k1_compact_clawback_verify(
   MPT_ARG_CHECK(C1 != NULL);
   MPT_ARG_CHECK(C2 != NULL);
 
-  unsigned char e[32], z_sk[32], e_prime[32], neg_e[32];
+  unsigned char e[kMPT_SCALAR_SIZE], z_sk[kMPT_SCALAR_SIZE];
+  unsigned char e_prime[kMPT_SCALAR_SIZE], neg_e[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T1, T2;
 
   /* 1. Deserialize: e || z_sk */
-  memcpy(e, proof, 32);
-  memcpy(z_sk, proof + 32, 32);
+  memcpy(e, proof, kMPT_SCALAR_SIZE);
+  memcpy(z_sk, proof + 32, kMPT_SCALAR_SIZE);
 
   if (!secp256k1_ec_seckey_verify(ctx, e))
     return 0;
@@ -307,9 +308,9 @@ int secp256k1_compact_clawback_verify(
       secp256k1_pubkey mG;
       if (!compute_amount_point(ctx, &mG, amount))
         return 0;
-      unsigned char neg_one[32];
-      unsigned char one[32] = {0};
-      one[31] = 1;
+      unsigned char neg_one[kMPT_SCALAR_SIZE];
+      unsigned char one[kMPT_SCALAR_SIZE] = {0};
+      one[kMPT_SCALAR_SIZE - 1] = 1;
       secp256k1_mpt_scalar_negate(neg_one, one);
       secp256k1_pubkey neg_mG = mG;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &neg_mG, neg_one))
@@ -336,5 +337,5 @@ int secp256k1_compact_clawback_verify(
     return 0;
 
   /* 4. Accept iff e' == e */
-  return CRYPTO_memcmp(e, e_prime, 32) == 0;
+  return CRYPTO_memcmp(e, e_prime, kMPT_SCALAR_SIZE) == 0;
 }
