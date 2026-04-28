@@ -2093,6 +2093,14 @@ int secp256k1_bulletproof_verify_agg(
     return 0;
   }
 
+  /* Heap allocations whose lifetime spans multiple goto-fail sites.
+   * Declared here, ahead of the first `goto fail`, and NULL-initialized so the
+   * centralized free at the `fail:` label is a no-op when execution exits
+   * before the actual malloc. */
+  unsigned char *y_powers = NULL;
+  unsigned char *y_inv_powers = NULL;
+  unsigned char (*y_block_sum)[32] = NULL;
+
   unsigned char a_final[32], b_final[32];
   unsigned char t_hat[32], tau_x[32], mu[32];
 
@@ -2166,8 +2174,6 @@ int secp256k1_bulletproof_verify_agg(
   size_t slen;
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   int fs_ok = 0;
-  unsigned char *y_powers = NULL;
-  unsigned char *y_inv_powers = NULL;
 
   if (!mdctx)
     goto fail;
@@ -2264,11 +2270,7 @@ int secp256k1_bulletproof_verify_agg(
   y_powers = (unsigned char *)malloc(n * 32);
   y_inv_powers = (unsigned char *)malloc(n * 32);
   if (!y_powers || !y_inv_powers)
-  {
-    free(y_powers);
-    free(y_inv_powers);
     goto fs_fail;
-  }
 
   unsigned char y_inv[32];
   scalar_vector_powers(ctx, (unsigned char (*)[32])y_powers, y, n);
@@ -2299,13 +2301,7 @@ int secp256k1_bulletproof_verify_agg(
   secp256k1_mpt_scalar_reduce32(x, x);
 
   if (!secp256k1_ec_seckey_verify(ctx, x))
-  {
-    free(y_powers);
-    y_powers = NULL;
-    free(y_inv_powers);
-    y_inv_powers = NULL;
     goto fs_fail;
-  }
 
   fs_ok = 1;
 
@@ -2324,13 +2320,9 @@ fs_fail:
    */
 
   /* --- delta(y,z) for aggregation --- */
-  unsigned char (*y_block_sum)[32] = (unsigned char (*)[32])malloc(m * 32);
+  y_block_sum = (unsigned char (*)[32])malloc(m * 32);
   if (!y_block_sum)
-  {
-    free(y_powers);
-    free(y_inv_powers);
     goto fail;
-  }
 
   unsigned char two_sum[32];
   compute_delta_scalars(ctx, y_block_sum, two_sum, y, m);
@@ -2379,9 +2371,6 @@ fs_fail:
     {
       if (!secp256k1_ec_pubkey_create(ctx, &tG, t_hat))
       {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
       have_t = 1;
@@ -2391,9 +2380,6 @@ fs_fail:
       tauH = *pk_base;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tauH, tau_x))
       {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
       have_tau = 1;
@@ -2403,9 +2389,6 @@ fs_fail:
       const secp256k1_pubkey *pts[2] = {&tG, &tauH};
       if (!secp256k1_ec_pubkey_combine(ctx, &LHS, pts, 2))
       {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
     }
@@ -2419,9 +2402,6 @@ fs_fail:
     }
     else
     {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
   }
@@ -2444,16 +2424,10 @@ fs_fail:
         tmpP = commitment_C_vec[j];
         if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, z_j2))
         {
-          free(y_block_sum);
-          free(y_powers);
-          free(y_inv_powers);
           goto fail;
         }
         if (!add_term(ctx, &acc, &inited, &tmpP))
         {
-          free(y_block_sum);
-          free(y_powers);
-          free(y_inv_powers);
           goto fail;
         }
       }
@@ -2476,16 +2450,10 @@ fs_fail:
       tmpP = T1;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x))
       {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
       if (!add_term(ctx, &acc, &inited, &tmpP))
       {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
     }
@@ -2499,17 +2467,11 @@ fs_fail:
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x_sq))
       {
         OPENSSL_cleanse(x_sq, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
       if (!add_term(ctx, &acc, &inited, &tmpP))
       {
         OPENSSL_cleanse(x_sq, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
     }
@@ -2517,9 +2479,6 @@ fs_fail:
 
     if (!inited)
     {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
     RHS = acc;
@@ -2527,9 +2486,6 @@ fs_fail:
 
   if (!pubkey_equal(ctx, &LHS, &RHS))
   {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
     goto fail;
   }
 
@@ -2613,9 +2569,6 @@ fs_fail:
     secp256k1_pubkey xS = S;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &xS, x))
     {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
 
@@ -2632,9 +2585,6 @@ fs_fail:
   memcpy(neg_z, z, 32);
   if (!secp256k1_ec_seckey_negate(ctx, neg_z))
   {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
     goto fail;
   }
 
@@ -2711,9 +2661,6 @@ fs_fail:
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &Q, t_hat_ux))
       {
         OPENSSL_cleanse(t_hat_ux, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
         goto fail;
       }
       const secp256k1_pubkey *pts2[2] = {&P, &Q};
@@ -2731,9 +2678,6 @@ fs_fail:
     memcpy(neg_mu, mu, 32);
     if (!secp256k1_ec_seckey_negate(ctx, neg_mu))
     {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
 
@@ -2741,9 +2685,6 @@ fs_fail:
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &mu_term, neg_mu))
     {
       OPENSSL_cleanse(neg_mu, 32);
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
     OPENSSL_cleanse(neg_mu, 32);
@@ -2760,9 +2701,6 @@ fs_fail:
       (secp256k1_pubkey *)malloc(n * sizeof(secp256k1_pubkey));
   if (!Hprime)
   {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
     goto fail;
   }
 
@@ -2773,9 +2711,6 @@ fs_fail:
             ctx, &Hprime[k], (const unsigned char *)(y_inv_powers + 32 * k)))
     {
       free(Hprime);
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
       goto fail;
     }
   }
@@ -2795,6 +2730,11 @@ fs_fail:
   return ok ? 1 : 0;
 
 fail:
+  /* Centralized cleanup. All goto-fail sites land here; pointers that have
+   * not yet been allocated are still NULL, and free(NULL) is a no-op. */
+  free(y_block_sum);
+  free(y_powers);
+  free(y_inv_powers);
   free(L_vec);
   free(R_vec);
   return 0;
