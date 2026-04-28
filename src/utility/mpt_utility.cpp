@@ -88,6 +88,13 @@ mpt_get_bulletproof_agg(
     uint8_t* out_proof,
     size_t* out_len)
 {
+    // Today's protocols invoke aggregated bulletproofs only with m == 1
+    // (ConvertBack) or m == 2 (Send). The underlying primitive
+    // secp256k1_bulletproof_prove_agg accepts any power of 2 up to
+    // BP_MAX_VALUES (= 4), but we deliberately reject the unused cases here:
+    // the size constants kMPT_{SINGLE,DOUBLE}_BULLETPROOF_SIZE only cover
+    // these two, and broader values have no test coverage. Extend the check
+    // (and add a corresponding size constant) when a new use case appears.
     if ((m != 1 && m != 2) || !values || !blinding_ptrs || !out_proof || !out_len)
         return -1;
 
@@ -865,7 +872,9 @@ mpt_verify_aggregated_bulletproof(
     if (!proof || !compressed_commitments || !context_hash)
         return -1;
 
-    // m must be power of 2, in our case, it is either 1 or 2.
+    // m must be a power of 2; today's protocols invoke this verifier only
+    // with m == 1 (ConvertBack) or m == 2 (Send). See the matching note in
+    // mpt_get_bulletproof_agg above for the rationale and how to broaden.
     if (m != 1 && m != 2)
         return -1;
 
