@@ -163,26 +163,31 @@ generate_deterministic_nonces(
     {
         EVP_MAC* mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
         if (!mac)
+        {
+            OPENSSL_cleanse(salt, 32);
             return 0;
+        }
         EVP_MAC_CTX* mctx = EVP_MAC_CTX_new(mac);
         if (!mctx)
         {
             EVP_MAC_free(mac);
+            OPENSSL_cleanse(salt, 32);
             return 0;
         }
         OSSL_PARAM params[] = {
             OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0), OSSL_PARAM_construct_end()};
-        if (!EVP_MAC_init(mctx, salt, 32, params))
+        size_t mac_len = 32;
+        if (!EVP_MAC_init(mctx, salt, 32, params) || !EVP_MAC_update(mctx, witness, witness_len) ||
+            !EVP_MAC_update(mctx, statement_hash, 32) ||
+            !EVP_MAC_update(mctx, (unsigned char const*)domain, domain_len) ||
+            !EVP_MAC_final(mctx, prk, &mac_len, 32))
         {
             EVP_MAC_CTX_free(mctx);
             EVP_MAC_free(mac);
+            OPENSSL_cleanse(salt, 32);
+            OPENSSL_cleanse(prk, 32);
             return 0;
         }
-        EVP_MAC_update(mctx, witness, witness_len);
-        EVP_MAC_update(mctx, statement_hash, 32);
-        EVP_MAC_update(mctx, (unsigned char const*)domain, domain_len);
-        size_t mac_len = 32;
-        EVP_MAC_final(mctx, prk, &mac_len, 32);
         EVP_MAC_CTX_free(mctx);
         EVP_MAC_free(mac);
     }
@@ -225,17 +230,22 @@ generate_deterministic_nonces(
                 OSSL_PARAM params[] = {
                     OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0),
                     OSSL_PARAM_construct_end()};
-                EVP_MAC_init(mctx, prk, 32, params);
-                if (i > 0)
-                    EVP_MAC_update(mctx, prev, 32);
-                EVP_MAC_update(mctx, &counter, 1);
-                if (sub_counter > 0)
-                {
-                    unsigned char sub = (unsigned char)sub_counter;
-                    EVP_MAC_update(mctx, &sub, 1);
-                }
                 size_t mac_len = 32;
-                EVP_MAC_final(mctx, out, &mac_len, 32);
+                unsigned char sub = (unsigned char)sub_counter;
+                if (!EVP_MAC_init(mctx, prk, 32, params) ||
+                    (i > 0 && !EVP_MAC_update(mctx, prev, 32)) ||
+                    !EVP_MAC_update(mctx, &counter, 1) ||
+                    (sub_counter > 0 && !EVP_MAC_update(mctx, &sub, 1)) ||
+                    !EVP_MAC_final(mctx, out, &mac_len, 32))
+                {
+                    EVP_MAC_CTX_free(mctx);
+                    EVP_MAC_free(mac);
+                    OPENSSL_cleanse(out, 32);
+                    OPENSSL_cleanse(prev, 32);
+                    OPENSSL_cleanse(prk, 32);
+                    OPENSSL_cleanse(nonces_out, k * 32);
+                    return 0;
+                }
                 EVP_MAC_CTX_free(mctx);
                 EVP_MAC_free(mac);
 
