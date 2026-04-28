@@ -274,21 +274,24 @@ int generate_canonical_encrypted_zero(
   memcpy(hash_input + 7, account_id, 20);
   memcpy(hash_input + 27, mpt_issuance_id, 24);
 
-  /* Rejection sampling loop to ensure scalar is valid */
-  do
+  /* Initial hash of the domain-tagged input. */
+  unsigned int md_len = 32;
+  if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
+                 NULL) != 1)
+    return 0;
+
+  /* Rejection sampling: chain-hash the 32-byte previous output until it is a
+   * valid secp256k1 scalar. The probability of needing more than one iteration
+   * is ~2^-128, so in practice the loop body executes zero times. The chain
+   * deliberately hashes only the previous output (not the full 51-byte
+   * domain-tagged buffer): mixing stale tail bytes from `hash_input` would
+   * yield a non-standard construction without any security benefit. */
+  while (!secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
   {
-    unsigned int md_len = 32;
-    if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
-                   NULL) != 1)
+    if (EVP_Digest(deterministic_scalar, 32, deterministic_scalar, &md_len,
+                   EVP_sha256(), NULL) != 1)
       return 0;
-
-    if (secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
-      break;
-
-    // Re-hash the output for next iteration (chain method for determinism)
-    memcpy(hash_input, deterministic_scalar, 32);
-
-  } while (1);
+  }
 
   ret = secp256k1_elgamal_encrypt(ctx, enc_zero_c1, enc_zero_c2, pubkey, 0,
                                   deterministic_scalar);
