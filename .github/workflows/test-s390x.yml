@@ -14,4 +14,4 @@ jobs:
           platforms: s390x
 
       - name: Run s390x container
-        run: docker run --rm --platform linux/s390x ls
+        run: docker run --rm --platform linux/s390x s390x/ubuntu:24.04 ls
