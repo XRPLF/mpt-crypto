@@ -1,0 +1,17 @@
+name: Test s390x Docker
+
+on:
+  pull_request:
+
+jobs:
+  test-s390x:
+    if: github.repository_owner == 'XRPLF'
+    runs-on: heavy
+    steps:
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        with:
+          platforms: s390x
+
+      - name: Run s390x container
+        run: docker run --rm --platform linux/s390x ls
