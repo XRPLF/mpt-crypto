@@ -107,11 +107,11 @@ static int add_term(const secp256k1_context *ctx, secp256k1_pubkey *acc,
 static void secp256k1_mpt_scalar_sub(unsigned char *res, const unsigned char *a,
                                      const unsigned char *b)
 {
-  unsigned char neg_b[32];
-  memcpy(neg_b, b, 32);
+  unsigned char neg_b[kMPT_SCALAR_SIZE];
+  memcpy(neg_b, b, kMPT_SCALAR_SIZE);
   secp256k1_mpt_scalar_negate(neg_b, neg_b); /* neg_b = -b mod q */
   secp256k1_mpt_scalar_add(res, a, neg_b);   /* res = a + (-b) */
-  OPENSSL_cleanse(neg_b, 32);
+  OPENSSL_cleanse(neg_b, kMPT_SCALAR_SIZE);
 }
 /**
  * Computes the modular dot product c = <a, b> = sum(a[i] * b[i]) mod q.
@@ -128,15 +128,16 @@ int secp256k1_bulletproof_ipa_dot(const secp256k1_context *ctx,
                                   const unsigned char *b, size_t n)
 {
   (void)ctx;
-  unsigned char acc[32] = {0};
-  unsigned char term[32];
+  unsigned char acc[kMPT_SCALAR_SIZE] = {0};
+  unsigned char term[kMPT_SCALAR_SIZE];
 
   for (size_t i = 0; i < n; i++)
   {
-    secp256k1_mpt_scalar_mul(term, a + i * 32, b + i * 32);
+    secp256k1_mpt_scalar_mul(term, a + i * kMPT_SCALAR_SIZE,
+                             b + i * kMPT_SCALAR_SIZE);
     secp256k1_mpt_scalar_add(acc, acc, term);
   }
-  memcpy(out, acc, 32);
+  memcpy(out, acc, kMPT_SCALAR_SIZE);
   return 1;
 }
 /**
@@ -157,10 +158,10 @@ int secp256k1_bulletproof_add_point_to_accumulator(const secp256k1_context *ctx,
   return 1;
 }
 
-static int scalar_is_zero(const unsigned char s[32])
+static int scalar_is_zero(const unsigned char s[kMPT_SCALAR_SIZE])
 {
   unsigned char b = 0;
-  for (int i = 0; i < 32; i++)
+  for (int i = 0; i < (int)kMPT_SCALAR_SIZE; i++)
   {
     b |= s[i];
   }
@@ -193,8 +194,8 @@ int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
 
   for (size_t i = 0; i < n; ++i)
   {
-    unsigned char s_tmp[32];
-    memcpy(s_tmp, scalars + i * 32, 32);
+    unsigned char s_tmp[kMPT_SCALAR_SIZE];
+    memcpy(s_tmp, scalars + i * kMPT_SCALAR_SIZE, kMPT_SCALAR_SIZE);
 
     if (scalar_is_zero(s_tmp))
     {
@@ -237,8 +238,10 @@ static int msm_try_add(const secp256k1_context *ctx, secp256k1_pubkey *acc,
 /**
  * Computes component-wise: result[i] = a[i] * b[i] (Hadamard product)
  */
-void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
-                       unsigned char a[][32], unsigned char b[][32], size_t n)
+void scalar_vector_mul(const secp256k1_context *ctx,
+                       unsigned char res[][kMPT_SCALAR_SIZE],
+                       unsigned char a[][kMPT_SCALAR_SIZE],
+                       unsigned char b[][kMPT_SCALAR_SIZE], size_t n)
 {
   (void)ctx;
   for (size_t i = 0; i < n; i++)
@@ -250,8 +253,10 @@ void scalar_vector_mul(const secp256k1_context *ctx, unsigned char res[][32],
 /**
  * Computes component-wise: result[i] = a[i] + b[i]
  */
-void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
-                       unsigned char a[][32], unsigned char b[][32], size_t n)
+void scalar_vector_add(const secp256k1_context *ctx,
+                       unsigned char res[][kMPT_SCALAR_SIZE],
+                       unsigned char a[][kMPT_SCALAR_SIZE],
+                       unsigned char b[][kMPT_SCALAR_SIZE], size_t n)
 {
   (void)ctx;
   for (size_t i = 0; i < n; i++)
@@ -263,16 +268,17 @@ void scalar_vector_add(const secp256k1_context *ctx, unsigned char res[][32],
 /**
  * Fills a vector with powers of a scalar: [1, y, y^2, ..., y^{n-1}]
  */
-void scalar_vector_powers(const secp256k1_context *ctx, unsigned char res[][32],
+void scalar_vector_powers(const secp256k1_context *ctx,
+                          unsigned char res[][kMPT_SCALAR_SIZE],
                           const unsigned char *y, size_t n)
 {
   (void)ctx;
   if (n == 0)
     return;
 
-  unsigned char one[32] = {0};
-  one[31] = 1;
-  memcpy(res[0], one, 32);
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  one[kMPT_SCALAR_SIZE - 1] = 1;
+  memcpy(res[0], one, kMPT_SCALAR_SIZE);
 
   for (size_t i = 1; i < n; i++)
   {
@@ -283,13 +289,14 @@ void scalar_vector_powers(const secp256k1_context *ctx, unsigned char res[][32],
  * Compute y^i for small i.
  */
 static void scalar_pow_u32(const secp256k1_context *ctx,
-                           unsigned char y_pow_out[32],
-                           const unsigned char y[32], unsigned int i)
+                           unsigned char y_pow_out[kMPT_SCALAR_SIZE],
+                           const unsigned char y[kMPT_SCALAR_SIZE],
+                           unsigned int i)
 {
   (void)ctx;
-  unsigned char one[32] = {0};
-  one[31] = 1;
-  memcpy(y_pow_out, one, 32);
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  one[kMPT_SCALAR_SIZE - 1] = 1;
+  memcpy(y_pow_out, one, kMPT_SCALAR_SIZE);
 
   while (i--)
   {
@@ -299,9 +306,10 @@ static void scalar_pow_u32(const secp256k1_context *ctx,
 /**
  * z_j2 = z^(j+2) for j = 0..m-1 (small exponent)
  */
-static void compute_z_pows_j2(const secp256k1_context *ctx,
-                              unsigned char (*z_j2)[32], /* m x 32 */
-                              const unsigned char z[32], size_t m)
+static void
+compute_z_pows_j2(const secp256k1_context *ctx,
+                  unsigned char (*z_j2)[kMPT_SCALAR_SIZE], /* m x 32 */
+                  const unsigned char z[kMPT_SCALAR_SIZE], size_t m)
 {
   for (size_t j = 0; j < m; j++)
   {
@@ -317,23 +325,23 @@ static void compute_z_pows_j2(const secp256k1_context *ctx,
  *   two_sum = sum_{i=0}^{63} 2^i
  * These are used by the caller to construct delta(y, z).
  */
-static void
-compute_delta_scalars(const secp256k1_context *ctx,
-                      unsigned char (*y_block_sum)[32], /* m blocks */
-                      unsigned char two_sum[32], const unsigned char y[32],
-                      size_t m)
+static void compute_delta_scalars(
+    const secp256k1_context *ctx,
+    unsigned char (*y_block_sum)[kMPT_SCALAR_SIZE], /* m blocks */
+    unsigned char two_sum[kMPT_SCALAR_SIZE],
+    const unsigned char y[kMPT_SCALAR_SIZE], size_t m)
 {
   (void)ctx;
 
-  unsigned char one[32] = {0};
-  unsigned char y_pow[32];
-  unsigned char two_pow[32];
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  unsigned char y_pow[kMPT_SCALAR_SIZE];
+  unsigned char two_pow[kMPT_SCALAR_SIZE];
 
-  one[31] = 1;
+  one[kMPT_SCALAR_SIZE - 1] = 1;
 
   /* Compute two_sum = sum_{i=0}^{63} 2^i */
-  memset(two_sum, 0, 32);
-  memcpy(two_pow, one, 32);
+  memset(two_sum, 0, kMPT_SCALAR_SIZE);
+  memcpy(two_pow, one, kMPT_SCALAR_SIZE);
   for (size_t i = 0; i < 64; i++)
   {
     secp256k1_mpt_scalar_add(two_sum, two_sum, two_pow);
@@ -341,11 +349,11 @@ compute_delta_scalars(const secp256k1_context *ctx,
   }
 
   /* Compute y_block_sum[j] = sum_{i=0}^{63} y^{64j + i} */
-  memcpy(y_pow, one, 32); /* y^0 */
+  memcpy(y_pow, one, kMPT_SCALAR_SIZE); /* y^0 */
 
   for (size_t j = 0; j < m; j++)
   {
-    memset(y_block_sum[j], 0, 32);
+    memset(y_block_sum[j], 0, kMPT_SCALAR_SIZE);
 
     for (size_t i = 0; i < 64; i++)
     {
@@ -355,7 +363,7 @@ compute_delta_scalars(const secp256k1_context *ctx,
   }
 }
 /**
- * u_flat and uinv_flat are arrays of length (rounds * 32):
+ * u_flat and uinv_flat are arrays of length (rounds * kMPT_SCALAR_SIZE):
  *   u_j     = u_flat    + 32*j
  *   u_j_inv = uinv_flat + 32*j
  */
@@ -373,17 +381,17 @@ int fold_generators(const secp256k1_context *ctx, secp256k1_pubkey *final_point,
     return 0;
 
   /* Allocate scalars for MSM: n * 32 bytes */
-  unsigned char *s_flat = (unsigned char *)malloc(n * 32);
+  unsigned char *s_flat = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
   if (!s_flat)
     return 0;
 
-  unsigned char current_s[32];
+  unsigned char current_s[kMPT_SCALAR_SIZE];
   int ok = 0;
 
   for (size_t i = 0; i < n; i++)
   {
     /* current_s = 1 */
-    memset(current_s, 0, 32);
+    memset(current_s, 0, kMPT_SCALAR_SIZE);
     current_s[31] = 1;
 
     for (size_t j = 0; j < rounds; j++)
@@ -391,8 +399,8 @@ int fold_generators(const secp256k1_context *ctx, secp256k1_pubkey *final_point,
       /* bit from MSB to LSB across 'rounds' bits */
       int bit = (int)((i >> (rounds - 1 - j)) & 1);
 
-      const unsigned char *uj = u_flat + 32 * j;
-      const unsigned char *ujinv = uinv_flat + 32 * j;
+      const unsigned char *uj = u_flat + kMPT_SCALAR_SIZE * j;
+      const unsigned char *ujinv = uinv_flat + kMPT_SCALAR_SIZE * j;
 
       if (!is_H)
       {
@@ -406,13 +414,13 @@ int fold_generators(const secp256k1_context *ctx, secp256k1_pubkey *final_point,
       }
     }
 
-    memcpy(s_flat + (i * 32), current_s, 32);
+    memcpy(s_flat + (i * kMPT_SCALAR_SIZE), current_s, kMPT_SCALAR_SIZE);
   }
 
   ok = secp256k1_bulletproof_ipa_msm(ctx, final_point, generators, s_flat, n);
 
-  OPENSSL_cleanse(current_s, 32);
-  OPENSSL_cleanse(s_flat, n * 32);
+  OPENSSL_cleanse(current_s, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(s_flat, n * kMPT_SCALAR_SIZE);
   free(s_flat);
 
   return ok;
@@ -421,7 +429,7 @@ int fold_generators(const secp256k1_context *ctx, secp256k1_pubkey *final_point,
  * Apply verifier-side IPA updates to P for `rounds` rounds.
  * Update rule per round i:
  *   P <- P + (u_i^2) * L_i + (u_i^{-2}) * R_i
- * u_flat / uinv_flat are (rounds * 32)-byte arrays:
+ * u_flat / uinv_flat are (rounds * kMPT_SCALAR_SIZE)-byte arrays:
  *   u_i    = u_flat    + 32*i
  *   u_iinv = uinv_flat + 32*i
  */
@@ -431,14 +439,14 @@ int apply_ipa_folding_to_P(const secp256k1_context *ctx, secp256k1_pubkey *P,
                            const unsigned char *u_flat,
                            const unsigned char *uinv_flat, size_t rounds)
 {
-  unsigned char u_sq[32], uinv_sq[32];
+  unsigned char u_sq[kMPT_SCALAR_SIZE], uinv_sq[kMPT_SCALAR_SIZE];
   secp256k1_pubkey tL, tR;
   const secp256k1_pubkey *pts[3];
 
   for (size_t i = 0; i < rounds; i++)
   {
-    const unsigned char *ui = u_flat + 32 * i;
-    const unsigned char *uiinv = uinv_flat + 32 * i;
+    const unsigned char *ui = u_flat + kMPT_SCALAR_SIZE * i;
+    const unsigned char *uiinv = uinv_flat + kMPT_SCALAR_SIZE * i;
 
     /* u_sq = u_i^2, uinv_sq = (u_i^{-1})^2 = u_i^{-2} */
     secp256k1_mpt_scalar_mul(u_sq, ui, ui);
@@ -448,8 +456,8 @@ int apply_ipa_folding_to_P(const secp256k1_context *ctx, secp256k1_pubkey *P,
     tL = L_vec[i];
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tL, u_sq))
     {
-      OPENSSL_cleanse(u_sq, 32);
-      OPENSSL_cleanse(uinv_sq, 32);
+      OPENSSL_cleanse(u_sq, kMPT_SCALAR_SIZE);
+      OPENSSL_cleanse(uinv_sq, kMPT_SCALAR_SIZE);
       return 0;
     }
 
@@ -457,8 +465,8 @@ int apply_ipa_folding_to_P(const secp256k1_context *ctx, secp256k1_pubkey *P,
     tR = R_vec[i];
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tR, uinv_sq))
     {
-      OPENSSL_cleanse(u_sq, 32);
-      OPENSSL_cleanse(uinv_sq, 32);
+      OPENSSL_cleanse(u_sq, kMPT_SCALAR_SIZE);
+      OPENSSL_cleanse(uinv_sq, kMPT_SCALAR_SIZE);
       return 0;
     }
 
@@ -470,15 +478,15 @@ int apply_ipa_folding_to_P(const secp256k1_context *ctx, secp256k1_pubkey *P,
     secp256k1_pubkey newP;
     if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts, 3))
     {
-      OPENSSL_cleanse(u_sq, 32);
-      OPENSSL_cleanse(uinv_sq, 32);
+      OPENSSL_cleanse(u_sq, kMPT_SCALAR_SIZE);
+      OPENSSL_cleanse(uinv_sq, kMPT_SCALAR_SIZE);
       return 0;
     }
     *P = newP;
   }
 
-  OPENSSL_cleanse(u_sq, 32);
-  OPENSSL_cleanse(uinv_sq, 32);
+  OPENSSL_cleanse(u_sq, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(uinv_sq, kMPT_SCALAR_SIZE);
   return 1;
 }
 
@@ -502,8 +510,8 @@ int secp256k1_bulletproof_ipa_compute_LR(
     const secp256k1_pubkey *H_L, const secp256k1_pubkey *H_R,
     const secp256k1_pubkey *U, const unsigned char *ux, size_t half_n)
 {
-  unsigned char cL[32], cR[32];
-  unsigned char cLux[32], cRux[32];
+  unsigned char cL[kMPT_SCALAR_SIZE], cR[kMPT_SCALAR_SIZE];
+  unsigned char cLux[kMPT_SCALAR_SIZE], cRux[kMPT_SCALAR_SIZE];
 
   secp256k1_pubkey acc, term;
   int acc_inited; /* Tracks if acc contains a valid point */
@@ -566,17 +574,17 @@ int secp256k1_bulletproof_ipa_compute_LR(
   }
   *R = acc;
 
-  OPENSSL_cleanse(cL, 32);
-  OPENSSL_cleanse(cR, 32);
-  OPENSSL_cleanse(cLux, 32);
-  OPENSSL_cleanse(cRux, 32);
+  OPENSSL_cleanse(cL, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cR, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cLux, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cRux, kMPT_SCALAR_SIZE);
   return 1;
 
 cleanup:
-  OPENSSL_cleanse(cL, 32);
-  OPENSSL_cleanse(cR, 32);
-  OPENSSL_cleanse(cLux, 32);
-  OPENSSL_cleanse(cRux, 32);
+  OPENSSL_cleanse(cL, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cR, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cLux, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(cRux, kMPT_SCALAR_SIZE);
   return 0;
 }
 /**
@@ -605,7 +613,7 @@ int secp256k1_bulletproof_ipa_compress_step(const secp256k1_context *ctx,
   size_t i;
   int ok = 0;
 
-  unsigned char t1[32], t2[32];
+  unsigned char t1[kMPT_SCALAR_SIZE], t2[kMPT_SCALAR_SIZE];
   secp256k1_pubkey left, right;
   const secp256k1_pubkey *pts[2];
 
@@ -622,11 +630,11 @@ int secp256k1_bulletproof_ipa_compress_step(const secp256k1_context *ctx,
 
   for (i = 0; i < half_n; ++i)
   {
-    unsigned char *aL = a + (i * 32);
-    unsigned char *aR = a + ((i + half_n) * 32);
+    unsigned char *aL = a + (i * kMPT_SCALAR_SIZE);
+    unsigned char *aR = a + ((i + half_n) * kMPT_SCALAR_SIZE);
 
-    unsigned char *bL = b + (i * 32);
-    unsigned char *bR = b + ((i + half_n) * 32);
+    unsigned char *bL = b + (i * kMPT_SCALAR_SIZE);
+    unsigned char *bR = b + ((i + half_n) * kMPT_SCALAR_SIZE);
 
     /* a'[i] = aL*x + aR*x_inv */
     secp256k1_mpt_scalar_mul(t1, aL, x);
@@ -666,8 +674,8 @@ int secp256k1_bulletproof_ipa_compress_step(const secp256k1_context *ctx,
   ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(t1, 32);
-  OPENSSL_cleanse(t2, 32);
+  OPENSSL_cleanse(t1, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(t2, kMPT_SCALAR_SIZE);
   return ok;
 }
 
@@ -689,8 +697,8 @@ int derive_ipa_binding_challenge(const secp256k1_context *ctx,
                                  const unsigned char *commit_inp_32,
                                  const unsigned char *dot_32)
 {
-  unsigned char hash_input[64];
-  unsigned char hash_output[32];
+  unsigned char hash_input[2 * kMPT_SCALAR_SIZE];
+  unsigned char hash_output[kMPT_HALF_SHA_SIZE];
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   int ok = 0;
 
@@ -698,13 +706,13 @@ int derive_ipa_binding_challenge(const secp256k1_context *ctx,
     return 0;
 
   /* 1. Build hash input = commit_inp || dot */
-  memcpy(hash_input, commit_inp_32, 32);
-  memcpy(hash_input + 32, dot_32, 32);
+  memcpy(hash_input, commit_inp_32, kMPT_SCALAR_SIZE);
+  memcpy(hash_input + kMPT_SCALAR_SIZE, dot_32, kMPT_SCALAR_SIZE);
 
   /* 2. Hash */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
-  if (EVP_DigestUpdate(mdctx, hash_input, 64) != 1)
+  if (EVP_DigestUpdate(mdctx, hash_input, 2 * kMPT_SCALAR_SIZE) != 1)
     goto cleanup;
   if (EVP_DigestFinal_ex(mdctx, hash_output, NULL) != 1)
     goto cleanup;
@@ -728,46 +736,45 @@ cleanup:
  * IMPORTANT: use the SAME exact logic in verifier.
  */
 
-int derive_ipa_round_challenge(const secp256k1_context *ctx,
-                               unsigned char u_out[32],
-                               const unsigned char last_challenge[32],
-                               const secp256k1_pubkey *L,
-                               const secp256k1_pubkey *R)
+int derive_ipa_round_challenge(
+    const secp256k1_context *ctx, unsigned char u_out[kMPT_SCALAR_SIZE],
+    const unsigned char last_challenge[kMPT_SCALAR_SIZE],
+    const secp256k1_pubkey *L, const secp256k1_pubkey *R)
 {
-  unsigned char L_ser[33], R_ser[33];
+  unsigned char L_ser[kMPT_PUBKEY_SIZE], R_ser[kMPT_PUBKEY_SIZE];
   size_t len;
-  unsigned char hash[32];
+  unsigned char hash[kMPT_HALF_SHA_SIZE];
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   int ok = 0;
 
   if (!mdctx)
     return 0;
 
-  len = 33;
+  len = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, L_ser, &len, L,
                                      SECP256K1_EC_COMPRESSED) ||
-      len != 33)
+      len != kMPT_PUBKEY_SIZE)
     goto cleanup;
 
-  len = 33;
+  len = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, R_ser, &len, R,
                                      SECP256K1_EC_COMPRESSED) ||
-      len != 33)
+      len != kMPT_PUBKEY_SIZE)
     goto cleanup;
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
-  if (EVP_DigestUpdate(mdctx, last_challenge, 32) != 1)
+  if (EVP_DigestUpdate(mdctx, last_challenge, kMPT_SCALAR_SIZE) != 1)
     goto cleanup;
-  if (EVP_DigestUpdate(mdctx, L_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, L_ser, kMPT_PUBKEY_SIZE) != 1)
     goto cleanup;
-  if (EVP_DigestUpdate(mdctx, R_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, R_ser, kMPT_PUBKEY_SIZE) != 1)
     goto cleanup;
   if (EVP_DigestFinal_ex(mdctx, hash, NULL) != 1)
     goto cleanup;
 
   secp256k1_mpt_scalar_reduce32(hash, hash);
-  memcpy(u_out, hash, 32);
+  memcpy(u_out, hash, kMPT_SCALAR_SIZE);
 
   if (secp256k1_ec_seckey_verify(ctx, u_out) != 1)
     goto cleanup;
@@ -870,17 +877,19 @@ static void bulletproof_be32_encode(unsigned char out[4], uint32_t x)
 int secp256k1_bulletproof_run_ipa_prover(
     const secp256k1_context *ctx, const secp256k1_pubkey *g,
     secp256k1_pubkey *G_vec, secp256k1_pubkey *H_vec, unsigned char *a_vec,
-    unsigned char *b_vec, size_t n, const unsigned char ipa_transcript_id[32],
-    const unsigned char ux_scalar[32], secp256k1_pubkey *L_out,
+    unsigned char *b_vec, size_t n,
+    const unsigned char ipa_transcript_id[kMPT_SCALAR_SIZE],
+    const unsigned char ux_scalar[kMPT_SCALAR_SIZE], secp256k1_pubkey *L_out,
     secp256k1_pubkey *R_out, size_t max_rounds, size_t *rounds_out,
-    unsigned char a_final[32], unsigned char b_final[32])
+    unsigned char a_final[kMPT_SCALAR_SIZE],
+    unsigned char b_final[kMPT_SCALAR_SIZE])
 {
   size_t rounds = 0;
   size_t cur_n = n;
   int ok = 0;
 
-  unsigned char u_scalar[32], u_inv[32];
-  unsigned char last_challenge[32];
+  unsigned char u_scalar[kMPT_SCALAR_SIZE], u_inv[kMPT_SCALAR_SIZE];
+  unsigned char last_challenge[kMPT_SCALAR_SIZE];
 
   /* Validate n is power of 2 */
   if (n == 0 || (n & (n - 1)) != 0)
@@ -899,7 +908,7 @@ int secp256k1_bulletproof_run_ipa_prover(
     return 0;
 
   /* Seed transcript */
-  memcpy(last_challenge, ipa_transcript_id, 32);
+  memcpy(last_challenge, ipa_transcript_id, kMPT_SCALAR_SIZE);
 
   for (size_t r = 0; r < rounds; ++r)
   {
@@ -908,9 +917,9 @@ int secp256k1_bulletproof_run_ipa_prover(
 
     /* 1) Compute cross-term commitments Lr, Rr */
     if (!secp256k1_bulletproof_ipa_compute_LR(
-            ctx, &Lr, &Rr, a_vec, a_vec + half_n * 32, b_vec,
-            b_vec + half_n * 32, G_vec, G_vec + half_n, H_vec, H_vec + half_n,
-            g, ux_scalar, half_n))
+            ctx, &Lr, &Rr, a_vec, a_vec + half_n * kMPT_SCALAR_SIZE, b_vec,
+            b_vec + half_n * kMPT_SCALAR_SIZE, G_vec, G_vec + half_n, H_vec,
+            H_vec + half_n, g, ux_scalar, half_n))
       goto cleanup;
 
     /* 2) Store L/R */
@@ -927,7 +936,7 @@ int secp256k1_bulletproof_run_ipa_prover(
       goto cleanup;
 
     /* 5) Update transcript chaining state */
-    memcpy(last_challenge, u_scalar, 32);
+    memcpy(last_challenge, u_scalar, kMPT_SCALAR_SIZE);
 
     /* 6) Fold vectors in-place */
     if (!secp256k1_bulletproof_ipa_compress_step(
@@ -938,16 +947,16 @@ int secp256k1_bulletproof_run_ipa_prover(
   }
 
   /* Final folded scalars */
-  memcpy(a_final, a_vec, 32);
-  memcpy(b_final, b_vec, 32);
+  memcpy(a_final, a_vec, kMPT_SCALAR_SIZE);
+  memcpy(b_final, b_vec, kMPT_SCALAR_SIZE);
 
   if (rounds_out)
     *rounds_out = rounds;
   ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(u_scalar, 32);
-  OPENSSL_cleanse(u_inv, 32);
+  OPENSSL_cleanse(u_scalar, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(u_inv, kMPT_SCALAR_SIZE);
   return ok;
 }
 
@@ -985,8 +994,10 @@ static int ipa_verify_explicit(
     const secp256k1_pubkey *L_vec, /* length = rounds */
     const secp256k1_pubkey *R_vec, /* length = rounds */
     size_t n,                      /* total vector length (64*m) */
-    const unsigned char a_final[32], const unsigned char b_final[32],
-    const unsigned char ux[32], const unsigned char ipa_transcript_id[32])
+    const unsigned char a_final[kMPT_SCALAR_SIZE],
+    const unsigned char b_final[kMPT_SCALAR_SIZE],
+    const unsigned char ux[kMPT_SCALAR_SIZE],
+    const unsigned char ipa_transcript_id[kMPT_SCALAR_SIZE])
 {
   secp256k1_pubkey P = *P_in;
   secp256k1_pubkey Gf, Hf, RHS, tmp;
@@ -1000,19 +1011,19 @@ static int ipa_verify_explicit(
   size_t rounds = bp_ipa_rounds(n);
 
   /* --- allocate u / u_inv --- */
-  unsigned char *u_flat = (unsigned char *)malloc(rounds * 32);
-  unsigned char *uinv_flat = (unsigned char *)malloc(rounds * 32);
+  unsigned char *u_flat = (unsigned char *)malloc(rounds * kMPT_SCALAR_SIZE);
+  unsigned char *uinv_flat = (unsigned char *)malloc(rounds * kMPT_SCALAR_SIZE);
   if (!u_flat || !uinv_flat)
     goto cleanup_alloc;
 
-  unsigned char last[32];
-  memcpy(last, ipa_transcript_id, 32);
+  unsigned char last[kMPT_SCALAR_SIZE];
+  memcpy(last, ipa_transcript_id, kMPT_SCALAR_SIZE);
 
   /* ---- 1. Re-derive u_i ---- */
   for (size_t i = 0; i < rounds; i++)
   {
-    unsigned char *ui = u_flat + 32 * i;
-    unsigned char *uiinv = uinv_flat + 32 * i;
+    unsigned char *ui = u_flat + kMPT_SCALAR_SIZE * i;
+    unsigned char *uiinv = uinv_flat + kMPT_SCALAR_SIZE * i;
 
     if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
       goto cleanup;
@@ -1021,7 +1032,7 @@ static int ipa_verify_explicit(
     if (!secp256k1_ec_seckey_verify(ctx, uiinv))
       goto cleanup;
 
-    memcpy(last, ui, 32);
+    memcpy(last, ui, kMPT_SCALAR_SIZE);
   }
 
   /* ---- 2. Fold generators ---- */
@@ -1052,7 +1063,7 @@ static int ipa_verify_explicit(
   }
 
   {
-    unsigned char ab[32], ab_ux[32];
+    unsigned char ab[kMPT_SCALAR_SIZE], ab_ux[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_mul(ab, a_final, b_final);
     secp256k1_mpt_scalar_mul(ab_ux, ab, ux);
 
@@ -1065,8 +1076,8 @@ static int ipa_verify_explicit(
         goto cleanup;
     }
 
-    OPENSSL_cleanse(ab, 32);
-    OPENSSL_cleanse(ab_ux, 32);
+    OPENSSL_cleanse(ab, kMPT_SCALAR_SIZE);
+    OPENSSL_cleanse(ab_ux, kMPT_SCALAR_SIZE);
   }
 
   if (!RHS_inited)
@@ -1081,8 +1092,8 @@ static int ipa_verify_explicit(
     ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(u_flat, rounds * 32);
-  OPENSSL_cleanse(uinv_flat, rounds * 32);
+  OPENSSL_cleanse(u_flat, rounds * kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(uinv_flat, rounds * kMPT_SCALAR_SIZE);
 
 cleanup_alloc:
   free(u_flat);
@@ -1111,11 +1122,11 @@ int secp256k1_bulletproof_compute_vectors_block(
   const size_t offset = BP_VALUE_BITS * block_index;
 
   /* Scalars */
-  unsigned char one[32] = {0};
-  unsigned char minus_one[32];
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  unsigned char minus_one[kMPT_SCALAR_SIZE];
 
-  one[31] = 1;
-  memcpy(minus_one, one, 32);
+  one[kMPT_SCALAR_SIZE - 1] = 1;
+  memcpy(minus_one, one, kMPT_SCALAR_SIZE);
   secp256k1_mpt_scalar_negate(minus_one, minus_one);
 
   /* ---- 1. Encode value bits into al/ar ---- */
@@ -1126,10 +1137,10 @@ int secp256k1_bulletproof_compute_vectors_block(
     unsigned char mask =
         (unsigned char)(-bit); /* 0xFF if bit==1, 0x00 if bit==0 */
 
-    for (int b = 0; b < 32; b++)
+    for (int b = 0; b < (int)kMPT_SCALAR_SIZE; b++)
     {
-      al[idx * 32 + b] = one[b] & mask;
-      ar[idx * 32 + b] = minus_one[b] & ~mask;
+      al[idx * kMPT_SCALAR_SIZE + b] = one[b] & mask;
+      ar[idx * kMPT_SCALAR_SIZE + b] = minus_one[b] & ~mask;
     }
   }
   /* ---- 2. Generate random blinding vectors sl/sr ---- */
@@ -1137,11 +1148,11 @@ int secp256k1_bulletproof_compute_vectors_block(
   {
     size_t idx = offset + i;
 
-    if (!generate_random_scalar(ctx, sl + idx * 32))
+    if (!generate_random_scalar(ctx, sl + idx * kMPT_SCALAR_SIZE))
     {
       goto cleanup;
     }
-    if (!generate_random_scalar(ctx, sr + idx * 32))
+    if (!generate_random_scalar(ctx, sr + idx * kMPT_SCALAR_SIZE))
     {
       goto cleanup;
     }
@@ -1151,10 +1162,14 @@ int secp256k1_bulletproof_compute_vectors_block(
 
 cleanup:
   /* Wipe only the affected block */
-  OPENSSL_cleanse(al + offset * 32, BP_VALUE_BITS * 32);
-  OPENSSL_cleanse(ar + offset * 32, BP_VALUE_BITS * 32);
-  OPENSSL_cleanse(sl + offset * 32, BP_VALUE_BITS * 32);
-  OPENSSL_cleanse(sr + offset * 32, BP_VALUE_BITS * 32);
+  OPENSSL_cleanse(al + offset * kMPT_SCALAR_SIZE,
+                  BP_VALUE_BITS * kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(ar + offset * kMPT_SCALAR_SIZE,
+                  BP_VALUE_BITS * kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(sl + offset * kMPT_SCALAR_SIZE,
+                  BP_VALUE_BITS * kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(sr + offset * kMPT_SCALAR_SIZE,
+                  BP_VALUE_BITS * kMPT_SCALAR_SIZE);
   return 0;
 }
 /**
@@ -1199,10 +1214,10 @@ int secp256k1_bulletproof_create_commitment(
 /* Helper for a vector 0 */
 static int scalar_vector_all_zero(const unsigned char *scalars, size_t n)
 {
-  unsigned char zero[32] = {0};
+  unsigned char zero[kMPT_SCALAR_SIZE] = {0};
   for (size_t i = 0; i < n; ++i)
   {
-    if (memcmp(scalars + 32 * i, zero, 32) != 0)
+    if (memcmp(scalars + kMPT_SCALAR_SIZE * i, zero, kMPT_SCALAR_SIZE) != 0)
       return 0; /* found non-zero */
   }
   return 1; /* all zero */
@@ -1301,21 +1316,23 @@ int secp256k1_bulletproof_prove_agg(
       (secp256k1_pubkey *)malloc(n * sizeof(secp256k1_pubkey));
   secp256k1_pubkey *H_prime =
       (secp256k1_pubkey *)malloc(n * sizeof(secp256k1_pubkey));
-  unsigned char *al = (unsigned char *)malloc(n * 32);
-  unsigned char *ar = (unsigned char *)malloc(n * 32);
-  unsigned char *sl = (unsigned char *)malloc(n * 32);
-  unsigned char *sr = (unsigned char *)malloc(n * 32);
-  unsigned char *l_vec = (unsigned char *)malloc(n * 32);
-  unsigned char *r_vec = (unsigned char *)malloc(n * 32);
-  unsigned char *r1_vec = (unsigned char *)malloc(n * 32);
+  unsigned char *al = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *ar = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *sl = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *sr = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *l_vec = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *r_vec = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  unsigned char *r1_vec = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
 
   secp256k1_pubkey *L_vec =
       (secp256k1_pubkey *)malloc(rounds * sizeof(secp256k1_pubkey));
   secp256k1_pubkey *R_vec =
       (secp256k1_pubkey *)malloc(rounds * sizeof(secp256k1_pubkey));
 
-  unsigned char *y_powers = (unsigned char *)malloc(n * 32); /* y^i */
-  unsigned char *z_j2 = (unsigned char *)malloc(m * 32);     /* z^(j+2) */
+  unsigned char *y_powers =
+      (unsigned char *)malloc(n * kMPT_SCALAR_SIZE); /* y^i */
+  unsigned char *z_j2 =
+      (unsigned char *)malloc(m * kMPT_SCALAR_SIZE); /* z^(j+2) */
 
   if (!G_vec || !H_vec || !H_prime || !al || !ar || !sl || !sr || !l_vec ||
       !r_vec || !r1_vec || !L_vec || !R_vec || !y_powers || !z_j2)
@@ -1326,22 +1343,24 @@ int secp256k1_bulletproof_prove_agg(
   /* ---- 2. Scalars / points ---- */
   secp256k1_pubkey A, S, T1, T2, U;
 
-  unsigned char alpha[32], rho[32];
-  unsigned char tau1[32], tau2[32];
-  unsigned char t1[32], t2[32];
-  unsigned char t_hat[32], tau_x[32], mu[32];
-  unsigned char a_final[32], b_final[32];
+  unsigned char alpha[kMPT_SCALAR_SIZE], rho[kMPT_SCALAR_SIZE];
+  unsigned char tau1[kMPT_SCALAR_SIZE], tau2[kMPT_SCALAR_SIZE];
+  unsigned char t1[kMPT_SCALAR_SIZE], t2[kMPT_SCALAR_SIZE];
+  unsigned char t_hat[kMPT_SCALAR_SIZE], tau_x[kMPT_SCALAR_SIZE],
+      mu[kMPT_SCALAR_SIZE];
+  unsigned char a_final[kMPT_SCALAR_SIZE], b_final[kMPT_SCALAR_SIZE];
 
-  unsigned char y[32], z[32], x[32];
-  unsigned char z_sq[32], z_neg[32], x_sq[32];
-  unsigned char ux_scalar[32];
-  unsigned char ipa_transcript[32];
+  unsigned char y[kMPT_SCALAR_SIZE], z[kMPT_SCALAR_SIZE], x[kMPT_SCALAR_SIZE];
+  unsigned char z_sq[kMPT_SCALAR_SIZE], z_neg[kMPT_SCALAR_SIZE],
+      x_sq[kMPT_SCALAR_SIZE];
+  unsigned char ux_scalar[kMPT_SCALAR_SIZE];
+  unsigned char ipa_transcript[kMPT_SCALAR_SIZE];
 
-  unsigned char one[32] = {0};
-  one[31] = 1;
-  unsigned char minus_one[32];
+  unsigned char one[kMPT_SCALAR_SIZE] = {0};
+  one[kMPT_SCALAR_SIZE - 1] = 1;
+  unsigned char minus_one[kMPT_SCALAR_SIZE];
   secp256k1_mpt_scalar_negate(minus_one, one);
-  unsigned char zero[32] = {0};
+  unsigned char zero[kMPT_SCALAR_SIZE] = {0};
 
   /* ---- 3. Generator vectors ---- */
   if (!secp256k1_mpt_get_generator_vector(ctx, G_vec, n,
@@ -1366,17 +1385,17 @@ int secp256k1_bulletproof_prove_agg(
     for (size_t i = 0; i < BP_VALUE_BITS; i++)
     {
       const size_t k = j * BP_VALUE_BITS + i; /* 0..n-1 */
-      unsigned char *al_k = al + 32 * k;
-      unsigned char *ar_k = ar + 32 * k;
-      unsigned char *sl_k = sl + 32 * k;
-      unsigned char *sr_k = sr + 32 * k;
+      unsigned char *al_k = al + kMPT_SCALAR_SIZE * k;
+      unsigned char *ar_k = ar + kMPT_SCALAR_SIZE * k;
+      unsigned char *sl_k = sl + kMPT_SCALAR_SIZE * k;
+      unsigned char *sr_k = sr + kMPT_SCALAR_SIZE * k;
 
       /* Constant-time bit decomposition to prevent cache-timing leaks */
       unsigned char bit = (unsigned char)((v >> i) & 1);
       unsigned char mask =
           (unsigned char)(0 - bit); /* 0xFF if bit==1, 0x00 if bit==0 */
 
-      for (int b = 0; b < 32; b++)
+      for (int b = 0; b < (int)kMPT_SCALAR_SIZE; b++)
       {
         al_k[b] = one[b] & mask;
         ar_k[b] = minus_one[b] & ~mask;
@@ -1419,8 +1438,8 @@ int secp256k1_bulletproof_prove_agg(
    * (CMPT appendix.tex, "Fiat-Shamir Challenges".)
    */
   {
-    unsigned char A_ser[33], S_ser[33];
-    unsigned char gens_digest[32];
+    unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE];
+    unsigned char gens_digest[kMPT_HALF_SHA_SIZE];
     unsigned char N_be[4], m_be[4];
     size_t len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
@@ -1438,19 +1457,19 @@ int secp256k1_bulletproof_prove_agg(
     bulletproof_be32_encode(N_be, (uint32_t)BP_VALUE_BITS);
     bulletproof_be32_encode(m_be, (uint32_t)m);
 
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
 
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1486,39 +1505,41 @@ int secp256k1_bulletproof_prove_agg(
     for (size_t i = 0; i < m; i++)
     {
       secp256k1_pubkey V_temp;
-      unsigned char V_ser[33];
-      size_t v_len = 33;
+      unsigned char V_ser[kMPT_PUBKEY_SIZE];
+      size_t v_len = kMPT_PUBKEY_SIZE;
       if (!secp256k1_bulletproof_create_commitment(
-              ctx, &V_temp, values[i], blindings_flat + 32 * i, h_generator))
+              ctx, &V_temp, values[i], blindings_flat + kMPT_SCALAR_SIZE * i,
+              h_generator))
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
       if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
                                          SECP256K1_EC_COMPRESSED) ||
-          v_len != 33)
+          v_len != kMPT_PUBKEY_SIZE)
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
-      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      if (EVP_DigestUpdate(mdctx, V_ser, kMPT_PUBKEY_SIZE) != 1)
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
     }
 
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (context_id &&
+        EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1560,44 +1581,46 @@ int secp256k1_bulletproof_prove_agg(
     for (size_t i = 0; i < m; i++)
     {
       secp256k1_pubkey V_temp;
-      unsigned char V_ser[33];
-      size_t v_len = 33;
+      unsigned char V_ser[kMPT_PUBKEY_SIZE];
+      size_t v_len = kMPT_PUBKEY_SIZE;
       if (!secp256k1_bulletproof_create_commitment(
-              ctx, &V_temp, values[i], blindings_flat + 32 * i, h_generator))
+              ctx, &V_temp, values[i], blindings_flat + kMPT_SCALAR_SIZE * i,
+              h_generator))
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
       if (!secp256k1_ec_pubkey_serialize(ctx, V_ser, &v_len, &V_temp,
                                          SECP256K1_EC_COMPRESSED) ||
-          v_len != 33)
+          v_len != kMPT_PUBKEY_SIZE)
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
-      if (EVP_DigestUpdate(mdctx, V_ser, 33) != 1)
+      if (EVP_DigestUpdate(mdctx, V_ser, kMPT_PUBKEY_SIZE) != 1)
       {
         fs_ok = 0;
         goto fs_cleanup;
       }
     }
 
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (context_id &&
+        EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1609,7 +1632,7 @@ int secp256k1_bulletproof_prove_agg(
     }
     secp256k1_mpt_scalar_reduce32(z, z);
 
-    memcpy(z_neg, z, 32);
+    memcpy(z_neg, z, kMPT_SCALAR_SIZE);
     secp256k1_mpt_scalar_negate(z_neg, z_neg);
 
   fs_cleanup:
@@ -1622,39 +1645,40 @@ int secp256k1_bulletproof_prove_agg(
 
   /* y_powers[k] = y^k */
   {
-    unsigned char ypow[32];
-    memcpy(ypow, one, 32);
+    unsigned char ypow[kMPT_SCALAR_SIZE];
+    memcpy(ypow, one, kMPT_SCALAR_SIZE);
 
     for (size_t k = 0; k < n; k++)
     {
-      memcpy(y_powers + 32 * k, ypow, 32);
+      memcpy(y_powers + kMPT_SCALAR_SIZE * k, ypow, kMPT_SCALAR_SIZE);
       secp256k1_mpt_scalar_mul(ypow, ypow, y);
     }
-    OPENSSL_cleanse(ypow, 32);
+    OPENSSL_cleanse(ypow, kMPT_SCALAR_SIZE);
   }
 
   /* z_j2[j] = z^(j+2) */
-  compute_z_pows_j2(ctx, (unsigned char (*)[32])z_j2, z, m);
+  compute_z_pows_j2(ctx, (unsigned char (*)[kMPT_SCALAR_SIZE])z_j2, z, m);
 
   /* l0, r0, r1 */
   for (size_t block = 0; block < m; block++)
   {
-    const unsigned char *zblk = z_j2 + 32 * block; /* z^(block+2) */
+    const unsigned char *zblk =
+        z_j2 + kMPT_SCALAR_SIZE * block; /* z^(block+2) */
 
     for (size_t i = 0; i < BP_VALUE_BITS; i++)
     {
       size_t k = block * BP_VALUE_BITS + i;
 
-      unsigned char *l0 = l_vec + 32 * k;
-      unsigned char *r0 = r_vec + 32 * k;
-      unsigned char *r1 = r1_vec + 32 * k;
+      unsigned char *l0 = l_vec + kMPT_SCALAR_SIZE * k;
+      unsigned char *r0 = r_vec + kMPT_SCALAR_SIZE * k;
+      unsigned char *r1 = r1_vec + kMPT_SCALAR_SIZE * k;
 
-      const unsigned char *al_k = al + 32 * k;
-      const unsigned char *ar_k = ar + 32 * k;
-      const unsigned char *sr_k = sr + 32 * k;
-      const unsigned char *yk = y_powers + 32 * k;
+      const unsigned char *al_k = al + kMPT_SCALAR_SIZE * k;
+      const unsigned char *ar_k = ar + kMPT_SCALAR_SIZE * k;
+      const unsigned char *sr_k = sr + kMPT_SCALAR_SIZE * k;
+      const unsigned char *yk = y_powers + kMPT_SCALAR_SIZE * k;
 
-      unsigned char two_i[32] = {0};
+      unsigned char two_i[kMPT_SCALAR_SIZE] = {0};
       two_i[31 - (i >> 3)] = (unsigned char)(1u << (i & 7));
 
       /* l0 = aL - z */
@@ -1662,7 +1686,7 @@ int secp256k1_bulletproof_prove_agg(
 
       /* r0 = y^k * (aR + z) + z^(block+2) * 2^i */
       {
-        unsigned char tmp1[32], tmp2[32];
+        unsigned char tmp1[kMPT_SCALAR_SIZE], tmp2[kMPT_SCALAR_SIZE];
 
         /* tmp1 = aR + z */
         secp256k1_mpt_scalar_add(tmp1, ar_k, z);
@@ -1676,8 +1700,8 @@ int secp256k1_bulletproof_prove_agg(
         /* r0 += tmp2 */
         secp256k1_mpt_scalar_add(r0, r0, tmp2);
 
-        OPENSSL_cleanse(tmp1, 32);
-        OPENSSL_cleanse(tmp2, 32);
+        OPENSSL_cleanse(tmp1, kMPT_SCALAR_SIZE);
+        OPENSSL_cleanse(tmp2, kMPT_SCALAR_SIZE);
       }
 
       /* r1 = sR * y^k */
@@ -1687,14 +1711,14 @@ int secp256k1_bulletproof_prove_agg(
 
   /* t1 = <l0, r1> + <l1, r0> */
   {
-    unsigned char dot1[32], dot2[32];
+    unsigned char dot1[kMPT_SCALAR_SIZE], dot2[kMPT_SCALAR_SIZE];
     if (!secp256k1_bulletproof_ipa_dot(ctx, dot1, l_vec, r1_vec, n))
       goto cleanup;
     if (!secp256k1_bulletproof_ipa_dot(ctx, dot2, sl, r_vec, n))
       goto cleanup;
     secp256k1_mpt_scalar_add(t1, dot1, dot2);
-    OPENSSL_cleanse(dot1, 32);
-    OPENSSL_cleanse(dot2, 32);
+    OPENSSL_cleanse(dot1, kMPT_SCALAR_SIZE);
+    OPENSSL_cleanse(dot2, kMPT_SCALAR_SIZE);
   }
 
   /* t2 = <l1, r1> */
@@ -1719,7 +1743,7 @@ int secp256k1_bulletproof_prove_agg(
     if (!mpt_ct_pubkey_tweak_mul(ctx, &tB, tau1))
       goto cleanup;
 
-    if (memcmp(t1, zero, 32) == 0)
+    if (memcmp(t1, zero, kMPT_SCALAR_SIZE) == 0)
     {
       T1 = tB;
     }
@@ -1743,7 +1767,7 @@ int secp256k1_bulletproof_prove_agg(
     if (!mpt_ct_pubkey_tweak_mul(ctx, &tB, tau2))
       goto cleanup;
 
-    if (memcmp(t2, zero, 32) == 0)
+    if (memcmp(t2, zero, kMPT_SCALAR_SIZE) == 0)
     {
       T2 = tB;
     }
@@ -1761,7 +1785,8 @@ int secp256k1_bulletproof_prove_agg(
   /* ---- 9. Challenge x ---- */
   /* x = H(A || S || y || z || T1 || T2 || context_id) */
   {
-    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE],
+        T1_ser[kMPT_PUBKEY_SIZE], T2_ser[kMPT_PUBKEY_SIZE];
     size_t len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     int fs_ok = 0;
@@ -1769,48 +1794,49 @@ int secp256k1_bulletproof_prove_agg(
     if (!mdctx)
       goto cleanup;
 
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto fs_x_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto fs_x_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto fs_x_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto fs_x_cleanup;
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, z, kMPT_SCALAR_SIZE) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T1_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_x_cleanup;
-    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T2_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_x_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (context_id &&
+        EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
       goto fs_x_cleanup;
     if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
       goto fs_x_cleanup;
 
     secp256k1_mpt_scalar_reduce32(x, x);
-    if (memcmp(x, zero, 32) == 0)
+    if (memcmp(x, zero, kMPT_SCALAR_SIZE) == 0)
       goto fs_x_cleanup; /* avoid infinity later */
 
     fs_ok = 1;
@@ -1824,17 +1850,19 @@ int secp256k1_bulletproof_prove_agg(
   /* ---- 10. Evaluate l(x), r(x), t_hat ---- */
   for (size_t k = 0; k < n; k++)
   {
-    unsigned char tmp[32];
+    unsigned char tmp[kMPT_SCALAR_SIZE];
 
     /* l = l0 + sL*x */
-    secp256k1_mpt_scalar_mul(tmp, sl + 32 * k, x);
-    secp256k1_mpt_scalar_add(l_vec + 32 * k, l_vec + 32 * k, tmp);
+    secp256k1_mpt_scalar_mul(tmp, sl + kMPT_SCALAR_SIZE * k, x);
+    secp256k1_mpt_scalar_add(l_vec + kMPT_SCALAR_SIZE * k,
+                             l_vec + kMPT_SCALAR_SIZE * k, tmp);
 
     /* r = r0 + r1*x */
-    secp256k1_mpt_scalar_mul(tmp, r1_vec + 32 * k, x);
-    secp256k1_mpt_scalar_add(r_vec + 32 * k, r_vec + 32 * k, tmp);
+    secp256k1_mpt_scalar_mul(tmp, r1_vec + kMPT_SCALAR_SIZE * k, x);
+    secp256k1_mpt_scalar_add(r_vec + kMPT_SCALAR_SIZE * k,
+                             r_vec + kMPT_SCALAR_SIZE * k, tmp);
 
-    OPENSSL_cleanse(tmp, 32);
+    OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
   }
 
   if (!secp256k1_bulletproof_ipa_dot(ctx, t_hat, l_vec, r_vec, n))
@@ -1846,28 +1874,29 @@ int secp256k1_bulletproof_prove_agg(
   /* tau_x = tau2*x^2 + tau1*x + sum_j z^(j+2) * blinding_j */
   secp256k1_mpt_scalar_mul(tau_x, tau2, x_sq);
   {
-    unsigned char tmp[32];
+    unsigned char tmp[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_mul(tmp, tau1, x);
     secp256k1_mpt_scalar_add(tau_x, tau_x, tmp);
 
     /* + sum_j z^(j+2) * r_j */
     for (size_t j = 0; j < m; j++)
     {
-      unsigned char add[32];
-      secp256k1_mpt_scalar_mul(add, z_j2 + 32 * j, blindings_flat + 32 * j);
+      unsigned char add[kMPT_SCALAR_SIZE];
+      secp256k1_mpt_scalar_mul(add, z_j2 + kMPT_SCALAR_SIZE * j,
+                               blindings_flat + kMPT_SCALAR_SIZE * j);
       secp256k1_mpt_scalar_add(tau_x, tau_x, add);
-      OPENSSL_cleanse(add, 32);
+      OPENSSL_cleanse(add, kMPT_SCALAR_SIZE);
     }
 
-    OPENSSL_cleanse(tmp, 32);
+    OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
   }
 
   /* mu = alpha + rho*x */
   {
-    unsigned char tmp[32];
+    unsigned char tmp[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_mul(tmp, rho, x);
     secp256k1_mpt_scalar_add(mu, alpha, tmp);
-    OPENSSL_cleanse(tmp, 32);
+    OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
   }
 
   /* ---- 12. IPA transcript + ux (binding), and H' normalization ---- */
@@ -1884,7 +1913,8 @@ int secp256k1_bulletproof_prove_agg(
    * (All points are serialized compressed 33 bytes.)
    */
   {
-    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE],
+        T1_ser[kMPT_PUBKEY_SIZE], T2_ser[kMPT_PUBKEY_SIZE];
     size_t ser_len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     int fs_ok = 0;
@@ -1892,50 +1922,51 @@ int secp256k1_bulletproof_prove_agg(
     if (!mdctx)
       goto cleanup;
 
-    ser_len = 33;
+    ser_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &ser_len, &A,
                                        SECP256K1_EC_COMPRESSED) ||
-        ser_len != 33)
+        ser_len != kMPT_PUBKEY_SIZE)
       goto fs_ipa_cleanup;
 
-    ser_len = 33;
+    ser_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
                                        SECP256K1_EC_COMPRESSED) ||
-        ser_len != 33)
+        ser_len != kMPT_PUBKEY_SIZE)
       goto fs_ipa_cleanup;
 
-    ser_len = 33;
+    ser_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &ser_len, &T1,
                                        SECP256K1_EC_COMPRESSED) ||
-        ser_len != 33)
+        ser_len != kMPT_PUBKEY_SIZE)
       goto fs_ipa_cleanup;
 
-    ser_len = 33;
+    ser_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &ser_len, &T2,
                                        SECP256K1_EC_COMPRESSED) ||
-        ser_len != 33)
+        ser_len != kMPT_PUBKEY_SIZE)
       goto fs_ipa_cleanup;
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto fs_ipa_cleanup;
 
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T1_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T2_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, z, kMPT_SCALAR_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, x, kMPT_SCALAR_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, t_hat, kMPT_SCALAR_SIZE) != 1)
       goto fs_ipa_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (context_id &&
+        EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
       goto fs_ipa_cleanup;
 
     if (EVP_DigestFinal_ex(mdctx, ipa_transcript, NULL) != 1)
@@ -1960,13 +1991,13 @@ int secp256k1_bulletproof_prove_agg(
    *  - If y==0 (mod q), abort (cannot invert).
    */
   {
-    unsigned char y_inv[32];
-    unsigned char y_inv_pow[32]; /* (y^{-1})^k */
-    if (memcmp(y, zero, 32) == 0)
+    unsigned char y_inv[kMPT_SCALAR_SIZE];
+    unsigned char y_inv_pow[kMPT_SCALAR_SIZE]; /* (y^{-1})^k */
+    if (memcmp(y, zero, kMPT_SCALAR_SIZE) == 0)
       goto cleanup;
 
     secp256k1_mpt_scalar_inverse(y_inv, y);
-    memcpy(y_inv_pow, one, 32);
+    memcpy(y_inv_pow, one, kMPT_SCALAR_SIZE);
 
     for (size_t k = 0; k < n; k++)
     {
@@ -1977,8 +2008,8 @@ int secp256k1_bulletproof_prove_agg(
       secp256k1_mpt_scalar_mul(y_inv_pow, y_inv_pow, y_inv);
     }
 
-    OPENSSL_cleanse(y_inv, 32);
-    OPENSSL_cleanse(y_inv_pow, 32);
+    OPENSSL_cleanse(y_inv, kMPT_SCALAR_SIZE);
+    OPENSSL_cleanse(y_inv_pow, kMPT_SCALAR_SIZE);
   }
 
   /* 12d. Run IPA prover */
@@ -2029,13 +2060,13 @@ int secp256k1_bulletproof_prove_agg(
 #define SER_PT(P)                                                              \
   do                                                                           \
   {                                                                            \
-    ser_len = 33;                                                              \
+    ser_len = kMPT_PUBKEY_SIZE;                                                \
     if (!secp256k1_ec_pubkey_serialize(ctx, ptr, &ser_len, &(P),               \
                                        SECP256K1_EC_COMPRESSED))               \
       goto cleanup;                                                            \
-    if (ser_len != 33)                                                         \
+    if (ser_len != kMPT_PUBKEY_SIZE)                                           \
       goto cleanup;                                                            \
-    ptr += 33;                                                                 \
+    ptr += kMPT_PUBKEY_SIZE;                                                   \
   } while (0)
 
     SER_PT(A);
@@ -2048,16 +2079,16 @@ int secp256k1_bulletproof_prove_agg(
     for (size_t r = 0; r < rounds; r++)
       SER_PT(R_vec[r]);
 
-    memcpy(ptr, a_final, 32);
-    ptr += 32;
-    memcpy(ptr, b_final, 32);
-    ptr += 32;
-    memcpy(ptr, t_hat, 32);
-    ptr += 32;
-    memcpy(ptr, tau_x, 32);
-    ptr += 32;
-    memcpy(ptr, mu, 32);
-    ptr += 32;
+    memcpy(ptr, a_final, kMPT_SCALAR_SIZE);
+    ptr += kMPT_SCALAR_SIZE;
+    memcpy(ptr, b_final, kMPT_SCALAR_SIZE);
+    ptr += kMPT_SCALAR_SIZE;
+    memcpy(ptr, t_hat, kMPT_SCALAR_SIZE);
+    ptr += kMPT_SCALAR_SIZE;
+    memcpy(ptr, tau_x, kMPT_SCALAR_SIZE);
+    ptr += kMPT_SCALAR_SIZE;
+    memcpy(ptr, mu, kMPT_SCALAR_SIZE);
+    ptr += kMPT_SCALAR_SIZE;
 
 #undef SER_PT
 
@@ -2074,38 +2105,38 @@ cleanup:
 
   /* wipe sensitive scalars; free buffers */
   if (al)
-    OPENSSL_cleanse(al, n * 32);
+    OPENSSL_cleanse(al, n * kMPT_SCALAR_SIZE);
   if (ar)
-    OPENSSL_cleanse(ar, n * 32);
+    OPENSSL_cleanse(ar, n * kMPT_SCALAR_SIZE);
   if (sl)
-    OPENSSL_cleanse(sl, n * 32);
+    OPENSSL_cleanse(sl, n * kMPT_SCALAR_SIZE);
   if (sr)
-    OPENSSL_cleanse(sr, n * 32);
+    OPENSSL_cleanse(sr, n * kMPT_SCALAR_SIZE);
   if (l_vec)
-    OPENSSL_cleanse(l_vec, n * 32);
+    OPENSSL_cleanse(l_vec, n * kMPT_SCALAR_SIZE);
   if (r_vec)
-    OPENSSL_cleanse(r_vec, n * 32);
+    OPENSSL_cleanse(r_vec, n * kMPT_SCALAR_SIZE);
   if (r1_vec)
-    OPENSSL_cleanse(r1_vec, n * 32);
+    OPENSSL_cleanse(r1_vec, n * kMPT_SCALAR_SIZE);
 
-  OPENSSL_cleanse(alpha, 32);
-  OPENSSL_cleanse(rho, 32);
-  OPENSSL_cleanse(tau1, 32);
-  OPENSSL_cleanse(tau2, 32);
-  OPENSSL_cleanse(t1, 32);
-  OPENSSL_cleanse(t2, 32);
-  OPENSSL_cleanse(t_hat, 32);
-  OPENSSL_cleanse(tau_x, 32);
-  OPENSSL_cleanse(mu, 32);
+  OPENSSL_cleanse(alpha, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(rho, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(tau1, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(tau2, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(t1, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(t2, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(t_hat, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(tau_x, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(mu, kMPT_SCALAR_SIZE);
 
-  OPENSSL_cleanse(y, 32);
-  OPENSSL_cleanse(z, 32);
-  OPENSSL_cleanse(x, 32);
-  OPENSSL_cleanse(z_sq, 32);
-  OPENSSL_cleanse(z_neg, 32);
-  OPENSSL_cleanse(x_sq, 32);
-  OPENSSL_cleanse(ux_scalar, 32);
-  OPENSSL_cleanse(ipa_transcript, 32);
+  OPENSSL_cleanse(y, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(x, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_sq, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(z_neg, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(x_sq, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(ux_scalar, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(ipa_transcript, kMPT_SCALAR_SIZE);
 
   if (G_vec)
   {
@@ -2144,12 +2175,12 @@ cleanup:
 
   if (y_powers)
   {
-    OPENSSL_cleanse(y_powers, n * 32);
+    OPENSSL_cleanse(y_powers, n * kMPT_SCALAR_SIZE);
     free(y_powers);
   }
   if (z_j2)
   {
-    OPENSSL_cleanse(z_j2, m * 32);
+    OPENSSL_cleanse(z_j2, m * kMPT_SCALAR_SIZE);
     free(z_j2);
   }
 
@@ -2227,54 +2258,55 @@ int secp256k1_bulletproof_verify_agg(
    * before the actual malloc. */
   unsigned char *y_powers = NULL;
   unsigned char *y_inv_powers = NULL;
-  unsigned char (*y_block_sum)[32] = NULL;
+  unsigned char (*y_block_sum)[kMPT_SCALAR_SIZE] = NULL;
 
-  unsigned char a_final[32], b_final[32];
-  unsigned char t_hat[32], tau_x[32], mu[32];
+  unsigned char a_final[kMPT_SCALAR_SIZE], b_final[kMPT_SCALAR_SIZE];
+  unsigned char t_hat[kMPT_SCALAR_SIZE], tau_x[kMPT_SCALAR_SIZE],
+      mu[kMPT_SCALAR_SIZE];
 
-  unsigned char y[32], z[32], x[32];
-  unsigned char ux_scalar[32];
-  unsigned char z_sq[32];
+  unsigned char y[kMPT_SCALAR_SIZE], z[kMPT_SCALAR_SIZE], x[kMPT_SCALAR_SIZE];
+  unsigned char ux_scalar[kMPT_SCALAR_SIZE];
+  unsigned char z_sq[kMPT_SCALAR_SIZE];
 
   const unsigned char *ptr = proof;
 
-  if (!secp256k1_ec_pubkey_parse(ctx, &A, ptr, 33))
+  if (!secp256k1_ec_pubkey_parse(ctx, &A, ptr, kMPT_PUBKEY_SIZE))
     goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &S, ptr, 33))
+  ptr += kMPT_PUBKEY_SIZE;
+  if (!secp256k1_ec_pubkey_parse(ctx, &S, ptr, kMPT_PUBKEY_SIZE))
     goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &T1, ptr, 33))
+  ptr += kMPT_PUBKEY_SIZE;
+  if (!secp256k1_ec_pubkey_parse(ctx, &T1, ptr, kMPT_PUBKEY_SIZE))
     goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &T2, ptr, 33))
+  ptr += kMPT_PUBKEY_SIZE;
+  if (!secp256k1_ec_pubkey_parse(ctx, &T2, ptr, kMPT_PUBKEY_SIZE))
     goto fail;
-  ptr += 33;
+  ptr += kMPT_PUBKEY_SIZE;
 
   for (size_t i = 0; i < rounds; i++)
   {
-    if (!secp256k1_ec_pubkey_parse(ctx, &L_vec[i], ptr, 33))
+    if (!secp256k1_ec_pubkey_parse(ctx, &L_vec[i], ptr, kMPT_PUBKEY_SIZE))
       goto fail;
-    ptr += 33;
+    ptr += kMPT_PUBKEY_SIZE;
   }
 
   for (size_t i = 0; i < rounds; i++)
   {
-    if (!secp256k1_ec_pubkey_parse(ctx, &R_vec[i], ptr, 33))
+    if (!secp256k1_ec_pubkey_parse(ctx, &R_vec[i], ptr, kMPT_PUBKEY_SIZE))
       goto fail;
-    ptr += 33;
+    ptr += kMPT_PUBKEY_SIZE;
   }
 
-  memcpy(a_final, ptr, 32);
-  ptr += 32;
-  memcpy(b_final, ptr, 32);
-  ptr += 32;
-  memcpy(t_hat, ptr, 32);
-  ptr += 32;
-  memcpy(tau_x, ptr, 32);
-  ptr += 32;
-  memcpy(mu, ptr, 32);
-  ptr += 32;
+  memcpy(a_final, ptr, kMPT_SCALAR_SIZE);
+  ptr += kMPT_SCALAR_SIZE;
+  memcpy(b_final, ptr, kMPT_SCALAR_SIZE);
+  ptr += kMPT_SCALAR_SIZE;
+  memcpy(t_hat, ptr, kMPT_SCALAR_SIZE);
+  ptr += kMPT_SCALAR_SIZE;
+  memcpy(tau_x, ptr, kMPT_SCALAR_SIZE);
+  ptr += kMPT_SCALAR_SIZE;
+  memcpy(mu, ptr, kMPT_SCALAR_SIZE);
+  ptr += kMPT_SCALAR_SIZE;
 
   /* Basic scalar validity */
   if (!secp256k1_ec_seckey_verify(ctx, a_final))
@@ -2307,8 +2339,9 @@ int secp256k1_bulletproof_verify_agg(
    * MUST agree byte-for-byte with the prover; see the matching block in
    * secp256k1_bulletproof_prove_agg.
    */
-  unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-  unsigned char gens_digest[32];
+  unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE],
+      T1_ser[kMPT_PUBKEY_SIZE], T2_ser[kMPT_PUBKEY_SIZE];
+  unsigned char gens_digest[kMPT_HALF_SHA_SIZE];
   unsigned char N_be[4], m_be[4];
   size_t slen;
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
@@ -2323,25 +2356,25 @@ int secp256k1_bulletproof_verify_agg(
   bulletproof_be32_encode(m_be, (uint32_t)m);
 
   /* Serialize A,S,T1,T2 */
-  slen = 33;
+  slen = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A,
                                      SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
+      slen != kMPT_PUBKEY_SIZE)
     goto fs_fail;
-  slen = 33;
+  slen = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &S,
                                      SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
+      slen != kMPT_PUBKEY_SIZE)
     goto fs_fail;
-  slen = 33;
+  slen = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &T1,
                                      SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
+      slen != kMPT_PUBKEY_SIZE)
     goto fs_fail;
-  slen = 33;
+  slen = kMPT_PUBKEY_SIZE;
   if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &T2,
                                      SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
+      slen != kMPT_PUBKEY_SIZE)
     goto fs_fail;
 
   /* ---------------- y = H(domain || gens || N || m || C_i || A || S ||
@@ -2359,21 +2392,21 @@ int secp256k1_bulletproof_verify_agg(
 
   for (size_t i = 0; i < m; i++)
   {
-    unsigned char C_ser[33];
-    size_t c_len = 33;
+    unsigned char C_ser[kMPT_PUBKEY_SIZE];
+    size_t c_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
                                        SECP256K1_EC_COMPRESSED) ||
-        c_len != 33)
+        c_len != kMPT_PUBKEY_SIZE)
       goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, C_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_fail;
   }
 
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
     goto fs_fail;
@@ -2395,23 +2428,23 @@ int secp256k1_bulletproof_verify_agg(
 
   for (size_t i = 0; i < m; i++)
   {
-    unsigned char C_ser[33];
-    size_t c_len = 33;
+    unsigned char C_ser[kMPT_PUBKEY_SIZE];
+    size_t c_len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
                                        SECP256K1_EC_COMPRESSED) ||
-        c_len != 33)
+        c_len != kMPT_PUBKEY_SIZE)
       goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, C_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_fail;
   }
 
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+  if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
     goto fs_fail;
@@ -2423,33 +2456,35 @@ int secp256k1_bulletproof_verify_agg(
     goto fs_fail;
 
   /* Powers */
-  y_powers = (unsigned char *)malloc(n * 32);
-  y_inv_powers = (unsigned char *)malloc(n * 32);
+  y_powers = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
+  y_inv_powers = (unsigned char *)malloc(n * kMPT_SCALAR_SIZE);
   if (!y_powers || !y_inv_powers)
     goto fs_fail;
 
-  unsigned char y_inv[32];
-  scalar_vector_powers(ctx, (unsigned char (*)[32])y_powers, y, n);
+  unsigned char y_inv[kMPT_SCALAR_SIZE];
+  scalar_vector_powers(ctx, (unsigned char (*)[kMPT_SCALAR_SIZE])y_powers, y,
+                       n);
   secp256k1_mpt_scalar_inverse(y_inv, y);
-  scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
+  scalar_vector_powers(ctx, (unsigned char (*)[kMPT_SCALAR_SIZE])y_inv_powers,
+                       y_inv, n);
 
   /* ---------------- x = H(A || S || y || z || T1 || T2 || context)
    * ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+  if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+  if (EVP_DigestUpdate(mdctx, z, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, T1_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+  if (EVP_DigestUpdate(mdctx, T2_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+  if (context_id && EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
     goto fs_fail;
   if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
     goto fs_fail;
@@ -2476,15 +2511,16 @@ fs_fail:
    */
 
   /* --- delta(y,z) for aggregation --- */
-  y_block_sum = (unsigned char (*)[32])malloc(m * 32);
+  y_block_sum =
+      (unsigned char (*)[kMPT_SCALAR_SIZE])malloc(m * kMPT_SCALAR_SIZE);
   if (!y_block_sum)
     goto fail;
 
-  unsigned char two_sum[32];
+  unsigned char two_sum[kMPT_SCALAR_SIZE];
   compute_delta_scalars(ctx, y_block_sum, two_sum, y, m);
 
-  unsigned char delta[32] = {0};
-  unsigned char sum_y_all[32] = {0};
+  unsigned char delta[kMPT_SCALAR_SIZE] = {0};
+  unsigned char sum_y_all[kMPT_SCALAR_SIZE] = {0};
 
   /* sum_y_all = sum_{k=0}^{n-1} y^k = sum_j y_block_sum[j] */
   for (size_t j = 0; j < m; j++)
@@ -2494,36 +2530,36 @@ fs_fail:
 
   /* delta += (z - z^2) * sum_y_all */
   {
-    unsigned char z_minus_z2[32], tmp[32];
+    unsigned char z_minus_z2[kMPT_SCALAR_SIZE], tmp[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_sub(z_minus_z2, z, z_sq);
     secp256k1_mpt_scalar_mul(tmp, z_minus_z2, sum_y_all);
     secp256k1_mpt_scalar_add(delta, delta, tmp);
-    OPENSSL_cleanse(z_minus_z2, 32);
-    OPENSSL_cleanse(tmp, 32);
+    OPENSSL_cleanse(z_minus_z2, kMPT_SCALAR_SIZE);
+    OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
   }
 
   /* delta -= sum_{j=0}^{m-1} z^(j+3) * two_sum */
   for (size_t j = 0; j < m; j++)
   {
-    unsigned char z_j3[32], tmp[32];
+    unsigned char z_j3[kMPT_SCALAR_SIZE], tmp[kMPT_SCALAR_SIZE];
     scalar_pow_u32(ctx, z_j3, z, (unsigned int)(j + 3));
     secp256k1_mpt_scalar_mul(tmp, z_j3, two_sum);
     secp256k1_mpt_scalar_negate(tmp, tmp);
     secp256k1_mpt_scalar_add(delta, delta, tmp);
-    OPENSSL_cleanse(z_j3, 32);
-    OPENSSL_cleanse(tmp, 32);
+    OPENSSL_cleanse(z_j3, kMPT_SCALAR_SIZE);
+    OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
   }
 
-  OPENSSL_cleanse(sum_y_all, 32);
+  OPENSSL_cleanse(sum_y_all, kMPT_SCALAR_SIZE);
 
   /* LHS = t_hat*G + tau_x*Base */
   secp256k1_pubkey LHS;
   {
-    unsigned char zero32[32] = {0};
+    unsigned char zero32[kMPT_SCALAR_SIZE] = {0};
     int have_t = 0, have_tau = 0;
     secp256k1_pubkey tG, tauH;
 
-    if (memcmp(t_hat, zero32, 32) != 0)
+    if (memcmp(t_hat, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       if (!secp256k1_ec_pubkey_create(ctx, &tG, t_hat))
       {
@@ -2531,7 +2567,7 @@ fs_fail:
       }
       have_t = 1;
     }
-    if (memcmp(tau_x, zero32, 32) != 0)
+    if (memcmp(tau_x, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       tauH = *h_generator;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tauH, tau_x))
@@ -2567,15 +2603,15 @@ fs_fail:
   {
     secp256k1_pubkey acc, tmpP;
     int inited = 0;
-    unsigned char zero32[32] = {0};
+    unsigned char zero32[kMPT_SCALAR_SIZE] = {0};
 
     /* sum_j z^(j+2) V_j */
     for (size_t j = 0; j < m; j++)
     {
-      unsigned char z_j2[32];
+      unsigned char z_j2[kMPT_SCALAR_SIZE];
       scalar_pow_u32(ctx, z_j2, z, (unsigned int)(j + 2));
 
-      if (memcmp(z_j2, zero32, 32) != 0)
+      if (memcmp(z_j2, zero32, kMPT_SCALAR_SIZE) != 0)
       {
         tmpP = commitment_C_vec[j];
         if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, z_j2))
@@ -2587,7 +2623,7 @@ fs_fail:
           goto fail;
         }
       }
-      OPENSSL_cleanse(z_j2, 32);
+      OPENSSL_cleanse(z_j2, kMPT_SCALAR_SIZE);
     }
 
     /* + delta*G */
@@ -2601,7 +2637,7 @@ fs_fail:
     }
 
     /* + x*T1 */
-    if (memcmp(x, zero32, 32) != 0)
+    if (memcmp(x, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       tmpP = T1;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x))
@@ -2615,23 +2651,23 @@ fs_fail:
     }
 
     /* + x^2*T2 */
-    unsigned char x_sq[32];
+    unsigned char x_sq[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_mul(x_sq, x, x);
-    if (memcmp(x_sq, zero32, 32) != 0)
+    if (memcmp(x_sq, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       tmpP = T2;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x_sq))
       {
-        OPENSSL_cleanse(x_sq, 32);
+        OPENSSL_cleanse(x_sq, kMPT_SCALAR_SIZE);
         goto fail;
       }
       if (!add_term(ctx, &acc, &inited, &tmpP))
       {
-        OPENSSL_cleanse(x_sq, 32);
+        OPENSSL_cleanse(x_sq, kMPT_SCALAR_SIZE);
         goto fail;
       }
     }
-    OPENSSL_cleanse(x_sq, 32);
+    OPENSSL_cleanse(x_sq, kMPT_SCALAR_SIZE);
 
     if (!inited)
     {
@@ -2650,9 +2686,10 @@ fs_fail:
    * =========================================================================
    */
 
-  unsigned char ipa_transcript_id[32];
+  unsigned char ipa_transcript_id[kMPT_SCALAR_SIZE];
   {
-    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+    unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE],
+        T1_ser[kMPT_PUBKEY_SIZE], T2_ser[kMPT_PUBKEY_SIZE];
     size_t len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     int ok = 0;
@@ -2661,50 +2698,51 @@ fs_fail:
     if (!mdctx)
       goto fail;
 
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto ipa_tid_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto ipa_tid_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto ipa_tid_cleanup;
-    len = 33;
+    len = kMPT_PUBKEY_SIZE;
     if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
                                        SECP256K1_EC_COMPRESSED) ||
-        len != 33)
+        len != kMPT_PUBKEY_SIZE)
       goto ipa_tid_cleanup;
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, S_ser, kMPT_PUBKEY_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T1_ser, kMPT_PUBKEY_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+    if (EVP_DigestUpdate(mdctx, T2_ser, kMPT_PUBKEY_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, y, kMPT_SCALAR_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, z, kMPT_SCALAR_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, x, kMPT_SCALAR_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, t_hat, kMPT_SCALAR_SIZE) != 1)
       goto ipa_tid_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (context_id &&
+        EVP_DigestUpdate(mdctx, context_id, kMPT_SCALAR_SIZE) != 1)
       goto ipa_tid_cleanup;
     if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1)
       goto ipa_tid_cleanup;
-    if (md_len != 32)
+    if (md_len != kMPT_HALF_SHA_SIZE)
       goto ipa_tid_cleanup;
 
     ok = 1;
@@ -2737,12 +2775,12 @@ fs_fail:
 
   /* P += sum_{k=0}^{n-1} [ (-z)*G_k + ( z*y^k + z^(block+2)*z^2*2^i ) *
    * (y^{-k}*H_k) ] */
-  unsigned char neg_z[32];
+  unsigned char neg_z[kMPT_SCALAR_SIZE];
   secp256k1_mpt_scalar_negate(neg_z, z);
 
   for (size_t j = 0; j < m; j++)
   {
-    unsigned char z_j2[32];
+    unsigned char z_j2[kMPT_SCALAR_SIZE];
     scalar_pow_u32(ctx, z_j2, z, (unsigned int)(j + 2));
 
     for (size_t i = 0; i < 64; i++)
@@ -2764,11 +2802,11 @@ fs_fail:
       }
 
       /* ---- Hi term: termH * (y^{-k} * H_k) ---- */
-      unsigned char termH[32], tmp[32];
-      unsigned char two_i[32] = {0};
+      unsigned char termH[kMPT_SCALAR_SIZE], tmp[kMPT_SCALAR_SIZE];
+      unsigned char two_i[kMPT_SCALAR_SIZE] = {0};
 
-      secp256k1_mpt_scalar_mul(termH, z,
-                               (const unsigned char *)(y_powers + 32 * k));
+      secp256k1_mpt_scalar_mul(
+          termH, z, (const unsigned char *)(y_powers + kMPT_SCALAR_SIZE * k));
 
       two_i[31 - (i / 8)] = (unsigned char)(1u << (i % 8));
       secp256k1_mpt_scalar_mul(tmp, z_j2, two_i);
@@ -2780,7 +2818,8 @@ fs_fail:
 
         /* Hi = (y^{-k} * H_k) */
         if (!secp256k1_ec_pubkey_tweak_mul(
-                ctx, &Hi, (const unsigned char *)(y_inv_powers + 32 * k)))
+                ctx, &Hi,
+                (const unsigned char *)(y_inv_powers + kMPT_SCALAR_SIZE * k)))
           goto fail;
 
         /* Hi = termH * Hi */
@@ -2794,25 +2833,25 @@ fs_fail:
         P = newP;
       }
 
-      OPENSSL_cleanse(tmp, 32);
-      OPENSSL_cleanse(termH, 32);
+      OPENSSL_cleanse(tmp, kMPT_SCALAR_SIZE);
+      OPENSSL_cleanse(termH, kMPT_SCALAR_SIZE);
     }
 
-    OPENSSL_cleanse(z_j2, 32);
+    OPENSSL_cleanse(z_j2, kMPT_SCALAR_SIZE);
   }
 
   /* P += (t_hat * ux) * U */
   {
-    unsigned char t_hat_ux[32];
-    unsigned char zero32[32] = {0};
+    unsigned char t_hat_ux[kMPT_SCALAR_SIZE];
+    unsigned char zero32[kMPT_SCALAR_SIZE] = {0};
     secp256k1_mpt_scalar_mul(t_hat_ux, t_hat, ux_scalar);
 
-    if (memcmp(t_hat_ux, zero32, 32) != 0)
+    if (memcmp(t_hat_ux, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       secp256k1_pubkey Q = U;
       if (!secp256k1_ec_pubkey_tweak_mul(ctx, &Q, t_hat_ux))
       {
-        OPENSSL_cleanse(t_hat_ux, 32);
+        OPENSSL_cleanse(t_hat_ux, kMPT_SCALAR_SIZE);
         goto fail;
       }
       const secp256k1_pubkey *pts2[2] = {&P, &Q};
@@ -2821,21 +2860,21 @@ fs_fail:
         goto fail;
       P = newP;
     }
-    OPENSSL_cleanse(t_hat_ux, 32);
+    OPENSSL_cleanse(t_hat_ux, kMPT_SCALAR_SIZE);
   }
 
   /* P -= mu*h_generator */
   {
-    unsigned char neg_mu[32];
+    unsigned char neg_mu[kMPT_SCALAR_SIZE];
     secp256k1_mpt_scalar_negate(neg_mu, mu);
 
     secp256k1_pubkey mu_term = *h_generator;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &mu_term, neg_mu))
     {
-      OPENSSL_cleanse(neg_mu, 32);
+      OPENSSL_cleanse(neg_mu, kMPT_SCALAR_SIZE);
       goto fail;
     }
-    OPENSSL_cleanse(neg_mu, 32);
+    OPENSSL_cleanse(neg_mu, kMPT_SCALAR_SIZE);
 
     const secp256k1_pubkey *pts2[2] = {&P, &mu_term};
     secp256k1_pubkey newP;
@@ -2856,7 +2895,8 @@ fs_fail:
   {
     Hprime[k] = H_vec[k];
     if (!secp256k1_ec_pubkey_tweak_mul(
-            ctx, &Hprime[k], (const unsigned char *)(y_inv_powers + 32 * k)))
+            ctx, &Hprime[k],
+            (const unsigned char *)(y_inv_powers + kMPT_SCALAR_SIZE * k)))
     {
       free(Hprime);
       goto fail;
