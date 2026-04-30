@@ -47,6 +47,7 @@
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <secp256k1.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -778,6 +779,88 @@ cleanup:
   return ok;
 }
 
+/*
+ * Compute a binding digest of the BP fixed generators:
+ *   gens_digest = SHA256( H || G_vec[0..n-1] || H_vec[0..n-1] )
+ *
+ * This 32-byte digest is included in the Fiat-Shamir transcript T_0 so the
+ * challenges (y, z) bind to the exact generator set the prover used.  Per
+ * the spec (CMPT appendix.tex, "Fiat-Shamir Challenges", T_0 definition),
+ * T_0 includes the fixed BP generators (G, H, G, H); this implementation
+ * folds them down to a single 32-byte digest absorbed into T_0 once,
+ * giving the same binding at constant per-proof transcript cost.
+ *
+ * Note: in this implementation the value-commitment base "G" is G_vec[0],
+ * so it is implicitly included via the G_vec sweep below.
+ */
+static int bulletproof_gens_digest(const secp256k1_context *ctx,
+                                   const secp256k1_pubkey *pk_base,
+                                   const secp256k1_pubkey *G_vec,
+                                   const secp256k1_pubkey *H_vec, size_t n,
+                                   unsigned char out[32])
+{
+  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+  unsigned char buf[33];
+  size_t len;
+  int ok = 0;
+
+  if (!mdctx)
+    return 0;
+
+  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto done;
+
+  /* H base used for blinding in the Pedersen commitment. */
+  len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_base,
+                                     SECP256K1_EC_COMPRESSED) ||
+      len != 33)
+    goto done;
+  if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+    goto done;
+
+  /* G_vec (length n).  G_vec[0] doubles as the value-commitment base G. */
+  for (size_t i = 0; i < n; i++)
+  {
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &G_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto done;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto done;
+  }
+
+  /* H_vec (length n). */
+  for (size_t i = 0; i < n; i++)
+  {
+    len = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, &H_vec[i],
+                                       SECP256K1_EC_COMPRESSED) ||
+        len != 33)
+      goto done;
+    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)
+      goto done;
+  }
+
+  if (EVP_DigestFinal_ex(mdctx, out, NULL) != 1)
+    goto done;
+
+  ok = 1;
+done:
+  EVP_MD_CTX_free(mdctx);
+  return ok;
+}
+
+/* Encode x as a 4-byte big-endian unsigned integer. */
+static void bulletproof_be32_encode(unsigned char out[4], uint32_t x)
+{
+  out[0] = (unsigned char)((x >> 24) & 0xFF);
+  out[1] = (unsigned char)((x >> 16) & 0xFF);
+  out[2] = (unsigned char)((x >> 8) & 0xFF);
+  out[3] = (unsigned char)(x & 0xFF);
+}
+
 /**
  * Runs the Inner Product Argument (IPA) prover.
  * Recursively folds vectors G, H, a, and b into a single final term,
@@ -1325,14 +1408,36 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     goto cleanup;
 
   /* ---- 6. Fiat–Shamir y,z ---- */
+  /*
+   * T_0 = domain || gens_digest || N (BE u32) || m (BE u32) || V_0..V_{m-1}
+   * T_1 = T_0 || A || S
+   *   y = H(T_1 || context_id)
+   *   z = H(T_1 || y || context_id)
+   *
+   * gens_digest binds the BP fixed generators (H, G_vec, H_vec) into the
+   * transcript per the spec.  N (= BP_VALUE_BITS) and m (= aggregation
+   * count) are explicit so the verifier cannot be confused into accepting
+   * a proof produced for a different range / aggregation parameter.
+   * (CMPT appendix.tex, "Fiat-Shamir Challenges".)
+   */
   {
     unsigned char A_ser[33], S_ser[33];
+    unsigned char gens_digest[32];
+    unsigned char N_be[4], m_be[4];
     size_t len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
     int fs_ok = 1;
 
     if (!mdctx)
       goto cleanup;
+
+    if (!bulletproof_gens_digest(ctx, pk_base, G_vec, H_vec, n, gens_digest))
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    bulletproof_be32_encode(N_be, (uint32_t)BP_VALUE_BITS);
+    bulletproof_be32_encode(m_be, (uint32_t)m);
 
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
@@ -1352,13 +1457,28 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
       goto fs_cleanup;
     }
 
-    // y = H(domain || V* || A || S || context)
+    // y = H(domain || gens || N || m || V* || A || S || context)
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
     if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, gens_digest, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, N_be, 4) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, m_be, 4) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -1411,13 +1531,28 @@ int secp256k1_bulletproof_prove_agg(const secp256k1_context *ctx,
     }
     secp256k1_mpt_scalar_reduce32(y, y);
 
-    // z = H(domain || V* || A || S || y || context)
+    // z = H(domain || gens || N || m || V* || A || S || y || context)
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
     }
     if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, gens_digest, 32) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, N_be, 4) != 1)
+    {
+      fs_ok = 0;
+      goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, m_be, 4) != 1)
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -2161,8 +2296,19 @@ int secp256k1_bulletproof_verify_agg(
     U = U_arr[0];
   }
 
-  /* --- Fiat–Shamir: y,z,x --- */
+  /* --- Fiat–Shamir: y,z,x ---
+   *
+   * T_0 = domain || gens_digest || N (BE u32) || m (BE u32) || C_0..C_{m-1}
+   * T_1 = T_0 || A || S
+   *   y = H(T_1 || context_id)
+   *   z = H(T_1 || y || context_id)
+   *
+   * MUST agree byte-for-byte with the prover; see the matching block in
+   * secp256k1_bulletproof_prove_agg.
+   */
   unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+  unsigned char gens_digest[32];
+  unsigned char N_be[4], m_be[4];
   size_t slen;
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
   int fs_ok = 0;
@@ -2171,6 +2317,11 @@ int secp256k1_bulletproof_verify_agg(
 
   if (!mdctx)
     goto fail;
+
+  if (!bulletproof_gens_digest(ctx, pk_base, G_vec, H_vec, n, gens_digest))
+    goto fs_fail;
+  bulletproof_be32_encode(N_be, (uint32_t)BP_VALUE_BITS);
+  bulletproof_be32_encode(m_be, (uint32_t)m);
 
   /* Serialize A,S,T1,T2 */
   slen = 33;
@@ -2194,11 +2345,17 @@ int secp256k1_bulletproof_verify_agg(
       slen != 33)
     goto fs_fail;
 
-  /* ---------------- y = H(domain || C_i || A || S || context) ----------------
-   */
+  /* ---------------- y = H(domain || gens || N || m || C_i || A || S ||
+   * context) ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, gens_digest, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, N_be, 4) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, m_be, 4) != 1)
     goto fs_fail;
 
   for (size_t i = 0; i < m; i++)
@@ -2224,11 +2381,17 @@ int secp256k1_bulletproof_verify_agg(
 
   secp256k1_mpt_scalar_reduce32(y, y);
 
-  /* ---------------- z = H(domain || C_i || A || S || y || context)
-   * ---------------- */
+  /* ---------------- z = H(domain || gens || N || m || C_i || A || S || y ||
+   * context) ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, gens_digest, 32) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, N_be, 4) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, m_be, 4) != 1)
     goto fs_fail;
 
   for (size_t i = 0; i < m; i++)
