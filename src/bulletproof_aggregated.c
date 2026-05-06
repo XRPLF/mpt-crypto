@@ -1086,9 +1086,9 @@ int secp256k1_bulletproof_create_commitment(
   const secp256k1_pubkey *points_to_add[2];
   int v_is_zero = (value == 0);
 
-  /* 1. Compute r * Pk_base (The Blinding Term) */
+  /* 1. Compute r * h_generator (The Blinding Term) */
   Pk_term = *h_generator;
-  if (secp256k1_ec_pubkey_tweak_mul(ctx, &Pk_term, blinding_factor) != 1)
+  if (mpt_ct_pubkey_tweak_mul(ctx, &Pk_term, blinding_factor) != 1)
     return 0;
 
   /* 2. Handle Value Term */
@@ -1138,7 +1138,7 @@ static int calculate_commitment_term(
 
   /* 1. base_scalar * Base */
   tB = *h_generator;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, base_scalar))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &tB, base_scalar))
     return 0;
   pts[n_pts++] = &tB;
 
@@ -1580,7 +1580,7 @@ int secp256k1_bulletproof_prove_agg(
     const secp256k1_pubkey *pts[2];
 
     tB = *h_generator;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, tau1))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &tB, tau1))
       goto cleanup;
 
     if (memcmp(t1, zero, 32) == 0)
@@ -1604,7 +1604,7 @@ int secp256k1_bulletproof_prove_agg(
     const secp256k1_pubkey *pts[2];
 
     tB = *h_generator;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tB, tau2))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &tB, tau2))
       goto cleanup;
 
     if (memcmp(t2, zero, 32) == 0)
