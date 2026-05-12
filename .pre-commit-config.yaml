@@ -12,12 +12,21 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 
+# Files under third_party/ are vendored from upstream sources and must
+# stay close to their upstream form so re-syncs apply cleanly. They are
+# excluded from style-enforcing hooks. See third_party/secp256k1-msm/
+# README.md for the vendoring policy.
+exclude: ^third_party/
+
 repos:
   # `pre-commit sample-config` default hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
     hooks:
       - id: check-added-large-files
+        # precomputed_ecmult.c is ~2.3 MB of generator table data;
+        # raise the threshold to admit vendored upstream sources.
+        args: ["--maxkb=4096"]
       - id: check-executables-have-shebangs
       - id: check-shebang-scripts-are-executable
       - id: end-of-file-fixer
