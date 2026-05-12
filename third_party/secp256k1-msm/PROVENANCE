@@ -1,0 +1,78 @@
+Vendored from: https://github.com/bitcoin-core/secp256k1
+Tag:           v0.7.1
+Commit:        1a53f4961f337b4d166c25fce72ef0dc88806618
+License:       MIT (see LICENSE in this directory)
+Vendored on:   2026-05-05
+Vendored by:   Tess Dore <tdore@ripple.com>
+
+Purpose
+-------
+Self-contained copy of secp256k1_ecmult_multi_var (the
+Pippenger/Straus multi-scalar multiplication used by libsecp256k1
+for Schnorr batch verification) plus its supporting machinery:
+scalar/field/group arithmetic, scratch-space allocator, and
+generator precomputation tables.
+
+Why self-contained
+------------------
+The vendored MSM never passes its internal types
+(secp256k1_gej, secp256k1_scalar, etc.) across the public-API
+boundary. By vendoring those types alongside the MSM, the
+vendored module's correctness is independent of the version of
+libsecp256k1 that the rest of mpt-crypto links against. This
+PR therefore does not require any change to the existing
+libsecp256k1 dep pin (currently secp256k1/0.7.1 via Conan).
+
+Symbol naming
+-------------
+All vendored symbols are renamed from the secp256k1_* namespace
+to mpt_secp256k1_* to avoid linker collisions with the linked
+libsecp256k1 binary that mpt-crypto continues to use for the
+public-API surface (tweak_mul, pubkey_combine, ecdh, etc.).
+
+Drift detection
+---------------
+None. We follow the same operational model as the Conan lockfile
+under `conan/lockfile/`: pin known-good state, re-sync deliberately
+when there is a reason (a published security fix, a performance
+improvement we want to pull in, etc.). No automated tripwire.
+
+Sync procedure
+--------------
+To re-sync against upstream:
+
+  1. Note the new upstream commit hash and tag
+  2. Re-export the file list below from upstream at the new tag
+  3. Re-apply the symbol renames (see rename_symbols.sh, if used)
+  4. Run the calibration test in tests/test_mpt_msm.c
+  5. Update this file: Commit, Tag, Vendored on
+  6. Open a PR with the diff for review
+
+Local edits
+-----------
+- util.h: changed `#include "../include/secp256k1.h"` to
+  `#include <secp256k1.h>` so the include resolves through the
+  linked libsecp256k1 install rather than upstream's src-relative
+  layout. Public secp256k1.h surface is stable; no private-type
+  coupling.
+
+Compile-time symbol rename
+--------------------------
+The CMake build applies two compile-time renames to avoid
+linker collisions with the linked libsecp256k1 binary, which
+exports the same generator-table data symbols:
+
+  -Dsecp256k1_pre_g=mpt_secp256k1_pre_g
+  -Dsecp256k1_pre_g_128=mpt_secp256k1_pre_g_128
+
+These are the only renames. All other upstream identifiers
+remain unchanged because the vendored sources are included
+into a single wrapper translation unit (mpt_msm.c) and the
+upstream functions are file-static — they cannot collide
+across translation units. See third_party/secp256k1-msm/README.md
+for the full rationale.
+
+File list
+---------
+(Filled in as files are vendored. See README.md for the
+in-progress dependency analysis.)
