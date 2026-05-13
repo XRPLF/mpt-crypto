@@ -104,12 +104,13 @@ mpt_get_bulletproof_agg(
     }
 
     {
-        secp256k1_pubkey pk_base;
-        if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+        secp256k1_pubkey h_generator;
+        if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
             goto bp_cleanup;
 
         if (secp256k1_bulletproof_prove_agg(
-                ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
+                ctx, out_proof, out_len, values, blindings_flat, m, &h_generator, context_hash) !=
+            1)
             goto bp_cleanup;
 
         size_t const expected =
@@ -893,8 +894,8 @@ mpt_verify_aggregated_bulletproof(
         1)
         return -1;
 
-    secp256k1_pubkey pk_base;
-    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+    secp256k1_pubkey h_generator;
+    if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
         return -1;
 
     if (secp256k1_bulletproof_verify_agg(
@@ -905,7 +906,7 @@ mpt_verify_aggregated_bulletproof(
             proof_len,
             commitments.data(),
             m,
-            &pk_base,
+            &h_generator,
             context_hash) != 1)
     {
         return -1;
