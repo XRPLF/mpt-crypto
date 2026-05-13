@@ -73,7 +73,11 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
         (unsigned char)(ctr >> 24), (unsigned char)(ctr >> 16),
         (unsigned char)(ctr >> 8), (unsigned char)(ctr & 0xFF)};
 
-    EVP_MD_CTX_reset(mdctx);
+    if (EVP_MD_CTX_reset(mdctx) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       EVP_MD_CTX_free(mdctx);

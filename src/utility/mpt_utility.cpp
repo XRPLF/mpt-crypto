@@ -210,6 +210,16 @@ sha512_half(uint8_t const* data, size_t len, uint8_t* out)
     unsigned int digest_len = 0;
     if (EVP_Digest(data, len, full_hash, &digest_len, EVP_sha512(), NULL) != 1)
         return -1;
+    // SHA-512 produces 64 bytes; we copy out the upper half (32 bytes).
+    // Verify the digest is at least the expected size before copying so a
+    // surprise digest-length mismatch cannot leak adjacent stack bytes or
+    // produce a truncated context hash that downstream callers then bind
+    // proofs against.
+    if (digest_len < 32)
+    {
+        OPENSSL_cleanse(full_hash, sizeof(full_hash));
+        return -1;
+    }
     memcpy(out, full_hash, 32);
     OPENSSL_cleanse(full_hash, sizeof(full_hash));
     return 0;
