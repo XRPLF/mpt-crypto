@@ -218,24 +218,44 @@ static void test_decryption_boundaries(const secp256k1_context *ctx)
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
   uint64_t decrypted_amount = 0;
 
-  printf("Running test: decryption boundary limits (1,000,000)...\n");
+  printf("Running test: decryption boundary limits (0, 1, 1,000,000, "
+         "1,000,001)...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
   // Need a random scalar for the blinding factor
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, blinding_factor,
                                             &temp_pubkey) == 1);
 
-  /* Test exact upper boundary: 1,000,000 (Should succeed) */
+  /* amount = 0: exercises the c2 == S fast-path in the constant-time
+   * branchless arithmetic.  Must decrypt to exactly 0. */
+  decrypted_amount = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 0,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
+         1);
+  EXPECT(decrypted_amount == 0);
+
+  /* amount = 1: smallest positive value; first DLP iteration matches. */
+  decrypted_amount = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
+         1);
+  EXPECT(decrypted_amount == 1);
+
+  /* Exact upper boundary: 1,000,000.  Must succeed; the fixed-iteration
+   * loop runs to completion and the last iteration matches. */
+  decrypted_amount = 0xDEADBEEFu;
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000000,
                                    blinding_factor) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
          1);
   EXPECT(decrypted_amount == 1000000);
 
-  /* Test just outside boundary: 1,000,001 (Should gracefully fail to find) */
+  /* Just outside the boundary: 1,000,001.  Decrypt must gracefully fail
+   * (return 0) without producing a stale `decrypted_amount`. */
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000001,
                                    blinding_factor) == 1);
-  /* The decryption function should return 0 (not found) */
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
          0);
 

@@ -31,6 +31,35 @@ secp256k1_elgamal_encrypt(
 
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
+ *
+ * The function uses a linear discrete-logarithm search over a fixed range
+ * and can only successfully recover plaintext amounts in [0, 1,000,000].
+ * If the ciphertext encrypts a value greater than 1,000,000 the search
+ * exhausts its range and the function returns 0 (not found).  Callers
+ * that read the public API contract as supporting arbitrary 64-bit
+ * amounts should not rely on this function for those cases.
+ *
+ * To mitigate amount-dependent timing side channels (TOB-RIPCTX-1 / -4,
+ * reintroduced as TOB-RIPCTXR-1), the search executes with a fixed
+ * iteration count: it always runs to the maximum of 1,000,000 iterations
+ * regardless of where (or whether) the match is found.  This is a fixed
+ * iteration count, not strict constant time: the underlying libsecp256k1
+ * curve operations are inherently variable-time, so this function does
+ * not protect against attackers that can observe microarchitectural
+ * variation of individual point operations.  In shared / multitenant
+ * deployments where such attacks are relevant, callers should not
+ * expose decryption latency to untrusted observers.
+ *
+ * Architectural note: on-chain validators and verifiers never decrypt
+ * ciphertexts; this function is intended for testing and basic client-
+ * side operations.  Off-chain applications (wallets, audit tooling) that
+ * need to decrypt larger balances should use more efficient discrete
+ * logarithm algorithms such as baby-step giant-step (O(sqrt(n))) or
+ * Pollard's kangaroo.
+ *
+ * @return 1 if the ciphertext decrypts to an amount in [0, 1,000,000]
+ *         and `*amount` is set; 0 otherwise.  A 0 return covers both
+ *         "amount out of range" and "internal failure".
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt(
