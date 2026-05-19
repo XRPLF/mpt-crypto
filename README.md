@@ -47,7 +47,9 @@ sudo apt-get install cmake build-essential
 
 ### Dependency Setup
 
-Set up Conan using [xrpld's BUILD.md](https://github.com/XRPLF/rippled/blob/develop/BUILD.md#steps)
+Set up Conan using [rippled's BUILD.md](https://github.com/XRPLF/rippled/blob/develop/BUILD.md#steps).
+
+Dependency revisions are pinned via a Conan lockfile (`conan.lock`) at the repository root; Conan picks it up implicitly on `conan install`. To regenerate after editing `conanfile.py`, run `./conan/lockfile/regenerate.sh` from the repo root. The pattern mirrors [rippled's `conan/lockfile/`](https://github.com/XRPLF/rippled/tree/develop/conan/lockfile).
 
 ### Build Instructions
 

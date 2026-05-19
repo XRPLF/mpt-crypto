@@ -19,17 +19,11 @@ conan remote add --force --index 0 xrplf https://conan.ripplex.io
 # Delete any existing lockfile.
 rm -f conan.lock
 
-# Create a new lockfile that is compatible with Linux, macOS, and Windows. The
-# first create command will create a new lockfile, while the subsequent create
-# commands will merge any additional dependencies into the created lockfile.
-# `tests=True` is the build configuration used by CI; setting it here ensures
-# any test-only transitive deps are captured.
-conan lock create . \
-    --options '&:tests=True' \
-    --profile:all=conan/lockfile/linux.profile
-conan lock create . \
-    --options '&:tests=True' \
-    --profile:all=conan/lockfile/macos.profile
+# Create a new lockfile.  The lockfile pins recipe revisions, which for our
+# pure-C dependencies (`openssl`, `secp256k1`) are platform-independent, so
+# a single profile captures the full dependency graph.  `tests=True` is the
+# build configuration used by CI; setting it here ensures any test-only
+# transitive deps are captured.
 conan lock create . \
     --options '&:tests=True' \
     --profile:all=conan/lockfile/windows.profile
