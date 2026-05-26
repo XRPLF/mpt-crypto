@@ -121,16 +121,25 @@ generate_canonical_encrypted_zero(
 );
 
 /**
- * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
+ * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*H.
  *
  * This function creates the commitment point (C) that the Bulletproof proves
- * the range of. Pk_base is the dynamic secondary generator (H).
+ * the range of.
  *
  * @param[in]   ctx             A pointer to the context.
  * @param[out]  commitment_C    The resulting commitment point C.
  * @param[in]   value           The secret amount v (uint64_t).
  * @param[in]   blinding_factor The secret randomness r (32 bytes).
- * @param[in]   pk_base         The recipient's public key (used as the H generator).
+ * @param[in]   h_generator     The Pedersen blinding generator H, as returned
+ *                              by secp256k1_mpt_get_h_generator(). This MUST
+ *                              be the standardized nothing-up-my-sleeve H
+ *                              generator; it must NOT be a holder, issuer,
+ *                              auditor, or recipient encryption public key.
+ *                              Pedersen binding requires that the discrete
+ *                              log of H be unknown to all parties; supplying
+ *                              a key whose discrete log is known to any party
+ *                              breaks binding and lets that party compute
+ *                              alternate openings of the same commitment.
  *
  * @return 1 on success, 0 on failure.
  */
@@ -140,7 +149,7 @@ secp256k1_bulletproof_create_commitment(
     secp256k1_pubkey* commitment_C,
     uint64_t value,
     unsigned char const* blinding_factor,
-    secp256k1_pubkey const* pk_base);
+    secp256k1_pubkey const* h_generator);
 
 int
 secp256k1_bulletproof_prove(
@@ -149,7 +158,7 @@ secp256k1_bulletproof_prove(
     size_t* proof_len,
     uint64_t value,
     unsigned char const* blinding_factor,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id, /* <--- AND HERE */
     unsigned int proof_type);
 
@@ -161,7 +170,7 @@ secp256k1_bulletproof_verify(
     unsigned char const* proof,
     size_t proof_len,
     secp256k1_pubkey const* commitment_C,
-    secp256k1_pubkey const* pk_base, /* This is generator H */
+    secp256k1_pubkey const* h_generator, /* This is generator H */
     unsigned char const* context_id);
 /**
  * Verifies that (c1, c2) is a valid ElGamal encryption of 'amount'
@@ -242,7 +251,7 @@ secp256k1_bulletproof_prove_agg(
     uint64_t const* values,
     unsigned char const* blindings_flat,
     size_t m,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id);
 int
 secp256k1_bulletproof_verify_agg(
@@ -253,7 +262,7 @@ secp256k1_bulletproof_verify_agg(
     size_t proof_len,
     secp256k1_pubkey const* commitment_C_vec, /* length m */
     size_t m,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id);
 
 /*
