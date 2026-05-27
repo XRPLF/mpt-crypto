@@ -43,6 +43,7 @@
  * Bulletproofs)]
  */
 #include "mpt_internal.h"
+#include "mpt_msm.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -868,144 +869,10 @@ cleanup:
   return ok;
 }
 
-/*
- * Verifies a Bulletproof Inner Product Argument (IPA).
- *
- * Given:
- *   - the original generator vectors G_vec and H_vec,
- *   - the prover’s cross-term commitments L_i and R_i,
- *   - the final folded scalars a_final and b_final,
- *   - the binding scalar ux,
- *   - and the initial commitment P,
- *
- * this function re-derives all Fiat–Shamir challenges u_i from the transcript
- * and reconstructs the folded generators G_f and H_f implicitly.
- *
- * Verification checks that the folded commitment P' equals:
- *
- *     P' = a_final * G_f
- *        + b_final * H_f
- *        + (a_final * b_final * ux) * U
- *
- * where G_f and H_f are obtained by folding G_vec and H_vec using the
- * challenges u_i and their inverses, and P' is obtained by applying the same
- * folding operations to P using the L_i and R_i commitments.
- *
- * All group operations avoid explicit construction of the point at infinity,
- * which is not representable via the libsecp256k1 public-key API.
- */
-static int ipa_verify_explicit(
-    const secp256k1_context *ctx,
-    const secp256k1_pubkey *G_vec, /* original G generators (length n) */
-    const secp256k1_pubkey *H_vec, /* original H generators (length n) */
-    const secp256k1_pubkey *U, const secp256k1_pubkey *P_in, /* initial P */
-    const secp256k1_pubkey *L_vec, /* length = rounds */
-    const secp256k1_pubkey *R_vec, /* length = rounds */
-    size_t n,                      /* total vector length (64*m) */
-    const unsigned char a_final[32], const unsigned char b_final[32],
-    const unsigned char ux[32], const unsigned char ipa_transcript_id[32])
-{
-  secp256k1_pubkey P = *P_in;
-  secp256k1_pubkey Gf, Hf, RHS, tmp;
-  int RHS_inited = 0;
-  int ok = 0;
-
-  /* --- derive rounds --- */
-  if (n == 0 || (n & (n - 1)) != 0)
-    return 0;
-
-  size_t rounds = bp_ipa_rounds(n);
-
-  /* --- allocate u / u_inv --- */
-  unsigned char *u_flat = (unsigned char *)malloc(rounds * 32);
-  unsigned char *uinv_flat = (unsigned char *)malloc(rounds * 32);
-  if (!u_flat || !uinv_flat)
-    goto cleanup_alloc;
-
-  unsigned char last[32];
-  memcpy(last, ipa_transcript_id, 32);
-
-  /* ---- 1. Re-derive u_i ---- */
-  for (size_t i = 0; i < rounds; i++)
-  {
-    unsigned char *ui = u_flat + 32 * i;
-    unsigned char *uiinv = uinv_flat + 32 * i;
-
-    if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
-      goto cleanup;
-
-    secp256k1_mpt_scalar_inverse(uiinv, ui);
-    if (!secp256k1_ec_seckey_verify(ctx, uiinv))
-      goto cleanup;
-
-    memcpy(last, ui, 32);
-  }
-
-  /* ---- 2. Fold generators ---- */
-  if (!fold_generators(ctx, &Gf, G_vec, u_flat, uinv_flat, n, rounds, 0))
-    goto cleanup;
-
-  if (!fold_generators(ctx, &Hf, H_vec, u_flat, uinv_flat, n, rounds, 1))
-    goto cleanup;
-
-  /* ---- 3. RHS = a*Gf + b*Hf + (a*b*ux)*U ---- */
-
-  if (!scalar_is_zero(a_final))
-  {
-    tmp = Gf;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, a_final))
-      goto cleanup;
-    if (!add_term(ctx, &RHS, &RHS_inited, &tmp))
-      goto cleanup;
-  }
-
-  if (!scalar_is_zero(b_final))
-  {
-    tmp = Hf;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, b_final))
-      goto cleanup;
-    if (!add_term(ctx, &RHS, &RHS_inited, &tmp))
-      goto cleanup;
-  }
-
-  {
-    unsigned char ab[32], ab_ux[32];
-    secp256k1_mpt_scalar_mul(ab, a_final, b_final);
-    secp256k1_mpt_scalar_mul(ab_ux, ab, ux);
-
-    if (!scalar_is_zero(ab_ux))
-    {
-      tmp = *U;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmp, ab_ux))
-        goto cleanup;
-      if (!add_term(ctx, &RHS, &RHS_inited, &tmp))
-        goto cleanup;
-    }
-
-    OPENSSL_cleanse(ab, 32);
-    OPENSSL_cleanse(ab_ux, 32);
-  }
-
-  if (!RHS_inited)
-    goto cleanup;
-
-  /* ---- 4. Fold P using L/R ---- */
-  if (!apply_ipa_folding_to_P(ctx, &P, L_vec, R_vec, u_flat, uinv_flat, rounds))
-    goto cleanup;
-
-  /* ---- 5. Compare P and RHS ---- */
-  if (pubkey_equal(ctx, &P, &RHS))
-    ok = 1;
-
-cleanup:
-  OPENSSL_cleanse(u_flat, rounds * 32);
-  OPENSSL_cleanse(uinv_flat, rounds * 32);
-
-cleanup_alloc:
-  free(u_flat);
-  free(uinv_flat);
-  return ok;
-}
+/* The previous static helper ipa_verify_explicit() was replaced by the
+ * consolidated single-MSM check (see bp_verify_consolidated_msm below).
+ * The corresponding round-by-round IPA-verify path is still exercised by
+ * tests/test_ipa.c, which carries its own implementation. */
 /**
  * Phase 1, Step 3 (Aggregated):
  * Compute al, ar, sl, sr vectors for ONE value block inside an aggregated
@@ -2026,6 +1893,404 @@ cleanup:
 
   return ok;
 }
+/* -------------------------------------------------------------------------
+ * Consolidated single-MSM verification (issue #100).
+ *
+ * Collapses both the range-check identity
+ *
+ *   t_hat*G + tau_x*H_pk
+ *     == sum_j z^(j+2)*V_j + delta*G + x*T1 + x^2*T2          (E1)
+ *
+ * and the inner-product-collapsed check
+ *
+ *   P + sum_i u_i^2 *L_i + sum_i u_i^{-2}*R_i
+ *     == a*sum_k s_k*G_k + b*sum_k s_k^{-1}*y^{-k}*H_k + a*b*u_x*U   (E2)
+ *
+ * with P = A + x*S + sum_k (-z)*G_k
+ *        + sum_k y^{-k}*(z*y^k + z^(j_k+2)*2^{i_k}) *H_k
+ *        + t_hat*u_x*U - mu*H_pk,
+ *
+ * into one variable-time MSM that must return the identity. The two
+ * residuals are batched as E1 + c*E2 = 0 with a fresh Fiat-Shamir RLC
+ * weight c bound to all proof bytes via the IPA challenge chain plus the
+ * remaining scalars (tau_x, mu, a, b). Soundness: a malicious prover that
+ * makes both residuals individually non-zero would need to predict c, and
+ * c is derived after the prover commits to the entire proof.
+ *
+ * s_k = prod_j (bit_{rounds-1-j}(k) ? u_j : u_j^{-1}), matching the
+ * verifier-side G-fold pattern in fold_generators(); s_k^{-1} matches the
+ * H-fold pattern.
+ *
+ * The total MSM has 2n + 2*rounds + m + 6 (point, scalar) pairs plus an
+ * optional G coefficient supplied via mpt_msm_variable_time's
+ * inp_g_sc_be32 parameter.
+ */
+
+typedef struct
+{
+  unsigned char const *scalars_flat; /* n_terms * 32 bytes, big-endian */
+  unsigned char const *points_ser;   /* n_terms * 33 bytes, SEC1-compressed */
+  size_t n_terms;
+} bp_verify_msm_cbdata;
+
+static int bp_verify_msm_cb(unsigned char scalar_be32[32],
+                            unsigned char point_sec1_33[33], size_t idx,
+                            void *data)
+{
+  bp_verify_msm_cbdata const *d = (bp_verify_msm_cbdata const *)data;
+  if (idx >= d->n_terms)
+    return 0;
+  memcpy(scalar_be32, d->scalars_flat + 32 * idx, 32);
+  memcpy(point_sec1_33, d->points_ser + 33 * idx, 33);
+  return 1;
+}
+
+static int bp_verify_consolidated_msm(
+    const secp256k1_context *ctx,
+    /* generator vectors */
+    const secp256k1_pubkey *G_vec, const secp256k1_pubkey *H_vec,
+    const secp256k1_pubkey *V_vec, /* commitment_C_vec, length m */
+    const secp256k1_pubkey *h_generator, const secp256k1_pubkey *U,
+    /* proof points */
+    const secp256k1_pubkey *A, const secp256k1_pubkey *S,
+    const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
+    const secp256k1_pubkey *L_vec, const secp256k1_pubkey *R_vec,
+    /* proof scalars */
+    const unsigned char a_final[32], const unsigned char b_final[32],
+    const unsigned char t_hat[32], const unsigned char tau_x[32],
+    const unsigned char mu[32],
+    /* FS challenges & precomputed delta / y_inv_powers */
+    const unsigned char z[32], const unsigned char x[32],
+    const unsigned char delta[32], const unsigned char *y_inv_powers,
+    /* IPA state */
+    const unsigned char ipa_transcript_id[32],
+    const unsigned char ux_scalar[32],
+    /* sizes */
+    size_t m, size_t n, size_t rounds)
+{
+  int ok = 0;
+  unsigned char *u_flat = NULL;
+  unsigned char *uinv_flat = NULL;
+  unsigned char *s_G_flat = NULL;
+  unsigned char *points_ser = NULL;
+  unsigned char *scalars_flat = NULL;
+  unsigned char (*z_jp2)[32] = NULL;
+
+  u_flat = (unsigned char *)malloc(rounds * 32);
+  uinv_flat = (unsigned char *)malloc(rounds * 32);
+  s_G_flat = (unsigned char *)malloc(n * 32);
+
+  const size_t n_terms = 2 * n + 2 * rounds + m + 6;
+  points_ser = (unsigned char *)malloc(n_terms * 33);
+  scalars_flat = (unsigned char *)malloc(n_terms * 32);
+  z_jp2 = (unsigned char (*)[32])malloc(m * 32);
+
+  if (!u_flat || !uinv_flat || !s_G_flat || !points_ser || !scalars_flat ||
+      !z_jp2)
+    goto cleanup;
+
+  /* ---- (1) Re-derive IPA round challenges and inverses ---- */
+  {
+    unsigned char last[32];
+    memcpy(last, ipa_transcript_id, 32);
+    for (size_t i = 0; i < rounds; i++)
+    {
+      unsigned char *ui = u_flat + 32 * i;
+      unsigned char *uiinv = uinv_flat + 32 * i;
+      if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
+        goto cleanup;
+      secp256k1_mpt_scalar_inverse(uiinv, ui);
+      if (!secp256k1_ec_seckey_verify(ctx, uiinv))
+        goto cleanup;
+      memcpy(last, ui, 32);
+    }
+  }
+
+  /* ---- (2) Compute s_G_k for k = 0..n-1 (G-fold pattern) ---- */
+  for (size_t k = 0; k < n; k++)
+  {
+    unsigned char cur[32] = {0};
+    cur[31] = 1;
+    for (size_t j = 0; j < rounds; j++)
+    {
+      int bit = (int)((k >> (rounds - 1 - j)) & 1);
+      const unsigned char *uj = u_flat + 32 * j;
+      const unsigned char *ujinv = uinv_flat + 32 * j;
+      secp256k1_mpt_scalar_mul(cur, cur, bit ? uj : ujinv);
+    }
+    memcpy(s_G_flat + 32 * k, cur, 32);
+  }
+
+  /* ---- (3) Derive RLC challenge c that batches E1 + c*E2.
+   *      The last IPA round challenge transitively binds A, S, T1, T2,
+   *      y, z, x, t_hat, context_id, and all L_i/R_i via the FS chain.
+   *      Extending with tau_x, mu, a, b binds every remaining proof byte
+   *      so a malicious prover cannot predict c before committing. ---- */
+  unsigned char c_scalar[32];
+  {
+    EVP_MD_CTX *md = EVP_MD_CTX_new();
+    unsigned char hash[32];
+    unsigned int hlen = 0;
+    int hash_ok = 0;
+    if (!md)
+      goto cleanup;
+    if (EVP_DigestInit_ex(md, EVP_sha256(), NULL) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, "MPT_BP_VERIFY_BATCH_RLC", 23) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, u_flat + 32 * (rounds - 1), 32) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, tau_x, 32) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, mu, 32) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, a_final, 32) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestUpdate(md, b_final, 32) != 1)
+      goto c_hash_cleanup;
+    if (EVP_DigestFinal_ex(md, hash, &hlen) != 1 || hlen != 32)
+      goto c_hash_cleanup;
+    secp256k1_mpt_scalar_reduce32(c_scalar, hash);
+    /* c == 0 is statistically negligible (~2^-256) but would zero out E2;
+     * reject as malformed if it occurs so soundness reasoning stays clean. */
+    if (!secp256k1_ec_seckey_verify(ctx, c_scalar))
+      goto c_hash_cleanup;
+    hash_ok = 1;
+  c_hash_cleanup:
+    EVP_MD_CTX_free(md);
+    if (!hash_ok)
+      goto cleanup;
+  }
+
+  /* ---- (4) Precompute z^(j+2) for j = 0..m-1 ---- */
+  for (size_t j = 0; j < m; j++)
+    scalar_pow_u32(ctx, z_jp2[j], z, (unsigned int)(j + 2));
+
+  /* ---- (5) Assemble (scalar, point) pairs.
+   *
+   * Layout (idx -> term):
+   *   0           : H_pk          coeff = tau_x - c*mu
+   *   1..m        : V_j           coeff = -z^(j+2)
+   *   m+1         : T1            coeff = -x
+   *   m+2         : T2            coeff = -x^2
+   *   m+3         : A             coeff = c
+   *   m+4         : S             coeff = c*x
+   *   m+5 ..      : G_k           coeff = c*(-z - a*s_k)
+   *   m+5+n ..    : H_k           coeff = c*(z + z^(j_k+2)*2^{i_k}*y^{-k}
+   *                                          - b*s_k^{-1}*y^{-k})
+   *   m+5+2n      : U             coeff = c*u_x*(t_hat - a*b)
+   *   m+6+2n ..   : L_i           coeff = c*u_i^2
+   *   m+6+2n+r .. : R_i           coeff = c*u_i^{-2}
+   *
+   * G's coefficient (t_hat - delta) is passed via mpt_msm_variable_time's
+   * inp_g_sc_be32 parameter.
+   */
+  size_t idx = 0;
+  {
+#define BP_WRITE_POINT(P_ptr)                                                  \
+  do                                                                           \
+  {                                                                            \
+    size_t L_ = 33;                                                            \
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * idx, &L_,        \
+                                       (P_ptr), SECP256K1_EC_COMPRESSED) ||    \
+        L_ != 33)                                                              \
+      goto cleanup;                                                            \
+  } while (0)
+#define BP_WRITE_SCALAR(SRC) memcpy(scalars_flat + 32 * idx, (SRC), 32)
+#define BP_BUMP() (idx++)
+
+    /* (5a) H_pk: tau_x - c*mu */
+    {
+      unsigned char neg_mu[32], c_neg_mu[32], coef[32];
+      memcpy(neg_mu, mu, 32);
+      secp256k1_mpt_scalar_negate(neg_mu, neg_mu);
+      secp256k1_mpt_scalar_mul(c_neg_mu, c_scalar, neg_mu);
+      secp256k1_mpt_scalar_add(coef, tau_x, c_neg_mu);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(h_generator);
+      BP_BUMP();
+    }
+
+    /* (5b) V_j: -z^(j+2) */
+    for (size_t j = 0; j < m; j++)
+    {
+      unsigned char coef[32];
+      memcpy(coef, z_jp2[j], 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(&V_vec[j]);
+      BP_BUMP();
+    }
+
+    /* (5c) T1: -x */
+    {
+      unsigned char coef[32];
+      memcpy(coef, x, 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(T1);
+      BP_BUMP();
+    }
+
+    /* (5d) T2: -x^2 */
+    {
+      unsigned char x_sq[32], coef[32];
+      secp256k1_mpt_scalar_mul(x_sq, x, x);
+      memcpy(coef, x_sq, 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(T2);
+      BP_BUMP();
+    }
+
+    /* (5e) A: c */
+    BP_WRITE_SCALAR(c_scalar);
+    BP_WRITE_POINT(A);
+    BP_BUMP();
+
+    /* (5f) S: c*x */
+    {
+      unsigned char coef[32];
+      secp256k1_mpt_scalar_mul(coef, c_scalar, x);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(S);
+      BP_BUMP();
+    }
+
+    /* (5g) G_k: c*(-z - a*s_k) */
+    {
+      unsigned char neg_z[32];
+      memcpy(neg_z, z, 32);
+      secp256k1_mpt_scalar_negate(neg_z, neg_z);
+      for (size_t k = 0; k < n; k++)
+      {
+        unsigned char a_sk[32], inner[32], coef[32];
+        secp256k1_mpt_scalar_mul(a_sk, a_final, s_G_flat + 32 * k);
+        secp256k1_mpt_scalar_negate(a_sk, a_sk);
+        secp256k1_mpt_scalar_add(inner, neg_z, a_sk);
+        secp256k1_mpt_scalar_mul(coef, c_scalar, inner);
+        BP_WRITE_SCALAR(coef);
+        BP_WRITE_POINT(&G_vec[k]);
+        BP_BUMP();
+      }
+    }
+
+    /* (5h) H_k: c*(z + z^(j_k+2)*2^{i_k}*y^{-k} - b*s_k^{-1}*y^{-k})
+     *
+     * s_k^{-1} matches the H-fold pattern: bit-flip of s_G_k's selectors.
+     * Compute it inline to avoid n scalar inversions (each ~256 squarings).
+     */
+    for (size_t k = 0; k < n; k++)
+    {
+      const size_t j_k = k / BP_VALUE_BITS;
+      const size_t i_k = k % BP_VALUE_BITS;
+      const unsigned char *y_inv_k = y_inv_powers + 32 * k;
+
+      unsigned char s_H_k[32] = {0};
+      s_H_k[31] = 1;
+      for (size_t j = 0; j < rounds; j++)
+      {
+        int bit = (int)((k >> (rounds - 1 - j)) & 1);
+        const unsigned char *uj = u_flat + 32 * j;
+        const unsigned char *ujinv = uinv_flat + 32 * j;
+        secp256k1_mpt_scalar_mul(s_H_k, s_H_k, bit ? ujinv : uj);
+      }
+
+      unsigned char two_i[32] = {0};
+      two_i[31 - (i_k / 8)] = (unsigned char)(1u << (i_k % 8));
+
+      unsigned char term1[32], term2[32], inner[32], coef[32];
+      /* term1 = z^(j_k+2) * 2^{i_k} * y^{-k} */
+      secp256k1_mpt_scalar_mul(term1, z_jp2[j_k], two_i);
+      secp256k1_mpt_scalar_mul(term1, term1, y_inv_k);
+      /* term2 = -b * s_H_k * y^{-k} */
+      secp256k1_mpt_scalar_mul(term2, b_final, s_H_k);
+      secp256k1_mpt_scalar_mul(term2, term2, y_inv_k);
+      secp256k1_mpt_scalar_negate(term2, term2);
+      /* inner = z + term1 + term2 */
+      secp256k1_mpt_scalar_add(inner, z, term1);
+      secp256k1_mpt_scalar_add(inner, inner, term2);
+      secp256k1_mpt_scalar_mul(coef, c_scalar, inner);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(&H_vec[k]);
+      BP_BUMP();
+    }
+
+    /* (5i) U: c*u_x*(t_hat - a*b) */
+    {
+      unsigned char ab[32], t_minus_ab[32], coef[32];
+      secp256k1_mpt_scalar_mul(ab, a_final, b_final);
+      secp256k1_mpt_scalar_negate(ab, ab);
+      secp256k1_mpt_scalar_add(t_minus_ab, t_hat, ab);
+      secp256k1_mpt_scalar_mul(coef, c_scalar, t_minus_ab);
+      secp256k1_mpt_scalar_mul(coef, coef, ux_scalar);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(U);
+      BP_BUMP();
+    }
+
+    /* (5j) L_i: c*u_i^2 */
+    for (size_t i = 0; i < rounds; i++)
+    {
+      unsigned char u_sq[32], coef[32];
+      const unsigned char *ui = u_flat + 32 * i;
+      secp256k1_mpt_scalar_mul(u_sq, ui, ui);
+      secp256k1_mpt_scalar_mul(coef, c_scalar, u_sq);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(&L_vec[i]);
+      BP_BUMP();
+    }
+
+    /* (5k) R_i: c*u_i^{-2} */
+    for (size_t i = 0; i < rounds; i++)
+    {
+      unsigned char uinv_sq[32], coef[32];
+      const unsigned char *uiinv = uinv_flat + 32 * i;
+      secp256k1_mpt_scalar_mul(uinv_sq, uiinv, uiinv);
+      secp256k1_mpt_scalar_mul(coef, c_scalar, uinv_sq);
+      BP_WRITE_SCALAR(coef);
+      BP_WRITE_POINT(&R_vec[i]);
+      BP_BUMP();
+    }
+
+#undef BP_WRITE_POINT
+#undef BP_WRITE_SCALAR
+#undef BP_BUMP
+  }
+
+  if (idx != n_terms)
+    goto cleanup;
+
+  /* ---- (6) G coefficient: t_hat - delta (Check 1 only; E2 has no G). ---- */
+  unsigned char g_coef[32];
+  {
+    unsigned char neg_delta[32];
+    memcpy(neg_delta, delta, 32);
+    secp256k1_mpt_scalar_negate(neg_delta, neg_delta);
+    secp256k1_mpt_scalar_add(g_coef, t_hat, neg_delta);
+  }
+
+  /* ---- (7) Single MSM call; expected result = identity. ---- */
+  unsigned char result[33];
+  bp_verify_msm_cbdata cb_data = {scalars_flat, points_ser, n_terms};
+  if (!mpt_msm_variable_time(ctx, result, g_coef, bp_verify_msm_cb, &cb_data,
+                             n_terms))
+    goto cleanup;
+
+  /* Identity is encoded as 33 zero bytes by mpt_msm_variable_time. */
+  unsigned char zero33[33] = {0};
+  ok = (memcmp(result, zero33, 33) == 0) ? 1 : 0;
+
+cleanup:
+  free(u_flat);
+  free(uinv_flat);
+  free(s_G_flat);
+  free(points_ser);
+  free(scalars_flat);
+  free(z_jp2);
+  return ok;
+}
+
 /**
  * Verifies an aggregated Bulletproof range proof for m commitments.
  *
@@ -2367,186 +2632,27 @@ fs_fail:
 
   OPENSSL_cleanse(sum_y_all, 32);
 
-  /* LHS = t_hat*G + tau_x*Base */
-  secp256k1_pubkey LHS;
-  {
-    unsigned char zero32[32] = {0};
-    int have_t = 0, have_tau = 0;
-    secp256k1_pubkey tG, tauH;
-
-    if (memcmp(t_hat, zero32, 32) != 0)
-    {
-      if (!secp256k1_ec_pubkey_create(ctx, &tG, t_hat))
-      {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-      have_t = 1;
-    }
-    if (memcmp(tau_x, zero32, 32) != 0)
-    {
-      tauH = *h_generator;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tauH, tau_x))
-      {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-      have_tau = 1;
-    }
-    if (have_t && have_tau)
-    {
-      const secp256k1_pubkey *pts[2] = {&tG, &tauH};
-      if (!secp256k1_ec_pubkey_combine(ctx, &LHS, pts, 2))
-      {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-    }
-    else if (have_t)
-    {
-      LHS = tG;
-    }
-    else if (have_tau)
-    {
-      LHS = tauH;
-    }
-    else
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-  }
-
-  /* RHS = (sum_j z^(j+2) V_j) + delta*G + x*T1 + x^2*T2 */
-  secp256k1_pubkey RHS;
-  {
-    secp256k1_pubkey acc, tmpP;
-    int inited = 0;
-    unsigned char zero32[32] = {0};
-
-    /* sum_j z^(j+2) V_j */
-    for (size_t j = 0; j < m; j++)
-    {
-      unsigned char z_j2[32];
-      scalar_pow_u32(ctx, z_j2, z, (unsigned int)(j + 2));
-
-      if (memcmp(z_j2, zero32, 32) != 0)
-      {
-        tmpP = commitment_C_vec[j];
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, z_j2))
-        {
-          free(y_block_sum);
-          free(y_powers);
-          free(y_inv_powers);
-          goto fail;
-        }
-        if (!add_term(ctx, &acc, &inited, &tmpP))
-        {
-          free(y_block_sum);
-          free(y_powers);
-          free(y_inv_powers);
-          goto fail;
-        }
-      }
-      OPENSSL_cleanse(z_j2, 32);
-    }
-
-    /* + delta*G */
-    if (!scalar_is_zero(delta))
-    {
-      secp256k1_pubkey deltaG;
-      if (!secp256k1_ec_pubkey_create(ctx, &deltaG, delta))
-        goto fail;
-      if (!add_term(ctx, &acc, &inited, &deltaG))
-        goto fail;
-    }
-
-    /* + x*T1 */
-    if (memcmp(x, zero32, 32) != 0)
-    {
-      tmpP = T1;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x))
-      {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-      if (!add_term(ctx, &acc, &inited, &tmpP))
-      {
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-    }
-
-    /* + x^2*T2 */
-    unsigned char x_sq[32];
-    secp256k1_mpt_scalar_mul(x_sq, x, x);
-    if (memcmp(x_sq, zero32, 32) != 0)
-    {
-      tmpP = T2;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tmpP, x_sq))
-      {
-        OPENSSL_cleanse(x_sq, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-      if (!add_term(ctx, &acc, &inited, &tmpP))
-      {
-        OPENSSL_cleanse(x_sq, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-    }
-    OPENSSL_cleanse(x_sq, 32);
-
-    if (!inited)
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-    RHS = acc;
-  }
-
-  if (!pubkey_equal(ctx, &LHS, &RHS))
-  {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
-    goto fail;
-  }
-
   /* =========================================================================
-   * Step 4: Build P and Verify IPA
+   * Step 3: ipa_transcript_id binds A, S, T1, T2, y, z, x, t_hat, context_id.
+   * derive_ipa_round_challenge() inside the consolidated helper chains the
+   * remaining IPA challenges off it.
    * =========================================================================
    */
-
   unsigned char ipa_transcript_id[32];
   {
     unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
     size_t len;
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    int ok = 0;
+    int hash_ok = 0;
     unsigned int md_len = 0;
 
     if (!mdctx)
+    {
+      free(y_block_sum);
+      free(y_powers);
+      free(y_inv_powers);
       goto fail;
+    }
 
     len = 33;
     if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
@@ -2594,42 +2700,20 @@ fs_fail:
     if (md_len != 32)
       goto ipa_tid_cleanup;
 
-    ok = 1;
+    hash_ok = 1;
 
   ipa_tid_cleanup:
     EVP_MD_CTX_free(mdctx);
-    if (!ok)
+    if (!hash_ok)
+    {
+      free(y_block_sum);
+      free(y_powers);
+      free(y_inv_powers);
       goto fail;
+    }
   }
 
   if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript_id, t_hat))
-    goto fail;
-
-  secp256k1_pubkey P = A;
-
-  /* P += x*S */
-  {
-    secp256k1_pubkey xS = S;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &xS, x))
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-
-    secp256k1_pubkey newP;
-    const secp256k1_pubkey *pts[2] = {&P, &xS};
-    if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts, 2))
-      goto fail;
-    P = newP;
-  }
-
-  /* P += sum_{k=0}^{n-1} [ (-z)*G_k + ( z*y^k + z^(block+2)*z^2*2^i ) *
-   * (y^{-k}*H_k) ] */
-  unsigned char neg_z[32];
-  memcpy(neg_z, z, 32);
-  if (!secp256k1_ec_seckey_negate(ctx, neg_z))
   {
     free(y_block_sum);
     free(y_powers);
@@ -2637,154 +2721,17 @@ fs_fail:
     goto fail;
   }
 
-  for (size_t j = 0; j < m; j++)
-  {
-    unsigned char z_j2[32];
-    scalar_pow_u32(ctx, z_j2, z, (unsigned int)(j + 2));
+  /* =========================================================================
+   * Step 4: Single consolidated MSM check.
+   * Issue #100: collapses LHS/RHS + P-construction + IPA folding into one
+   * mpt_msm_variable_time call. Result must be the curve identity.
+   * =========================================================================
+   */
+  int ok = bp_verify_consolidated_msm(
+      ctx, G_vec, H_vec, commitment_C_vec, h_generator, &U, &A, &S, &T1, &T2,
+      L_vec, R_vec, a_final, b_final, t_hat, tau_x, mu, z, x, delta,
+      y_inv_powers, ipa_transcript_id, ux_scalar, m, n, rounds);
 
-    for (size_t i = 0; i < 64; i++)
-    {
-      const size_t k = j * 64 + i;
-
-      /* ---- Gi term: (-z) * G_k ---- */
-      if (!scalar_is_zero(neg_z))
-      {
-        secp256k1_pubkey Gi = G_vec[k];
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &Gi, neg_z))
-          goto fail;
-
-        secp256k1_pubkey newP;
-        const secp256k1_pubkey *pts2[2] = {&P, &Gi};
-        if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts2, 2))
-          goto fail;
-        P = newP;
-      }
-
-      /* ---- Hi term: termH * (y^{-k} * H_k) ---- */
-      unsigned char termH[32], tmp[32];
-      unsigned char two_i[32] = {0};
-
-      secp256k1_mpt_scalar_mul(termH, z,
-                               (const unsigned char *)(y_powers + 32 * k));
-
-      two_i[31 - (i / 8)] = (unsigned char)(1u << (i % 8));
-      secp256k1_mpt_scalar_mul(tmp, z_j2, two_i);
-      secp256k1_mpt_scalar_add(termH, termH, tmp);
-
-      if (!scalar_is_zero(termH))
-      {
-        secp256k1_pubkey Hi = H_vec[k];
-
-        /* Hi = (y^{-k} * H_k) */
-        if (!secp256k1_ec_pubkey_tweak_mul(
-                ctx, &Hi, (const unsigned char *)(y_inv_powers + 32 * k)))
-          goto fail;
-
-        /* Hi = termH * Hi */
-        if (!secp256k1_ec_pubkey_tweak_mul(ctx, &Hi, termH))
-          goto fail;
-
-        secp256k1_pubkey newP;
-        const secp256k1_pubkey *pts2[2] = {&P, &Hi};
-        if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts2, 2))
-          goto fail;
-        P = newP;
-      }
-
-      OPENSSL_cleanse(tmp, 32);
-      OPENSSL_cleanse(termH, 32);
-    }
-
-    OPENSSL_cleanse(z_j2, 32);
-  }
-
-  /* P += (t_hat * ux) * U */
-  {
-    unsigned char t_hat_ux[32];
-    unsigned char zero32[32] = {0};
-    secp256k1_mpt_scalar_mul(t_hat_ux, t_hat, ux_scalar);
-
-    if (memcmp(t_hat_ux, zero32, 32) != 0)
-    {
-      secp256k1_pubkey Q = U;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &Q, t_hat_ux))
-      {
-        OPENSSL_cleanse(t_hat_ux, 32);
-        free(y_block_sum);
-        free(y_powers);
-        free(y_inv_powers);
-        goto fail;
-      }
-      const secp256k1_pubkey *pts2[2] = {&P, &Q};
-      secp256k1_pubkey newP;
-      if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts2, 2))
-        goto fail;
-      P = newP;
-    }
-    OPENSSL_cleanse(t_hat_ux, 32);
-  }
-
-  /* P -= mu*h_generator */
-  {
-    unsigned char neg_mu[32];
-    memcpy(neg_mu, mu, 32);
-    if (!secp256k1_ec_seckey_negate(ctx, neg_mu))
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-
-    secp256k1_pubkey mu_term = *h_generator;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &mu_term, neg_mu))
-    {
-      OPENSSL_cleanse(neg_mu, 32);
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-    OPENSSL_cleanse(neg_mu, 32);
-
-    const secp256k1_pubkey *pts2[2] = {&P, &mu_term};
-    secp256k1_pubkey newP;
-    if (!secp256k1_ec_pubkey_combine(ctx, &newP, pts2, 2))
-      goto fail;
-    P = newP;
-  }
-
-  /* Build Hprime = y^{-k} * H_k (length n) */
-  secp256k1_pubkey *Hprime =
-      (secp256k1_pubkey *)malloc(n * sizeof(secp256k1_pubkey));
-  if (!Hprime)
-  {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
-    goto fail;
-  }
-
-  for (size_t k = 0; k < n; k++)
-  {
-    Hprime[k] = H_vec[k];
-    if (!secp256k1_ec_pubkey_tweak_mul(
-            ctx, &Hprime[k], (const unsigned char *)(y_inv_powers + 32 * k)))
-    {
-      free(Hprime);
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-  }
-  /* IPA verify */
-
-  int ok = ipa_verify_explicit(ctx, G_vec, Hprime, &U, &P, L_vec, R_vec,
-                               n, /* <-- add this */
-                               a_final, b_final, ux_scalar, ipa_transcript_id);
-
-  free(Hprime);
   free(y_block_sum);
   free(y_powers);
   free(y_inv_powers);
