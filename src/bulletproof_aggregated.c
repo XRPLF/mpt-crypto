@@ -1945,124 +1945,469 @@ static int bp_verify_msm_cb(unsigned char scalar_be32[32],
   return 1;
 }
 
-static int bp_verify_consolidated_msm(
-    const secp256k1_context *ctx,
-    /* generator vectors */
-    const secp256k1_pubkey *G_vec, const secp256k1_pubkey *H_vec,
-    const secp256k1_pubkey *V_vec, /* commitment_C_vec, length m */
-    const secp256k1_pubkey *h_generator, const secp256k1_pubkey *U,
-    /* proof points */
-    const secp256k1_pubkey *A, const secp256k1_pubkey *S,
-    const secp256k1_pubkey *T1, const secp256k1_pubkey *T2,
-    const secp256k1_pubkey *L_vec, const secp256k1_pubkey *R_vec,
-    /* proof scalars */
-    const unsigned char a_final[32], const unsigned char b_final[32],
-    const unsigned char t_hat[32], const unsigned char tau_x[32],
-    const unsigned char mu[32],
-    /* FS challenges & precomputed delta / y_inv_powers */
-    const unsigned char z[32], const unsigned char x[32],
-    const unsigned char delta[32], const unsigned char *y_inv_powers,
-    /* IPA state */
-    const unsigned char ipa_transcript_id[32],
-    const unsigned char ux_scalar[32],
-    /* sizes */
-    size_t m, size_t n, size_t rounds)
+/* -------------------------------------------------------------------------
+ * Per-proof derived state (issue #88, shared with #100 single-proof path).
+ *
+ * Captures everything one aggregated-BP proof's verification needs *after*
+ * parsing + FS-challenge derivation but *before* the per-coordinate
+ * coefficient assembly. Used both by the single-proof verifier and by the
+ * batch verifier; the batch version simply holds n_proofs of these.
+ *
+ * Memory ownership: bp_proof_state_init allocates the variable-length
+ * arrays (L_vec, R_vec, y_inv_powers, u_flat, uinv_flat, s_G_flat). The
+ * caller must invoke bp_proof_state_free on success or failure to release
+ * them; bp_proof_state_free is idempotent and tolerates NULL pointers
+ * (zeroed-state safe).
+ */
+typedef struct
 {
+  /* Parsed proof points */
+  secp256k1_pubkey A, S, T1, T2;
+  secp256k1_pubkey *L_vec; /* [rounds] */
+  secp256k1_pubkey *R_vec; /* [rounds] */
+  /* Parsed proof scalars */
+  unsigned char a_final[32];
+  unsigned char b_final[32];
+  unsigned char t_hat[32];
+  unsigned char tau_x[32];
+  unsigned char mu[32];
+  /* Outer FS challenges */
+  unsigned char y[32];
+  unsigned char z[32];
+  unsigned char x[32];
+  /* Derived */
+  unsigned char delta[32];
+  unsigned char *y_inv_powers; /* [n*32] */
+  /* IPA state */
+  unsigned char ipa_transcript_id[32];
+  unsigned char ux_scalar[32];
+  unsigned char *u_flat;    /* [rounds*32] */
+  unsigned char *uinv_flat; /* [rounds*32] */
+  unsigned char *s_G_flat;  /* [n*32]; G-fold weights. s_H_k = s_G_k^{-1}. */
+  /* Intra-proof RLC weight that batches E1 + c*E2 = 0 */
+  unsigned char c_scalar[32];
+  /* Sizes (derive from m) */
+  size_t m, n, rounds;
+} bp_proof_state;
+
+static void bp_proof_state_free(bp_proof_state *st)
+{
+  if (!st)
+    return;
+  free(st->L_vec);
+  st->L_vec = NULL;
+  free(st->R_vec);
+  st->R_vec = NULL;
+  free(st->y_inv_powers);
+  st->y_inv_powers = NULL;
+  free(st->u_flat);
+  st->u_flat = NULL;
+  free(st->uinv_flat);
+  st->uinv_flat = NULL;
+  free(st->s_G_flat);
+  st->s_G_flat = NULL;
+}
+
+static int bp_proof_state_init(const secp256k1_context *ctx, bp_proof_state *st,
+                               const secp256k1_pubkey *commitment_C_vec,
+                               const unsigned char *proof, size_t proof_len,
+                               size_t m, const unsigned char *context_id)
+{
+  memset(st, 0, sizeof(*st));
+
+  if (m == 0 || m > BP_MAX_VALUES)
+    return 0;
+  if ((m & (m - 1)) != 0)
+    return 0;
+  st->m = m;
+  st->n = BP_TOTAL_BITS(m);
+  st->rounds = bp_ipa_rounds(st->n);
+
+  if (proof_len != 292 + 66 * st->rounds)
+    return 0;
+
+  st->L_vec = (secp256k1_pubkey *)malloc(st->rounds * sizeof(secp256k1_pubkey));
+  st->R_vec = (secp256k1_pubkey *)malloc(st->rounds * sizeof(secp256k1_pubkey));
+  st->y_inv_powers = (unsigned char *)malloc(st->n * 32);
+  st->u_flat = (unsigned char *)malloc(st->rounds * 32);
+  st->uinv_flat = (unsigned char *)malloc(st->rounds * 32);
+  st->s_G_flat = (unsigned char *)malloc(st->n * 32);
+  if (!st->L_vec || !st->R_vec || !st->y_inv_powers || !st->u_flat ||
+      !st->uinv_flat || !st->s_G_flat)
+    return 0;
+
+  /* --- Parse proof bytes --- */
+  const unsigned char *ptr = proof;
+  if (!secp256k1_ec_pubkey_parse(ctx, &st->A, ptr, 33))
+    return 0;
+  ptr += 33;
+  if (!secp256k1_ec_pubkey_parse(ctx, &st->S, ptr, 33))
+    return 0;
+  ptr += 33;
+  if (!secp256k1_ec_pubkey_parse(ctx, &st->T1, ptr, 33))
+    return 0;
+  ptr += 33;
+  if (!secp256k1_ec_pubkey_parse(ctx, &st->T2, ptr, 33))
+    return 0;
+  ptr += 33;
+  for (size_t i = 0; i < st->rounds; i++)
+  {
+    if (!secp256k1_ec_pubkey_parse(ctx, &st->L_vec[i], ptr, 33))
+      return 0;
+    ptr += 33;
+  }
+  for (size_t i = 0; i < st->rounds; i++)
+  {
+    if (!secp256k1_ec_pubkey_parse(ctx, &st->R_vec[i], ptr, 33))
+      return 0;
+    ptr += 33;
+  }
+  memcpy(st->a_final, ptr, 32);
+  ptr += 32;
+  memcpy(st->b_final, ptr, 32);
+  ptr += 32;
+  memcpy(st->t_hat, ptr, 32);
+  ptr += 32;
+  memcpy(st->tau_x, ptr, 32);
+  ptr += 32;
+  memcpy(st->mu, ptr, 32);
+  ptr += 32;
+
+  if (!secp256k1_ec_seckey_verify(ctx, st->a_final))
+    return 0;
+  if (!secp256k1_ec_seckey_verify(ctx, st->b_final))
+    return 0;
+  if (!secp256k1_ec_seckey_verify(ctx, st->t_hat))
+    return 0;
+  if (!secp256k1_ec_seckey_verify(ctx, st->tau_x))
+    return 0;
+  if (!secp256k1_ec_seckey_verify(ctx, st->mu))
+    return 0;
+
+  /* --- Serialize A, S, T1, T2 once for FS hashing --- */
+  unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
+  size_t slen;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &st->A,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    return 0;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &st->S,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    return 0;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &st->T1,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    return 0;
+  slen = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &st->T2,
+                                     SECP256K1_EC_COMPRESSED) ||
+      slen != 33)
+    return 0;
+
+  /* --- FS challenges y, z, x via dedicated EVP_MD_CTX scope --- */
+  {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int fs_ok = 0;
+    if (!mdctx)
+      return 0;
+
+    /* y = H("MPT_BULLETPROOF_RANGE" || C_i... || A || S || context) */
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+      goto fs_cleanup;
+    for (size_t i = 0; i < m; i++)
+    {
+      unsigned char C_ser[33];
+      size_t c_len = 33;
+      if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len,
+                                         &commitment_C_vec[i],
+                                         SECP256K1_EC_COMPRESSED) ||
+          c_len != 33)
+        goto fs_cleanup;
+      if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+        goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, st->y, NULL) != 1)
+      goto fs_cleanup;
+    secp256k1_mpt_scalar_reduce32(st->y, st->y);
+
+    /* z = H(...||y) */
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
+      goto fs_cleanup;
+    for (size_t i = 0; i < m; i++)
+    {
+      unsigned char C_ser[33];
+      size_t c_len = 33;
+      if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len,
+                                         &commitment_C_vec[i],
+                                         SECP256K1_EC_COMPRESSED) ||
+          c_len != 33)
+        goto fs_cleanup;
+      if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
+        goto fs_cleanup;
+    }
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->y, 32) != 1)
+      goto fs_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, st->z, NULL) != 1)
+      goto fs_cleanup;
+    secp256k1_mpt_scalar_reduce32(st->z, st->z);
+    if (!secp256k1_ec_seckey_verify(ctx, st->y) ||
+        !secp256k1_ec_seckey_verify(ctx, st->z))
+      goto fs_cleanup;
+
+    /* x = H(A || S || y || z || T1 || T2 || context) */
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->y, 32) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->z, 32) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto fs_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto fs_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, st->x, NULL) != 1)
+      goto fs_cleanup;
+    secp256k1_mpt_scalar_reduce32(st->x, st->x);
+    if (!secp256k1_ec_seckey_verify(ctx, st->x))
+      goto fs_cleanup;
+
+    fs_ok = 1;
+  fs_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!fs_ok)
+      return 0;
+  }
+
+  /* --- y_inv_powers (the prover-side y_powers vector is not needed
+   * verifier-side because the consolidated MSM only references y^{-k}). --- */
+  {
+    unsigned char y_inv[32];
+    secp256k1_mpt_scalar_inverse(y_inv, st->y);
+    scalar_vector_powers(ctx, (unsigned char (*)[32])st->y_inv_powers, y_inv,
+                         st->n);
+  }
+
+  /* --- delta(y, z) for aggregation:
+   *   delta = (z - z^2) * sum_{k=0..n-1} y^k - sum_{j=0..m-1} z^(j+3) *
+   * <1,2^64>
+   */
+  {
+    unsigned char z_sq[32];
+    secp256k1_mpt_scalar_mul(z_sq, st->z, st->z);
+
+    unsigned char (*y_block_sum)[32] = (unsigned char (*)[32])malloc(m * 32);
+    if (!y_block_sum)
+      return 0;
+
+    unsigned char two_sum[32];
+    compute_delta_scalars(ctx, y_block_sum, two_sum, st->y, m);
+
+    unsigned char sum_y_all[32] = {0};
+    for (size_t j = 0; j < m; j++)
+      secp256k1_mpt_scalar_add(sum_y_all, sum_y_all, y_block_sum[j]);
+
+    unsigned char z_minus_z2[32], tmp[32];
+    secp256k1_mpt_scalar_sub(z_minus_z2, st->z, z_sq);
+    secp256k1_mpt_scalar_mul(tmp, z_minus_z2, sum_y_all);
+    memcpy(st->delta, tmp, 32);
+
+    for (size_t j = 0; j < m; j++)
+    {
+      unsigned char z_j3[32];
+      scalar_pow_u32(ctx, z_j3, st->z, (unsigned int)(j + 3));
+      secp256k1_mpt_scalar_mul(tmp, z_j3, two_sum);
+      secp256k1_mpt_scalar_negate(tmp, tmp);
+      secp256k1_mpt_scalar_add(st->delta, st->delta, tmp);
+    }
+
+    free(y_block_sum);
+  }
+
+  /* --- ipa_transcript_id binds A, S, T1, T2, y, z, x, t_hat, context_id --- */
+  {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    int hash_ok = 0;
+    unsigned int md_len = 0;
+    if (!mdctx)
+      return 0;
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->y, 32) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->z, 32) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->x, 32) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->t_hat, 32) != 1)
+      goto tid_cleanup;
+    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+      goto tid_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, st->ipa_transcript_id, &md_len) != 1 ||
+        md_len != 32)
+      goto tid_cleanup;
+    hash_ok = 1;
+  tid_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!hash_ok)
+      return 0;
+  }
+
+  if (!derive_ipa_binding_challenge(ctx, st->ux_scalar, st->ipa_transcript_id,
+                                    st->t_hat))
+    return 0;
+
+  /* --- IPA round challenges u_i and inverses --- */
+  {
+    unsigned char last[32];
+    memcpy(last, st->ipa_transcript_id, 32);
+    for (size_t i = 0; i < st->rounds; i++)
+    {
+      unsigned char *ui = st->u_flat + 32 * i;
+      unsigned char *uiinv = st->uinv_flat + 32 * i;
+      if (!derive_ipa_round_challenge(ctx, ui, last, &st->L_vec[i],
+                                      &st->R_vec[i]))
+        return 0;
+      secp256k1_mpt_scalar_inverse(uiinv, ui);
+      if (!secp256k1_ec_seckey_verify(ctx, uiinv))
+        return 0;
+      memcpy(last, ui, 32);
+    }
+  }
+
+  /* --- s_G_k for k = 0..n-1 (G-fold pattern) --- */
+  for (size_t k = 0; k < st->n; k++)
+  {
+    unsigned char cur[32] = {0};
+    cur[31] = 1;
+    for (size_t j = 0; j < st->rounds; j++)
+    {
+      int bit = (int)((k >> (st->rounds - 1 - j)) & 1);
+      const unsigned char *uj = st->u_flat + 32 * j;
+      const unsigned char *ujinv = st->uinv_flat + 32 * j;
+      secp256k1_mpt_scalar_mul(cur, cur, bit ? uj : ujinv);
+    }
+    memcpy(st->s_G_flat + 32 * k, cur, 32);
+  }
+
+  /* --- Intra-proof RLC weight c that batches E1 + c*E2 = 0 ---
+   *   c = H("MPT_BP_VERIFY_BATCH_RLC" || u_{rounds-1} || tau_x || mu || a ||
+   * b). Identical to the single-proof derivation in #100. */
+  {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+    unsigned char hash[32];
+    unsigned int hlen = 0;
+    int hash_ok = 0;
+    if (!mdctx)
+      return 0;
+    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, "MPT_BP_VERIFY_BATCH_RLC", 23) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->u_flat + 32 * (st->rounds - 1), 32) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->tau_x, 32) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->mu, 32) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->a_final, 32) != 1)
+      goto c_cleanup;
+    if (EVP_DigestUpdate(mdctx, st->b_final, 32) != 1)
+      goto c_cleanup;
+    if (EVP_DigestFinal_ex(mdctx, hash, &hlen) != 1 || hlen != 32)
+      goto c_cleanup;
+    secp256k1_mpt_scalar_reduce32(st->c_scalar, hash);
+    if (!secp256k1_ec_seckey_verify(ctx, st->c_scalar))
+      goto c_cleanup;
+    hash_ok = 1;
+  c_cleanup:
+    EVP_MD_CTX_free(mdctx);
+    if (!hash_ok)
+      return 0;
+  }
+
+  return 1;
+}
+
+static int bp_verify_consolidated_msm(const secp256k1_context *ctx,
+                                      const secp256k1_pubkey *G_vec,
+                                      const secp256k1_pubkey *H_vec,
+                                      const secp256k1_pubkey *V_vec,
+                                      const secp256k1_pubkey *h_generator,
+                                      const secp256k1_pubkey *U,
+                                      const bp_proof_state *st)
+{
+  /* Aliases that keep the assembly loops readable while still mapping
+   * one-to-one onto the equations in the file-level comment block. */
+  const unsigned char *a_final = st->a_final;
+  const unsigned char *b_final = st->b_final;
+  const unsigned char *t_hat = st->t_hat;
+  const unsigned char *tau_x = st->tau_x;
+  const unsigned char *mu = st->mu;
+  const unsigned char *z = st->z;
+  const unsigned char *x = st->x;
+  const unsigned char *delta = st->delta;
+  const unsigned char *ux_scalar = st->ux_scalar;
+  const unsigned char *c_scalar = st->c_scalar;
+  const unsigned char *y_inv_powers = st->y_inv_powers;
+  const unsigned char *u_flat = st->u_flat;
+  const unsigned char *uinv_flat = st->uinv_flat;
+  const unsigned char *s_G_flat = st->s_G_flat;
+  const secp256k1_pubkey *A = &st->A;
+  const secp256k1_pubkey *S = &st->S;
+  const secp256k1_pubkey *T1 = &st->T1;
+  const secp256k1_pubkey *T2 = &st->T2;
+  const secp256k1_pubkey *L_vec = st->L_vec;
+  const secp256k1_pubkey *R_vec = st->R_vec;
+  const size_t m = st->m, n = st->n, rounds = st->rounds;
+
   int ok = 0;
-  unsigned char *u_flat = NULL;
-  unsigned char *uinv_flat = NULL;
-  unsigned char *s_G_flat = NULL;
   unsigned char *points_ser = NULL;
   unsigned char *scalars_flat = NULL;
   unsigned char (*z_jp2)[32] = NULL;
-
-  u_flat = (unsigned char *)malloc(rounds * 32);
-  uinv_flat = (unsigned char *)malloc(rounds * 32);
-  s_G_flat = (unsigned char *)malloc(n * 32);
 
   const size_t n_terms = 2 * n + 2 * rounds + m + 6;
   points_ser = (unsigned char *)malloc(n_terms * 33);
   scalars_flat = (unsigned char *)malloc(n_terms * 32);
   z_jp2 = (unsigned char (*)[32])malloc(m * 32);
 
-  if (!u_flat || !uinv_flat || !s_G_flat || !points_ser || !scalars_flat ||
-      !z_jp2)
+  if (!points_ser || !scalars_flat || !z_jp2)
     goto cleanup;
 
-  /* ---- (1) Re-derive IPA round challenges and inverses ---- */
-  {
-    unsigned char last[32];
-    memcpy(last, ipa_transcript_id, 32);
-    for (size_t i = 0; i < rounds; i++)
-    {
-      unsigned char *ui = u_flat + 32 * i;
-      unsigned char *uiinv = uinv_flat + 32 * i;
-      if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
-        goto cleanup;
-      secp256k1_mpt_scalar_inverse(uiinv, ui);
-      if (!secp256k1_ec_seckey_verify(ctx, uiinv))
-        goto cleanup;
-      memcpy(last, ui, 32);
-    }
-  }
-
-  /* ---- (2) Compute s_G_k for k = 0..n-1 (G-fold pattern) ---- */
-  for (size_t k = 0; k < n; k++)
-  {
-    unsigned char cur[32] = {0};
-    cur[31] = 1;
-    for (size_t j = 0; j < rounds; j++)
-    {
-      int bit = (int)((k >> (rounds - 1 - j)) & 1);
-      const unsigned char *uj = u_flat + 32 * j;
-      const unsigned char *ujinv = uinv_flat + 32 * j;
-      secp256k1_mpt_scalar_mul(cur, cur, bit ? uj : ujinv);
-    }
-    memcpy(s_G_flat + 32 * k, cur, 32);
-  }
-
-  /* ---- (3) Derive RLC challenge c that batches E1 + c*E2.
-   *      The last IPA round challenge transitively binds A, S, T1, T2,
-   *      y, z, x, t_hat, context_id, and all L_i/R_i via the FS chain.
-   *      Extending with tau_x, mu, a, b binds every remaining proof byte
-   *      so a malicious prover cannot predict c before committing. ---- */
-  unsigned char c_scalar[32];
-  {
-    EVP_MD_CTX *md = EVP_MD_CTX_new();
-    unsigned char hash[32];
-    unsigned int hlen = 0;
-    int hash_ok = 0;
-    if (!md)
-      goto cleanup;
-    if (EVP_DigestInit_ex(md, EVP_sha256(), NULL) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, "MPT_BP_VERIFY_BATCH_RLC", 23) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, u_flat + 32 * (rounds - 1), 32) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, tau_x, 32) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, mu, 32) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, a_final, 32) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestUpdate(md, b_final, 32) != 1)
-      goto c_hash_cleanup;
-    if (EVP_DigestFinal_ex(md, hash, &hlen) != 1 || hlen != 32)
-      goto c_hash_cleanup;
-    secp256k1_mpt_scalar_reduce32(c_scalar, hash);
-    /* c == 0 is statistically negligible (~2^-256) but would zero out E2;
-     * reject as malformed if it occurs so soundness reasoning stays clean. */
-    if (!secp256k1_ec_seckey_verify(ctx, c_scalar))
-      goto c_hash_cleanup;
-    hash_ok = 1;
-  c_hash_cleanup:
-    EVP_MD_CTX_free(md);
-    if (!hash_ok)
-      goto cleanup;
-  }
-
-  /* ---- (4) Precompute z^(j+2) for j = 0..m-1 ---- */
+  /* ---- Precompute z^(j+2) for j = 0..m-1 ---- */
   for (size_t j = 0; j < m; j++)
     scalar_pow_u32(ctx, z_jp2[j], z, (unsigned int)(j + 2));
 
@@ -2282,9 +2627,6 @@ static int bp_verify_consolidated_msm(
   ok = (memcmp(result, zero33, 33) == 0) ? 1 : 0;
 
 cleanup:
-  free(u_flat);
-  free(uinv_flat);
-  free(s_G_flat);
   free(points_ser);
   free(scalars_flat);
   free(z_jp2);
@@ -2327,422 +2669,410 @@ int secp256k1_bulletproof_verify_agg(
 {
   if (!ctx || !G_vec || !H_vec || !proof || !commitment_C_vec || !h_generator)
     return 0;
-  if (m == 0 || m > BP_MAX_VALUES)
-    return 0;
-  /* Aggregation requires n = 64*m to be power-of-two => m must be power-of-two.
-   */
-  if ((m & (m - 1)) != 0)
-    return 0;
 
-  const size_t n = BP_TOTAL_BITS(m); /* 64*m */
-  const size_t rounds = bp_ipa_rounds(n);
-
-  /* Proof length is dynamic in aggregated mode */
-  const size_t expected_len = 292 + 66 * rounds;
-  if (proof_len != expected_len)
-    return 0;
-
-  /* --- Unpack proof --- */
-  secp256k1_pubkey A, S, T1, T2;
+  /* Derive U (HKDF-derived, identical across all proofs in any batch). */
   secp256k1_pubkey U;
-
-  secp256k1_pubkey *L_vec =
-      (secp256k1_pubkey *)malloc(rounds * sizeof(secp256k1_pubkey));
-  secp256k1_pubkey *R_vec =
-      (secp256k1_pubkey *)malloc(rounds * sizeof(secp256k1_pubkey));
-  if (!L_vec || !R_vec)
-  {
-    free(L_vec);
-    free(R_vec);
-    return 0;
-  }
-
-  unsigned char a_final[32], b_final[32];
-  unsigned char t_hat[32], tau_x[32], mu[32];
-
-  unsigned char y[32], z[32], x[32];
-  unsigned char ux_scalar[32];
-  unsigned char z_sq[32];
-
-  const unsigned char *ptr = proof;
-
-  if (!secp256k1_ec_pubkey_parse(ctx, &A, ptr, 33))
-    goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &S, ptr, 33))
-    goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &T1, ptr, 33))
-    goto fail;
-  ptr += 33;
-  if (!secp256k1_ec_pubkey_parse(ctx, &T2, ptr, 33))
-    goto fail;
-  ptr += 33;
-
-  for (size_t i = 0; i < rounds; i++)
-  {
-    if (!secp256k1_ec_pubkey_parse(ctx, &L_vec[i], ptr, 33))
-      goto fail;
-    ptr += 33;
-  }
-
-  for (size_t i = 0; i < rounds; i++)
-  {
-    if (!secp256k1_ec_pubkey_parse(ctx, &R_vec[i], ptr, 33))
-      goto fail;
-    ptr += 33;
-  }
-
-  memcpy(a_final, ptr, 32);
-  ptr += 32;
-  memcpy(b_final, ptr, 32);
-  ptr += 32;
-  memcpy(t_hat, ptr, 32);
-  ptr += 32;
-  memcpy(tau_x, ptr, 32);
-  ptr += 32;
-  memcpy(mu, ptr, 32);
-  ptr += 32;
-
-  /* Basic scalar validity */
-  if (!secp256k1_ec_seckey_verify(ctx, a_final))
-    goto fail;
-  if (!secp256k1_ec_seckey_verify(ctx, b_final))
-    goto fail;
-  if (!secp256k1_ec_seckey_verify(ctx, t_hat))
-    goto fail;
-  if (!secp256k1_ec_seckey_verify(ctx, tau_x))
-    goto fail;
-  if (!secp256k1_ec_seckey_verify(ctx, mu))
-    goto fail;
-
-  /* Derive U */
   {
     secp256k1_pubkey U_arr[1];
     if (!secp256k1_mpt_get_generator_vector(ctx, U_arr, 1,
                                             (const unsigned char *)"BP_U", 4))
-      goto fail;
+      return 0;
     U = U_arr[0];
   }
 
-  /* --- Fiat–Shamir: y,z,x --- */
-  unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-  size_t slen;
-  EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-  int fs_ok = 0;
-  unsigned char *y_powers = NULL;
-  unsigned char *y_inv_powers = NULL;
-
-  if (!mdctx)
-    goto fail;
-
-  /* Serialize A,S,T1,T2 */
-  slen = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &slen, &A,
-                                     SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
-    goto fs_fail;
-  slen = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &slen, &S,
-                                     SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
-    goto fs_fail;
-  slen = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &slen, &T1,
-                                     SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
-    goto fs_fail;
-  slen = 33;
-  if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &slen, &T2,
-                                     SECP256K1_EC_COMPRESSED) ||
-      slen != 33)
-    goto fs_fail;
-
-  /* ---------------- y = H(domain || C_i || A || S || context) ----------------
-   */
-  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    goto fs_fail;
-
-  for (size_t i = 0; i < m; i++)
+  bp_proof_state st;
+  if (!bp_proof_state_init(ctx, &st, commitment_C_vec, proof, proof_len, m,
+                           context_id))
   {
-    unsigned char C_ser[33];
-    size_t c_len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        c_len != 33)
-      goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
-      goto fs_fail;
+    bp_proof_state_free(&st);
+    return 0;
   }
 
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-    goto fs_fail;
-  if (EVP_DigestFinal_ex(mdctx, y, NULL) != 1)
-    goto fs_fail;
-
-  secp256k1_mpt_scalar_reduce32(y, y);
-
-  /* ---------------- z = H(domain || C_i || A || S || y || context)
-   * ---------------- */
-  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
-    goto fs_fail;
-
-  for (size_t i = 0; i < m; i++)
-  {
-    unsigned char C_ser[33];
-    size_t c_len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, C_ser, &c_len, &commitment_C_vec[i],
-                                       SECP256K1_EC_COMPRESSED) ||
-        c_len != 33)
-      goto fs_fail;
-    if (EVP_DigestUpdate(mdctx, C_ser, 33) != 1)
-      goto fs_fail;
-  }
-
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-    goto fs_fail;
-  if (EVP_DigestFinal_ex(mdctx, z, NULL) != 1)
-    goto fs_fail;
-
-  secp256k1_mpt_scalar_reduce32(z, z);
-
-  if (!secp256k1_ec_seckey_verify(ctx, y) ||
-      !secp256k1_ec_seckey_verify(ctx, z))
-    goto fs_fail;
-
-  /* Powers */
-  y_powers = (unsigned char *)malloc(n * 32);
-  y_inv_powers = (unsigned char *)malloc(n * 32);
-  if (!y_powers || !y_inv_powers)
-  {
-    free(y_powers);
-    free(y_inv_powers);
-    goto fs_fail;
-  }
-
-  unsigned char y_inv[32];
-  scalar_vector_powers(ctx, (unsigned char (*)[32])y_powers, y, n);
-  secp256k1_mpt_scalar_inverse(y_inv, y);
-  scalar_vector_powers(ctx, (unsigned char (*)[32])y_inv_powers, y_inv, n);
-
-  /* ---------------- x = H(A || S || y || z || T1 || T2 || context)
-   * ---------------- */
-  if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, y, 32) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, z, 32) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
-    goto fs_fail;
-  if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
-    goto fs_fail;
-  if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-    goto fs_fail;
-  if (EVP_DigestFinal_ex(mdctx, x, NULL) != 1)
-    goto fs_fail;
-
-  secp256k1_mpt_scalar_reduce32(x, x);
-
-  if (!secp256k1_ec_seckey_verify(ctx, x))
-  {
-    free(y_powers);
-    y_powers = NULL;
-    free(y_inv_powers);
-    y_inv_powers = NULL;
-    goto fs_fail;
-  }
-
-  fs_ok = 1;
-
-fs_fail:
-  EVP_MD_CTX_free(mdctx);
-  if (!fs_ok)
-    goto fail;
-
-  /* z^2 */
-  secp256k1_mpt_scalar_mul(z_sq, z, z);
-
-  /* =========================================================================
-   * Step 3: Verify polynomial identity:
-   *   t_hat*G + tau_x*H == (sum_j z^(j+2) * V_j) + delta(y,z)*G + x*T1 + x^2*T2
-   * =========================================================================
-   */
-
-  /* --- delta(y,z) for aggregation --- */
-  unsigned char (*y_block_sum)[32] = (unsigned char (*)[32])malloc(m * 32);
-  if (!y_block_sum)
-  {
-    free(y_powers);
-    free(y_inv_powers);
-    goto fail;
-  }
-
-  unsigned char two_sum[32];
-  compute_delta_scalars(ctx, y_block_sum, two_sum, y, m);
-
-  unsigned char delta[32] = {0};
-  unsigned char sum_y_all[32] = {0};
-
-  /* sum_y_all = sum_{k=0}^{n-1} y^k = sum_j y_block_sum[j] */
-  for (size_t j = 0; j < m; j++)
-  {
-    secp256k1_mpt_scalar_add(sum_y_all, sum_y_all, y_block_sum[j]);
-  }
-
-  /* delta += (z - z^2) * sum_y_all */
-  {
-    unsigned char z_minus_z2[32], tmp[32];
-    secp256k1_mpt_scalar_sub(z_minus_z2, z, z_sq);
-    secp256k1_mpt_scalar_mul(tmp, z_minus_z2, sum_y_all);
-    secp256k1_mpt_scalar_add(delta, delta, tmp);
-    OPENSSL_cleanse(z_minus_z2, 32);
-    OPENSSL_cleanse(tmp, 32);
-  }
-
-  /* delta -= sum_{j=0}^{m-1} z^(j+3) * two_sum */
-  for (size_t j = 0; j < m; j++)
-  {
-    unsigned char z_j3[32], tmp[32];
-    scalar_pow_u32(ctx, z_j3, z, (unsigned int)(j + 3));
-    secp256k1_mpt_scalar_mul(tmp, z_j3, two_sum);
-    secp256k1_mpt_scalar_negate(tmp, tmp);
-    secp256k1_mpt_scalar_add(delta, delta, tmp);
-    OPENSSL_cleanse(z_j3, 32);
-    OPENSSL_cleanse(tmp, 32);
-  }
-
-  OPENSSL_cleanse(sum_y_all, 32);
-
-  /* =========================================================================
-   * Step 3: ipa_transcript_id binds A, S, T1, T2, y, z, x, t_hat, context_id.
-   * derive_ipa_round_challenge() inside the consolidated helper chains the
-   * remaining IPA challenges off it.
-   * =========================================================================
-   */
-  unsigned char ipa_transcript_id[32];
-  {
-    unsigned char A_ser[33], S_ser[33], T1_ser[33], T2_ser[33];
-    size_t len;
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-    int hash_ok = 0;
-    unsigned int md_len = 0;
-
-    if (!mdctx)
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, A_ser, &len, &A,
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto ipa_tid_cleanup;
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &len, &S,
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto ipa_tid_cleanup;
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, T1_ser, &len, &T1,
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto ipa_tid_cleanup;
-    len = 33;
-    if (!secp256k1_ec_pubkey_serialize(ctx, T2_ser, &len, &T2,
-                                       SECP256K1_EC_COMPRESSED) ||
-        len != 33)
-      goto ipa_tid_cleanup;
-
-    if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, A_ser, 33) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, S_ser, 33) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, T1_ser, 33) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, T2_ser, 33) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, y, 32) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, z, 32) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, x, 32) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestUpdate(mdctx, t_hat, 32) != 1)
-      goto ipa_tid_cleanup;
-    if (context_id && EVP_DigestUpdate(mdctx, context_id, 32) != 1)
-      goto ipa_tid_cleanup;
-    if (EVP_DigestFinal_ex(mdctx, ipa_transcript_id, &md_len) != 1)
-      goto ipa_tid_cleanup;
-    if (md_len != 32)
-      goto ipa_tid_cleanup;
-
-    hash_ok = 1;
-
-  ipa_tid_cleanup:
-    EVP_MD_CTX_free(mdctx);
-    if (!hash_ok)
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
-  }
-
-  if (!derive_ipa_binding_challenge(ctx, ux_scalar, ipa_transcript_id, t_hat))
-  {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
-    goto fail;
-  }
-
-  /* =========================================================================
-   * Step 4: Single consolidated MSM check.
-   * Issue #100: collapses LHS/RHS + P-construction + IPA folding into one
-   * mpt_msm_variable_time call. Result must be the curve identity.
-   * =========================================================================
-   */
-  int ok = bp_verify_consolidated_msm(
-      ctx, G_vec, H_vec, commitment_C_vec, h_generator, &U, &A, &S, &T1, &T2,
-      L_vec,
-      R_vec, a_final, b_final, t_hat, tau_x, mu, z, x, delta, y_inv_powers,
-      ipa_transcript_id, ux_scalar, m, n, rounds);
-
-  free(y_block_sum);
-  free(y_powers);
-  free(y_inv_powers);
-  free(L_vec);
-  free(R_vec);
-
+  int ok = bp_verify_consolidated_msm(ctx, G_vec, H_vec, commitment_C_vec,
+                                      h_generator, &U, &st);
+  bp_proof_state_free(&st);
   return ok ? 1 : 0;
+}
 
-fail:
-  free(L_vec);
-  free(R_vec);
-  return 0;
+/* -------------------------------------------------------------------------
+ * Batched aggregated-Bulletproof verification (issue #88).
+ *
+ * Verifies n_proofs aggregated proofs via BBB+18 sec. 6.1 RLC stacking
+ * in a single mpt_msm_variable_time call. Per-proof inner check is the
+ * same E1 + c_i*E2 = 0 collapse from #100, then the batch sums
+ *   sum_i rho^i * (E1_i + c_i * E2_i) = 0
+ * with rho derived after every proof's c_i is fixed.
+ *
+ * Efficiency win: the shared generators G_vec / H_vec / h_generator / U
+ * contribute one MSM term each regardless of batch size, because their
+ * per-proof coefficients are summed before the MSM rather than
+ * accumulated point-by-point. For a batch of B proofs at m=2 this
+ * collapses ~B*278 terms down to ~258 + 20*B.
+ */
+
+int secp256k1_bulletproof_verify_batch_agg(
+    const secp256k1_context *ctx, const secp256k1_pubkey *G_vec,
+    const secp256k1_pubkey *H_vec, const unsigned char *const *proofs,
+    const size_t *proof_lens, const secp256k1_pubkey *const *commitment_C_vecs,
+    const size_t *m_vec, const secp256k1_pubkey *h_generator,
+    const unsigned char *const *context_ids, size_t n_proofs)
+{
+  if (!ctx || !G_vec || !H_vec || !proofs || !proof_lens ||
+      !commitment_C_vecs || !m_vec || !h_generator || !context_ids ||
+      n_proofs == 0)
+    return 0;
+
+  int ok = 0;
+  bp_proof_state *states = NULL;
+  unsigned char *G_coeffs = NULL;
+  unsigned char *H_coeffs = NULL;
+  unsigned char *points_ser = NULL;
+  unsigned char *scalars_flat = NULL;
+  unsigned char (*z_jp2_max)[32] = NULL;
+
+  /* Validate m_vec entries and compute max_m / max_n. */
+  size_t max_m = 0;
+  for (size_t i = 0; i < n_proofs; i++)
+  {
+    if (m_vec[i] == 0 || m_vec[i] > BP_MAX_VALUES)
+      return 0;
+    if ((m_vec[i] & (m_vec[i] - 1)) != 0)
+      return 0;
+    if (m_vec[i] > max_m)
+      max_m = m_vec[i];
+  }
+  const size_t max_n = BP_TOTAL_BITS(max_m);
+
+  /* Derive U (shared across all proofs in the batch). */
+  secp256k1_pubkey U;
+  {
+    secp256k1_pubkey U_arr[1];
+    if (!secp256k1_mpt_get_generator_vector(ctx, U_arr, 1,
+                                            (const unsigned char *)"BP_U", 4))
+      return 0;
+    U = U_arr[0];
+  }
+
+  /* Pass 1: parse + derive per-proof state (incl. each proof's c_scalar). */
+  states = (bp_proof_state *)calloc(n_proofs, sizeof(bp_proof_state));
+  if (!states)
+    return 0;
+  for (size_t i = 0; i < n_proofs; i++)
+  {
+    if (!commitment_C_vecs[i] || !proofs[i])
+      goto cleanup;
+    if (!bp_proof_state_init(ctx, &states[i], commitment_C_vecs[i], proofs[i],
+                             proof_lens[i], m_vec[i], context_ids[i]))
+      goto cleanup;
+  }
+
+  /* Derive batch RLC weight rho.
+   *   rho = H("MPT_BP_VERIFY_BATCH" || c_0 || c_1 || ... || c_{n_proofs-1}).
+   * Each c_i transitively binds all of proof_i's bytes (incl. commitments
+   * and context_id) via the FS chain, so rho binds every input to the
+   * batch verifier. */
+  unsigned char rho[32];
+  {
+    EVP_MD_CTX *md = EVP_MD_CTX_new();
+    unsigned char hash[32];
+    unsigned int hlen = 0;
+    int rho_ok = 0;
+    if (!md)
+      goto cleanup;
+    if (EVP_DigestInit_ex(md, EVP_sha256(), NULL) != 1)
+      goto rho_cleanup;
+    if (EVP_DigestUpdate(md, "MPT_BP_VERIFY_BATCH", 19) != 1)
+      goto rho_cleanup;
+    for (size_t i = 0; i < n_proofs; i++)
+    {
+      if (EVP_DigestUpdate(md, states[i].c_scalar, 32) != 1)
+        goto rho_cleanup;
+    }
+    if (EVP_DigestFinal_ex(md, hash, &hlen) != 1 || hlen != 32)
+      goto rho_cleanup;
+    secp256k1_mpt_scalar_reduce32(rho, hash);
+    if (!secp256k1_ec_seckey_verify(ctx, rho))
+      goto rho_cleanup;
+    rho_ok = 1;
+  rho_cleanup:
+    EVP_MD_CTX_free(md);
+    if (!rho_ok)
+      goto cleanup;
+  }
+
+  /* Shared accumulators. */
+  G_coeffs = (unsigned char *)calloc(max_n, 32);
+  H_coeffs = (unsigned char *)calloc(max_n, 32);
+  unsigned char H_pk_coef[32] = {0};
+  unsigned char U_coef[32] = {0};
+  unsigned char G_gen_coef[32] = {0};
+
+  /* Total MSM term count: shared + per-proof slots. */
+  size_t total_per_proof_terms = 0;
+  for (size_t i = 0; i < n_proofs; i++)
+    total_per_proof_terms += m_vec[i] + 4 + 2 * states[i].rounds;
+  const size_t shared_terms = 2 * max_n + 2; /* G_k + H_k + H_pk + U */
+  const size_t n_terms = shared_terms + total_per_proof_terms;
+
+  points_ser = (unsigned char *)malloc(n_terms * 33);
+  scalars_flat = (unsigned char *)malloc(n_terms * 32);
+  z_jp2_max = (unsigned char (*)[32])malloc(max_m * 32);
+  if (!G_coeffs || !H_coeffs || !points_ser || !scalars_flat || !z_jp2_max)
+    goto cleanup;
+
+  /* Pass 2: per-proof contribution accumulation.
+   * Per-proof points are written to the [shared_terms ..] tail.
+   * Shared coefficients are summed into G_coeffs / H_coeffs / H_pk_coef /
+   * U_coef / G_gen_coef. */
+  size_t pp_idx = shared_terms;
+  unsigned char rho_i[32] = {0};
+  rho_i[31] = 1; /* rho^0 = 1 */
+
+  for (size_t i = 0; i < n_proofs; i++)
+  {
+    const bp_proof_state *st = &states[i];
+    const size_t m = st->m, n = st->n, rounds = st->rounds;
+    const unsigned char *c = st->c_scalar;
+    const unsigned char *z = st->z, *x = st->x;
+    const unsigned char *a = st->a_final, *b = st->b_final;
+    const unsigned char *t_hat = st->t_hat, *tau_x = st->tau_x, *mu = st->mu;
+    const unsigned char *ux = st->ux_scalar;
+    const unsigned char *delta = st->delta;
+
+    if (i > 0)
+      secp256k1_mpt_scalar_mul(rho_i, rho_i, rho);
+
+    /* z^(j+2) for j=0..m-1 (reuses z_jp2_max scratch). */
+    for (size_t j = 0; j < m; j++)
+      scalar_pow_u32(ctx, z_jp2_max[j], z, (unsigned int)(j + 2));
+
+    unsigned char rho_c[32];
+    secp256k1_mpt_scalar_mul(rho_c, rho_i, c);
+
+    /* G_gen_coef += rho_i * (t_hat - delta) */
+    {
+      unsigned char tmp[32], tmp2[32];
+      memcpy(tmp, delta, 32);
+      secp256k1_mpt_scalar_negate(tmp, tmp);
+      secp256k1_mpt_scalar_add(tmp, tmp, t_hat);
+      secp256k1_mpt_scalar_mul(tmp2, rho_i, tmp);
+      secp256k1_mpt_scalar_add(G_gen_coef, G_gen_coef, tmp2);
+    }
+
+    /* H_pk_coef += rho_i*tau_x - rho_c*mu */
+    {
+      unsigned char neg_mu[32], rc_mu[32], r_tau[32], tmp[32];
+      memcpy(neg_mu, mu, 32);
+      secp256k1_mpt_scalar_negate(neg_mu, neg_mu);
+      secp256k1_mpt_scalar_mul(rc_mu, rho_c, neg_mu);
+      secp256k1_mpt_scalar_mul(r_tau, rho_i, tau_x);
+      secp256k1_mpt_scalar_add(tmp, r_tau, rc_mu);
+      secp256k1_mpt_scalar_add(H_pk_coef, H_pk_coef, tmp);
+    }
+
+    /* U_coef += rho_c * ux * (t_hat - a*b) */
+    {
+      unsigned char ab[32], t_minus_ab[32], coef[32];
+      secp256k1_mpt_scalar_mul(ab, a, b);
+      secp256k1_mpt_scalar_negate(ab, ab);
+      secp256k1_mpt_scalar_add(t_minus_ab, t_hat, ab);
+      secp256k1_mpt_scalar_mul(coef, rho_c, t_minus_ab);
+      secp256k1_mpt_scalar_mul(coef, coef, ux);
+      secp256k1_mpt_scalar_add(U_coef, U_coef, coef);
+    }
+
+    /* G_k accumulator: G_coeffs[k] += rho_c * (-z - a*s_k) */
+    {
+      unsigned char neg_z[32];
+      memcpy(neg_z, z, 32);
+      secp256k1_mpt_scalar_negate(neg_z, neg_z);
+      for (size_t k = 0; k < n; k++)
+      {
+        unsigned char a_sk[32], inner[32], coef[32];
+        secp256k1_mpt_scalar_mul(a_sk, a, st->s_G_flat + 32 * k);
+        secp256k1_mpt_scalar_negate(a_sk, a_sk);
+        secp256k1_mpt_scalar_add(inner, neg_z, a_sk);
+        secp256k1_mpt_scalar_mul(coef, rho_c, inner);
+        secp256k1_mpt_scalar_add(G_coeffs + 32 * k, G_coeffs + 32 * k, coef);
+      }
+    }
+
+    /* H_k accumulator: H_coeffs[k] +=
+     *   rho_c * (z + z^(j_k+2)*2^{i_k}*y^{-k} - b * s_k^{-1} * y^{-k}) */
+    for (size_t k = 0; k < n; k++)
+    {
+      const size_t j_k = k / BP_VALUE_BITS;
+      const size_t i_k = k % BP_VALUE_BITS;
+      const unsigned char *y_inv_k = st->y_inv_powers + 32 * k;
+
+      unsigned char s_H_k[32] = {0};
+      s_H_k[31] = 1;
+      for (size_t j = 0; j < rounds; j++)
+      {
+        int bit = (int)((k >> (rounds - 1 - j)) & 1);
+        const unsigned char *uj = st->u_flat + 32 * j;
+        const unsigned char *ujinv = st->uinv_flat + 32 * j;
+        secp256k1_mpt_scalar_mul(s_H_k, s_H_k, bit ? ujinv : uj);
+      }
+
+      unsigned char two_i[32] = {0};
+      two_i[31 - (i_k / 8)] = (unsigned char)(1u << (i_k % 8));
+
+      unsigned char term1[32], term2[32], inner[32], coef[32];
+      secp256k1_mpt_scalar_mul(term1, z_jp2_max[j_k], two_i);
+      secp256k1_mpt_scalar_mul(term1, term1, y_inv_k);
+      secp256k1_mpt_scalar_mul(term2, b, s_H_k);
+      secp256k1_mpt_scalar_mul(term2, term2, y_inv_k);
+      secp256k1_mpt_scalar_negate(term2, term2);
+      secp256k1_mpt_scalar_add(inner, z, term1);
+      secp256k1_mpt_scalar_add(inner, inner, term2);
+      secp256k1_mpt_scalar_mul(coef, rho_c, inner);
+      secp256k1_mpt_scalar_add(H_coeffs + 32 * k, H_coeffs + 32 * k, coef);
+    }
+
+#define BAT_WRITE_POINT(P_ptr)                                                 \
+  do                                                                           \
+  {                                                                            \
+    size_t L_ = 33;                                                            \
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * pp_idx, &L_,     \
+                                       (P_ptr), SECP256K1_EC_COMPRESSED) ||    \
+        L_ != 33)                                                              \
+      goto cleanup;                                                            \
+  } while (0)
+#define BAT_WRITE_SCALAR(SRC) memcpy(scalars_flat + 32 * pp_idx, (SRC), 32)
+
+    /* Per-proof: V_j = -rho_i * z^(j+2) */
+    for (size_t j = 0; j < m; j++)
+    {
+      unsigned char coef[32];
+      memcpy(coef, z_jp2_max[j], 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      secp256k1_mpt_scalar_mul(coef, coef, rho_i);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&commitment_C_vecs[i][j]);
+      pp_idx++;
+    }
+    /* T1: -rho_i * x */
+    {
+      unsigned char coef[32];
+      memcpy(coef, x, 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      secp256k1_mpt_scalar_mul(coef, coef, rho_i);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&st->T1);
+      pp_idx++;
+    }
+    /* T2: -rho_i * x^2 */
+    {
+      unsigned char x_sq[32], coef[32];
+      secp256k1_mpt_scalar_mul(x_sq, x, x);
+      memcpy(coef, x_sq, 32);
+      secp256k1_mpt_scalar_negate(coef, coef);
+      secp256k1_mpt_scalar_mul(coef, coef, rho_i);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&st->T2);
+      pp_idx++;
+    }
+    /* A: rho_c */
+    BAT_WRITE_SCALAR(rho_c);
+    BAT_WRITE_POINT(&st->A);
+    pp_idx++;
+    /* S: rho_c * x */
+    {
+      unsigned char coef[32];
+      secp256k1_mpt_scalar_mul(coef, rho_c, x);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&st->S);
+      pp_idx++;
+    }
+    /* L_j: rho_c * u_j^2 */
+    for (size_t j = 0; j < rounds; j++)
+    {
+      unsigned char u_sq[32], coef[32];
+      const unsigned char *uj = st->u_flat + 32 * j;
+      secp256k1_mpt_scalar_mul(u_sq, uj, uj);
+      secp256k1_mpt_scalar_mul(coef, rho_c, u_sq);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&st->L_vec[j]);
+      pp_idx++;
+    }
+    /* R_j: rho_c * u_j^{-2} */
+    for (size_t j = 0; j < rounds; j++)
+    {
+      unsigned char uinv_sq[32], coef[32];
+      const unsigned char *ujinv = st->uinv_flat + 32 * j;
+      secp256k1_mpt_scalar_mul(uinv_sq, ujinv, ujinv);
+      secp256k1_mpt_scalar_mul(coef, rho_c, uinv_sq);
+      BAT_WRITE_SCALAR(coef);
+      BAT_WRITE_POINT(&st->R_vec[j]);
+      pp_idx++;
+    }
+
+#undef BAT_WRITE_POINT
+#undef BAT_WRITE_SCALAR
+  }
+
+  if (pp_idx != n_terms)
+    goto cleanup;
+
+  /* Write the shared slots: G_k (k=0..max_n-1), H_k, h_generator, U. */
+  for (size_t k = 0; k < max_n; k++)
+  {
+    size_t L_ = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * k, &L_, &G_vec[k],
+                                       SECP256K1_EC_COMPRESSED) ||
+        L_ != 33)
+      goto cleanup;
+    memcpy(scalars_flat + 32 * k, G_coeffs + 32 * k, 32);
+  }
+  for (size_t k = 0; k < max_n; k++)
+  {
+    size_t L_ = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * (max_n + k), &L_,
+                                       &H_vec[k], SECP256K1_EC_COMPRESSED) ||
+        L_ != 33)
+      goto cleanup;
+    memcpy(scalars_flat + 32 * (max_n + k), H_coeffs + 32 * k, 32);
+  }
+  {
+    size_t L_ = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * (2 * max_n), &L_,
+                                       h_generator, SECP256K1_EC_COMPRESSED) ||
+        L_ != 33)
+      goto cleanup;
+    memcpy(scalars_flat + 32 * (2 * max_n), H_pk_coef, 32);
+  }
+  {
+    size_t L_ = 33;
+    if (!secp256k1_ec_pubkey_serialize(ctx, points_ser + 33 * (2 * max_n + 1),
+                                       &L_, &U, SECP256K1_EC_COMPRESSED) ||
+        L_ != 33)
+      goto cleanup;
+    memcpy(scalars_flat + 32 * (2 * max_n + 1), U_coef, 32);
+  }
+
+  /* Single batched MSM call; expected result = identity. */
+  {
+    unsigned char result[33];
+    bp_verify_msm_cbdata cb_data = {scalars_flat, points_ser, n_terms};
+    if (!mpt_msm_variable_time(ctx, result, G_gen_coef, bp_verify_msm_cb,
+                               &cb_data, n_terms))
+      goto cleanup;
+    unsigned char zero33[33] = {0};
+    ok = (memcmp(result, zero33, 33) == 0) ? 1 : 0;
+  }
+
+cleanup:
+  free(G_coeffs);
+  free(H_coeffs);
+  free(points_ser);
+  free(scalars_flat);
+  free(z_jp2_max);
+  if (states)
+  {
+    for (size_t i = 0; i < n_proofs; i++)
+      bp_proof_state_free(&states[i]);
+    free(states);
+  }
+  return ok;
 }
