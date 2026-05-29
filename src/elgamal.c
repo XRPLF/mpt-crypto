@@ -55,13 +55,13 @@ int secp256k1_elgamal_generate_keypair(const secp256k1_context *ctx,
 
   do
   {
-    if (RAND_bytes(privkey, 32) != 1)
+    if (RAND_bytes(privkey, kMPT_PRIVKEY_SIZE) != 1)
       return 0;
   } while (!secp256k1_ec_seckey_verify(ctx, privkey));
 
   if (!secp256k1_ec_pubkey_create(ctx, pubkey, privkey))
   {
-    OPENSSL_cleanse(privkey, 32); // Cleanup on failure
+    OPENSSL_cleanse(privkey, kMPT_PRIVKEY_SIZE); // Cleanup on failure
     return 0;
   }
   return 1;
@@ -423,7 +423,7 @@ int generate_canonical_encrypted_zero(
   memcpy(hash_input + 27, mpt_issuance_id, 24);
 
   /* Initial hash of the domain-tagged input. */
-  unsigned int md_len = 32;
+  unsigned int md_len = kMPT_HALF_SHA_SIZE;
   if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
                  NULL) != 1)
     return 0;
@@ -436,8 +436,8 @@ int generate_canonical_encrypted_zero(
    * yield a non-standard construction without any security benefit. */
   while (!secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
   {
-    if (EVP_Digest(deterministic_scalar, 32, deterministic_scalar, &md_len,
-                   EVP_sha256(), NULL) != 1)
+    if (EVP_Digest(deterministic_scalar, kMPT_HALF_SHA_SIZE,
+                   deterministic_scalar, &md_len, EVP_sha256(), NULL) != 1)
       return 0;
   }
 

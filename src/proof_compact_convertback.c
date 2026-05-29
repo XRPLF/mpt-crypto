@@ -36,8 +36,8 @@ static int compute_compact_convertback_challenge(
     const secp256k1_pubkey *T_b, const unsigned char *context_id)
 {
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-  unsigned char buf[33];
-  unsigned char h[32];
+  unsigned char buf[kMPT_PUBKEY_SIZE];
+  unsigned char h[kMPT_HALF_SHA_SIZE];
   size_t len;
   int ok = 0;
 
@@ -53,12 +53,12 @@ static int compute_compact_convertback_challenge(
 #define SER(pk_ptr)                                                            \
   do                                                                           \
   {                                                                            \
-    len = 33;                                                                  \
+    len = kMPT_PUBKEY_SIZE;                                                    \
     if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
                                        SECP256K1_EC_COMPRESSED) ||             \
-        len != 33)                                                             \
+        len != kMPT_PUBKEY_SIZE)                                               \
       goto cleanup;                                                            \
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+    if (EVP_DigestUpdate(mdctx, buf, kMPT_PUBKEY_SIZE) != 1)                   \
       goto cleanup;                                                            \
   } while (0)
 
@@ -77,7 +77,7 @@ static int compute_compact_convertback_challenge(
 
   if (context_id)
   {
-    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, context_id, kMPT_HALF_SHA_SIZE) != 1)
       goto cleanup;
   }
 
@@ -135,10 +135,10 @@ int secp256k1_compact_convertback_prove(
     memcpy(witness_buf + 64, sk_A, 32);
 
     /* Hash public statement elements */
-    unsigned char stmt_hash[32];
+    unsigned char stmt_hash[kMPT_HALF_SHA_SIZE];
     {
       EVP_MD_CTX *sh = EVP_MD_CTX_new();
-      unsigned char sbuf[33];
+      unsigned char sbuf[kMPT_PUBKEY_SIZE];
       size_t slen;
       if (!sh)
       {
@@ -154,16 +154,16 @@ int secp256k1_compact_convertback_prove(
 #define SHASH(pk_ptr)                                                          \
   do                                                                           \
   {                                                                            \
-    slen = 33;                                                                 \
+    slen = kMPT_PUBKEY_SIZE;                                                   \
     if (!secp256k1_ec_pubkey_serialize(ctx, sbuf, &slen, pk_ptr,               \
                                        SECP256K1_EC_COMPRESSED) ||             \
-        slen != 33)                                                            \
+        slen != kMPT_PUBKEY_SIZE)                                              \
     {                                                                          \
       EVP_MD_CTX_free(sh);                                                     \
       OPENSSL_cleanse(witness_buf, sizeof(witness_buf));                       \
       goto cleanup;                                                            \
     }                                                                          \
-    if (EVP_DigestUpdate(sh, sbuf, 33) != 1)                                   \
+    if (EVP_DigestUpdate(sh, sbuf, kMPT_PUBKEY_SIZE) != 1)                     \
     {                                                                          \
       EVP_MD_CTX_free(sh);                                                     \
       OPENSSL_cleanse(witness_buf, sizeof(witness_buf));                       \
@@ -176,7 +176,7 @@ int secp256k1_compact_convertback_prove(
       SHASH(PC_b);
       if (context_id)
       {
-        if (EVP_DigestUpdate(sh, context_id, 32) != 1)
+        if (EVP_DigestUpdate(sh, context_id, kMPT_HALF_SHA_SIZE) != 1)
         {
           EVP_MD_CTX_free(sh);
           OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
