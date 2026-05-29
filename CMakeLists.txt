@@ -12,6 +12,42 @@ if(NOT MSVC)
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --- Vendored MSM (libsecp256k1 ecmult_multi_var) ---
+# See third_party/secp256k1-msm/README.md for design rationale.
+# Self-contained vendor; not a dependency on the linked libsecp256k1
+# binary's internal types. Variable-time; verifier path only.
+add_library(
+    mpt-crypto-msm-vendor
+    OBJECT
+    third_party/secp256k1-msm/mpt_msm.c
+    third_party/secp256k1-msm/precomputed_ecmult.c
+)
+target_include_directories(
+    mpt-crypto-msm-vendor
+    PRIVATE third_party/secp256k1-msm include
+)
+target_link_libraries(mpt-crypto-msm-vendor PRIVATE secp256k1::secp256k1)
+# Rename the precomputed generator-table symbols so the vendored
+# copy never collides with the corresponding symbols inside the
+# linked libsecp256k1 binary. The vendored MSM uses these tables
+# internally; renaming via compile-time -D applies the rewrite
+# uniformly across the declaration (precomputed_ecmult.h), the
+# definition (precomputed_ecmult.c), and all use sites
+# (ecmult_impl.h, scratch_impl.h). The linked libsecp256k1
+# continues to use its own un-renamed copies; the two never meet.
+target_compile_definitions(
+    mpt-crypto-msm-vendor
+    PRIVATE
+        secp256k1_pre_g=mpt_secp256k1_pre_g
+        secp256k1_pre_g_128=mpt_secp256k1_pre_g_128
+)
+# Suppress -Wpedantic for the vendored TU: upstream libsecp256k1
+# uses extensions (variadic macros, designated initialisers, etc.)
+# that pedantic flags occasionally complain about.
+if(NOT MSVC)
+    target_compile_options(mpt-crypto-msm-vendor PRIVATE -Wno-pedantic)
+endif()
+
 # --- Define The Library ---
 add_library(
     mpt-crypto
@@ -24,6 +60,7 @@ add_library(
     src/proof_compact_clawback.c
     src/proof_compact_convertback.c
     src/utility/mpt_utility.cpp
+    $<TARGET_OBJECTS:mpt-crypto-msm-vendor>
 )
 
 # --- Set Include Directories ---

@@ -265,6 +265,40 @@ secp256k1_bulletproof_verify_agg(
     secp256k1_pubkey const* h_generator,
     unsigned char const* context_id);
 
+/* Batched aggregated-Bulletproof verification.
+ *
+ * Verifies n_proofs independent aggregated proofs in a single MSM via
+ * BBB+18 sec. 6.1 random-linear-combination stacking. All proofs share
+ * the same G_vec / H_vec (sized for the largest m in the batch; lower-m
+ * proofs touch only a prefix) and the same h_generator. The shared
+ * generators contribute one MSM term each regardless of batch size,
+ * yielding O(2*max_n + sum_i per_proof_size) total terms rather than
+ * O(n_proofs * 2n).
+ *
+ * Soundness: a single invalid proof causes rejection except with
+ * probability <= n_proofs / q via Schwartz-Zippel on the freshly-derived
+ * batch RLC weight. Each proof is otherwise verified by the same
+ * machinery as secp256k1_bulletproof_verify_agg.
+ *
+ * Arguments must satisfy: every m_vec[i] is a power of two in
+ * [1, BP_MAX_VALUES]; commitment_C_vecs[i] has m_vec[i] elements;
+ * context_ids[i] is either NULL or 32 bytes.
+ *
+ * Returns 1 if all proofs valid, 0 otherwise.
+ */
+int
+secp256k1_bulletproof_verify_batch_agg(
+    secp256k1_context const* ctx,
+    secp256k1_pubkey const* G_vec, /* length 64 * max(m_vec[i]) */
+    secp256k1_pubkey const* H_vec, /* length 64 * max(m_vec[i]) */
+    unsigned char const* const* proofs,
+    size_t const* proof_lens,
+    secp256k1_pubkey const* const* commitment_C_vecs,
+    size_t const* m_vec,
+    secp256k1_pubkey const* h_generator,
+    unsigned char const* const* context_ids,
+    size_t n_proofs);
+
 /*
 ================================================================================
 |                                                                              |
