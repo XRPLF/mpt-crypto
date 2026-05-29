@@ -165,12 +165,9 @@ int secp256k1_compact_standard_prove(
   if (!secp256k1_ec_seckey_verify(ctx, r_b))
     return 0;
 
-  if (n > 0)
-  {
-    T2_vec = (secp256k1_pubkey *)malloc(sizeof(secp256k1_pubkey) * n);
-    if (!T2_vec)
-      return 0;
-  }
+  T2_vec = (secp256k1_pubkey *)malloc(sizeof(secp256k1_pubkey) * n);
+  if (!T2_vec)
+    return 0;
 
   mpt_uint64_to_scalar(m_scalar, amount);
   mpt_uint64_to_scalar(b_scalar, balance);
@@ -351,7 +348,7 @@ int secp256k1_compact_standard_prove(
   /* z_b = epsilon + e*v */
   compute_sigma_response(z_b, epsilon, e, b_scalar);
 
-  /* 5. Serialize compact proof: e || z_m || z_r || z_b || z_rho || z_sk */
+  /* 5. Serialize compact proof: e || z_m || z_r || z_b || z_rb || z_sk */
   memcpy(proof_out, e, 32);
   memcpy(proof_out + 32, z_m, 32);
   memcpy(proof_out + 64, z_r, 32);
@@ -375,8 +372,7 @@ cleanup:
   OPENSSL_cleanse(z_sk, 32);
   OPENSSL_cleanse(z_rb, 32);
   OPENSSL_cleanse(z_b, 32);
-  if (T2_vec)
-    free(T2_vec);
+  free(T2_vec);
   return ok;
 }
 
@@ -411,7 +407,7 @@ int secp256k1_compact_standard_verify(
   secp256k1_pubkey H;
   int ok = 0;
 
-  /* 1. Deserialize: e || z_m || z_r || z_b || z_rho || z_sk */
+  /* 1. Deserialize: e || z_m || z_r || z_b || z_rb || z_sk */
   memcpy(e, proof, 32);
   memcpy(z_m, proof + 32, 32);
   memcpy(z_r, proof + 64, 32);
@@ -437,12 +433,9 @@ int secp256k1_compact_standard_verify(
   if (!secp256k1_ec_seckey_verify(ctx, z_b))
     return 0;
 
-  if (n > 0)
-  {
-    T2_vec = (secp256k1_pubkey *)malloc(sizeof(secp256k1_pubkey) * n);
-    if (!T2_vec)
-      return 0;
-  }
+  T2_vec = (secp256k1_pubkey *)malloc(sizeof(secp256k1_pubkey) * n);
+  if (!T2_vec)
+    return 0;
 
   if (!secp256k1_mpt_get_h_generator(ctx, &H))
     goto cleanup;
@@ -558,7 +551,6 @@ int secp256k1_compact_standard_verify(
 cleanup:
   OPENSSL_cleanse(neg_e, 32);
   /* z_*, e, e_prime are public proof values — intentionally not cleansed */
-  if (T2_vec)
-    free(T2_vec);
+  free(T2_vec);
   return ok;
 }

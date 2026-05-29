@@ -1987,20 +1987,13 @@ cleanup:
     free(H_prime);
   }
 
-  if (al)
-    free(al);
-  if (ar)
-    free(ar);
-  if (sl)
-    free(sl);
-  if (sr)
-    free(sr);
-  if (l_vec)
-    free(l_vec);
-  if (r_vec)
-    free(r_vec);
-  if (r1_vec)
-    free(r1_vec);
+  free(al);
+  free(ar);
+  free(sl);
+  free(sr);
+  free(l_vec);
+  free(r_vec);
+  free(r1_vec);
 
   if (L_vec)
   {
