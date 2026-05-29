@@ -83,3 +83,26 @@ add_mpt_test(
     test_compact_convertback.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
+
+# Calibration test for the vendored Pippenger/Straus MSM:
+# verifies bit-identical output against a public-API reference.
+add_mpt_test(
+    test_mpt_msm
+    test_mpt_msm.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+# Batched aggregated-BP verifier (issue #88): RLC stacking across proofs.
+add_mpt_test(
+    test_bulletproof_batch
+    test_bulletproof_batch.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+# Microbench for the four compact-sigma verifiers (issue #88, sigma side).
+# Not registered as a ctest; build with --target bench_compact_sigma.
+add_executable(bench_compact_sigma bench_compact_sigma.c)
+target_link_libraries(
+    bench_compact_sigma
+    PRIVATE mpt-crypto secp256k1::secp256k1
+)

@@ -22,6 +22,7 @@
  * then recomputes the hash and checks e' == e.
  */
 #include "mpt_internal.h"
+#include "mpt_msm.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -315,7 +316,7 @@ int secp256k1_compact_convertback_verify(const secp256k1_context *ctx,
     if (!secp256k1_ec_pubkey_create(ctx, &zskG, z_sk))
       return 0;
     ePA = *pk_A;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePA, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePA, neg_e))
       return 0;
     const secp256k1_pubkey *pts[2] = {&zskG, &ePA};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_sk1, pts, 2))
@@ -328,10 +329,10 @@ int secp256k1_compact_convertback_verify(const secp256k1_context *ctx,
     if (!secp256k1_ec_pubkey_create(ctx, &zbG, z_b))
       return 0;
     zskB1 = *B1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskB1, z_sk))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zskB1, z_sk))
       return 0;
     eB2 = *B2;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eB2, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &eB2, neg_e))
       return 0;
     const secp256k1_pubkey *pts[3] = {&zbG, &zskB1, &eB2};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_sk2, pts, 3))
@@ -344,10 +345,10 @@ int secp256k1_compact_convertback_verify(const secp256k1_context *ctx,
     if (!secp256k1_ec_pubkey_create(ctx, &zbG, z_b))
       return 0;
     zrH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrH, z_rho))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zrH, z_rho))
       return 0;
     ePCb = *PC_b;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePCb, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePCb, neg_e))
       return 0;
     const secp256k1_pubkey *pts[3] = {&zbG, &zrH, &ePCb};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_b, pts, 3))

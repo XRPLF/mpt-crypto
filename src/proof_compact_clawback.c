@@ -25,6 +25,7 @@
  * then recomputes the hash and checks e' == e.
  */
 #include "mpt_internal.h"
+#include "mpt_msm.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -286,7 +287,7 @@ int secp256k1_compact_clawback_verify(
     if (!secp256k1_ec_pubkey_create(ctx, &zskG, z_sk))
       return 0;
     ePiss = *P_iss;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePiss, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePiss, neg_e))
       return 0;
     const secp256k1_pubkey *pts[2] = {&zskG, &ePiss};
     if (!secp256k1_ec_pubkey_combine(ctx, &T1, pts, 2))
@@ -312,7 +313,7 @@ int secp256k1_compact_clawback_verify(
       one[31] = 1;
       secp256k1_mpt_scalar_negate(neg_one, one);
       secp256k1_pubkey neg_mG = mG;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &neg_mG, neg_one))
+      if (!mpt_ec_pubkey_mul_var(ctx, &neg_mG, neg_one))
         return 0;
       const secp256k1_pubkey *sub_pts[2] = {C2, &neg_mG};
       if (!secp256k1_ec_pubkey_combine(ctx, &C2_minus_mG, sub_pts, 2))
@@ -320,10 +321,10 @@ int secp256k1_compact_clawback_verify(
     }
 
     zskC1 = *C1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskC1, z_sk))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zskC1, z_sk))
       return 0;
     eTarget = C2_minus_mG;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eTarget, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &eTarget, neg_e))
       return 0;
     const secp256k1_pubkey *pts[2] = {&zskC1, &eTarget};
     if (!secp256k1_ec_pubkey_combine(ctx, &T2, pts, 2))
