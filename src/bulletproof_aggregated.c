@@ -2621,14 +2621,7 @@ fs_fail:
   /* P += sum_{k=0}^{n-1} [ (-z)*G_k + ( z*y^k + z^(block+2)*z^2*2^i ) *
    * (y^{-k}*H_k) ] */
   unsigned char neg_z[32];
-  memcpy(neg_z, z, 32);
-  if (!secp256k1_ec_seckey_negate(ctx, neg_z))
-  {
-    free(y_block_sum);
-    free(y_powers);
-    free(y_inv_powers);
-    goto fail;
-  }
+  secp256k1_mpt_scalar_negate(neg_z, z);
 
   for (size_t j = 0; j < m; j++)
   {
@@ -2720,14 +2713,7 @@ fs_fail:
   /* P -= mu*h_generator */
   {
     unsigned char neg_mu[32];
-    memcpy(neg_mu, mu, 32);
-    if (!secp256k1_ec_seckey_negate(ctx, neg_mu))
-    {
-      free(y_block_sum);
-      free(y_powers);
-      free(y_inv_powers);
-      goto fail;
-    }
+    secp256k1_mpt_scalar_negate(neg_mu, mu);
 
     secp256k1_pubkey mu_term = *h_generator;
     if (!secp256k1_ec_pubkey_tweak_mul(ctx, &mu_term, neg_mu))
