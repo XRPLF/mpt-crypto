@@ -14,6 +14,7 @@
  * Used during ConfidentialMPTConvert key registration (spec Section 1.4).
  */
 #include "mpt_internal.h"
+#include "mpt_msm.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -191,13 +192,15 @@ int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
 
   secp256k1_mpt_scalar_negate(neg_e, e);
 
-  /* 2. Reconstruct T = s*G - e*pk */
+  /* 2. Reconstruct T = s*G - e*pk
+   *    The tweak_mul of pk is variable-time-safe (public input); use the
+   *    vendored VT path (issue #88) to halve the dominant scalar-mul cost. */
   {
     secp256k1_pubkey sG, ePk;
     if (!secp256k1_ec_pubkey_create(ctx, &sG, s))
       return 0;
     ePk = *pk;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePk, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePk, neg_e))
       return 0;
     const secp256k1_pubkey *pts[2] = {&sG, &ePk};
     if (!secp256k1_ec_pubkey_combine(ctx, &T, pts, 2))

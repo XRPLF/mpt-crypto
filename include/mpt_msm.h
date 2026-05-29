@@ -61,6 +61,32 @@ mpt_msm_variable_time(
     void* cbdata,
     size_t n);
 
+/**
+ * @brief Variable-time in-place scalar multiplication on an arbitrary point.
+ *
+ * Computes `*pubkey = scalar * (*pubkey)` using libsecp256k1's internal
+ * `secp256k1_ecmult` (the variable-time single-output scalar mul that
+ * powers ecmult_multi_var). Same VT-vs-CT speedup as a 1-term call to
+ * `mpt_msm_variable_time`, but without the per-call scratch alloc — for
+ * the small k (1..3) MSMs that show up in compact-sigma reconstruction,
+ * the scratch alloc dominates and the MSM wrapper is a net regression.
+ *
+ * Use only on the verifier path (no secret scalars). The constant-time
+ * equivalent is `secp256k1_ec_pubkey_tweak_mul`.
+ *
+ * @param ctx          libsecp256k1 context (any verify-capable context).
+ * @param pubkey       In/out: point to be multiplied in place. Caller-owned.
+ * @param scalar_be32  32-byte big-endian scalar. Reduced mod n internally.
+ *
+ * @return 1 on success, 0 on failure (NULL input, identity result, or
+ *         pubkey serialization/parse failure).
+ */
+SECP256K1_API int
+mpt_ec_pubkey_mul_var(
+    secp256k1_context const* ctx,
+    secp256k1_pubkey* pubkey,
+    unsigned char const scalar_be32[32]);
+
 #ifdef __cplusplus
 }
 #endif

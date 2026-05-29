@@ -28,6 +28,7 @@
  * then recomputes the hash and checks e' == e.
  */
 #include "mpt_internal.h"
+#include "mpt_msm.h"
 #include "secp256k1_mpt.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -457,7 +458,7 @@ int secp256k1_compact_standard_verify(
     if (!secp256k1_ec_pubkey_create(ctx, &zrG, z_r))
       goto cleanup;
     eC1 = *C1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eC1, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &eC1, neg_e))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&zrG, &eC1};
     if (!secp256k1_ec_pubkey_combine(ctx, &T1, pts, 2))
@@ -473,10 +474,10 @@ int secp256k1_compact_standard_verify(
     {
       secp256k1_pubkey zrPk, eC2;
       zrPk = Pk_vec[i];
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrPk, z_r))
+      if (!mpt_ec_pubkey_mul_var(ctx, &zrPk, z_r))
         goto cleanup;
       eC2 = C2_vec[i];
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eC2, neg_e))
+      if (!mpt_ec_pubkey_mul_var(ctx, &eC2, neg_e))
         goto cleanup;
       const secp256k1_pubkey *pts[3] = {&zrPk, &zmG, &eC2};
       if (!secp256k1_ec_pubkey_combine(ctx, &T2_vec[i], pts, 3))
@@ -490,10 +491,10 @@ int secp256k1_compact_standard_verify(
     if (!secp256k1_ec_pubkey_create(ctx, &zmG, z_m))
       goto cleanup;
     zrH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrH, z_r))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zrH, z_r))
       goto cleanup;
     ePCm = *PC_m;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePCm, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePCm, neg_e))
       goto cleanup;
     const secp256k1_pubkey *pts[3] = {&zmG, &zrH, &ePCm};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCm, pts, 3))
@@ -506,7 +507,7 @@ int secp256k1_compact_standard_verify(
     if (!secp256k1_ec_pubkey_create(ctx, &zskG, z_sk))
       goto cleanup;
     ePk = *pk_A;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePk, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePk, neg_e))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&zskG, &ePk};
     if (!secp256k1_ec_pubkey_combine(ctx, &K1, pts, 2))
@@ -519,10 +520,10 @@ int secp256k1_compact_standard_verify(
     if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_b))
       goto cleanup;
     zrbH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zrbH, z_rb))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zrbH, z_rb))
       goto cleanup;
     ePCb = *PC_b;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &ePCb, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &ePCb, neg_e))
       goto cleanup;
     const secp256k1_pubkey *pts[3] = {&zvG, &zrbH, &ePCb};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCb, pts, 3))
@@ -533,12 +534,12 @@ int secp256k1_compact_standard_verify(
   {
     secp256k1_pubkey zskB1, zvG, eB2;
     zskB1 = *B1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &zskB1, z_sk))
+    if (!mpt_ec_pubkey_mul_var(ctx, &zskB1, z_sk))
       goto cleanup;
     if (!secp256k1_ec_pubkey_create(ctx, &zvG, z_b))
       goto cleanup;
     eB2 = *B2;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &eB2, neg_e))
+    if (!mpt_ec_pubkey_mul_var(ctx, &eB2, neg_e))
       goto cleanup;
     const secp256k1_pubkey *pts[3] = {&zskB1, &zvG, &eB2};
     if (!secp256k1_ec_pubkey_combine(ctx, &K2, pts, 3))

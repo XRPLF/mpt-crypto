@@ -193,3 +193,69 @@ SECP256K1_API int mpt_msm_variable_time(secp256k1_context const *ctx,
 
   return 1;
 }
+
+/* ----- mpt_ec_pubkey_mul_var ---------------------------------
+ *
+ * Issue #88 (compact-sigma side): the per-equation MSMs in the four
+ * compact-sigma verifiers have k in {1, 2, 3} and the scratch-alloc
+ * overhead in mpt_msm_variable_time dominates the VT-vs-CT savings
+ * (empirically a ~10% regression on pok_sk). This entry point skips
+ * the scratch dance and calls libsecp256k1's secp256k1_ecmult directly
+ * (variable-time scalar mul on an arbitrary point + optional G term;
+ * here we use NULL for the G coefficient to get pure point mul). The
+ * net effect is a drop-in variable-time replacement for the constant-
+ * time secp256k1_ec_pubkey_tweak_mul.
+ */
+
+/* Direct conversion between secp256k1_pubkey's 64-byte buffer and a
+ * secp256k1_ge_storage. libsecp256k1's own pubkey_load / pubkey_save use
+ * exactly this layout (see secp256k1.c); the storage is 64 bytes under
+ * both field backends (5x52 and 10x26), matching pubkey.data[64].
+ *
+ * Going through this path avoids the sqrt that secp256k1_ec_pubkey_parse
+ * performs on SEC1-compressed input -- empirically halves the cost of a
+ * single-mult VT wrapper. */
+static void mpt_pubkey_load(secp256k1_ge *ge, secp256k1_pubkey const *pubkey)
+{
+  secp256k1_ge_storage s;
+  memcpy(&s, &pubkey->data[0], sizeof(s));
+  secp256k1_ge_from_storage(ge, &s);
+}
+
+static void mpt_pubkey_save(secp256k1_pubkey *pubkey, secp256k1_ge *ge)
+{
+  secp256k1_ge_storage s;
+  secp256k1_ge_to_storage(&s, ge);
+  memcpy(&pubkey->data[0], &s, sizeof(s));
+}
+
+SECP256K1_API int mpt_ec_pubkey_mul_var(secp256k1_context const *ctx,
+                                        secp256k1_pubkey *pubkey,
+                                        unsigned char const scalar_be32[32])
+{
+  (void)ctx;
+  if (pubkey == NULL || scalar_be32 == NULL)
+    return 0;
+
+  secp256k1_ge ge;
+  mpt_pubkey_load(&ge, pubkey);
+
+  secp256k1_gej gej_in, gej_out;
+  secp256k1_gej_set_ge(&gej_in, &ge);
+
+  secp256k1_scalar sc;
+  int overflow = 0;
+  secp256k1_scalar_set_b32(&sc, scalar_be32, &overflow);
+  (void)overflow;
+
+  /* gej_out = sc * gej_in (no G term). secp256k1_ecmult is the
+   * variable-time scalar-mul that powers ecmult_multi_var. */
+  secp256k1_ecmult(&gej_out, &gej_in, &sc, NULL);
+
+  secp256k1_ge_set_gej(&ge, &gej_out);
+  if (secp256k1_ge_is_infinity(&ge))
+    return 0; /* secp256k1_pubkey cannot represent identity */
+
+  mpt_pubkey_save(pubkey, &ge);
+  return 1;
+}

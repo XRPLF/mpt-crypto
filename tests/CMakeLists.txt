@@ -98,3 +98,11 @@ add_mpt_test(
     test_bulletproof_batch.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
+
+# Microbench for the four compact-sigma verifiers (issue #88, sigma side).
+# Not registered as a ctest; build with --target bench_compact_sigma.
+add_executable(bench_compact_sigma bench_compact_sigma.c)
+target_link_libraries(
+    bench_compact_sigma
+    PRIVATE mpt-crypto secp256k1::secp256k1
+)
