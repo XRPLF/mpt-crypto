@@ -1,6 +1,7 @@
 #ifndef SECP256K1_MPT_H
 #define SECP256K1_MPT_H
 
+#include "mpt_protocol.h"
 #include <secp256k1.h>
 #include <stdint.h>
 
