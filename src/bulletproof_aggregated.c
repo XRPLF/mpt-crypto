@@ -1429,7 +1429,8 @@ int secp256k1_bulletproof_prove_agg(
     if (!mdctx)
       goto cleanup;
 
-    if (!bulletproof_gens_digest(ctx, pk_base, G_vec, H_vec, n, gens_digest))
+    if (!bulletproof_gens_digest(ctx, h_generator, G_vec, H_vec, n,
+                                 gens_digest))
     {
       fs_ok = 0;
       goto fs_cleanup;
@@ -2316,7 +2317,7 @@ int secp256k1_bulletproof_verify_agg(
   if (!mdctx)
     goto fail;
 
-  if (!bulletproof_gens_digest(ctx, pk_base, G_vec, H_vec, n, gens_digest))
+  if (!bulletproof_gens_digest(ctx, h_generator, G_vec, H_vec, n, gens_digest))
     goto fs_fail;
   bulletproof_be32_encode(N_be, (uint32_t)BP_VALUE_BITS);
   bulletproof_be32_encode(m_be, (uint32_t)m);

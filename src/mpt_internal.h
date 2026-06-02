@@ -185,6 +185,26 @@ compute_sigma_response(
  * salt = 32 bytes of fresh randomness (defense-in-depth).
  * Each output is reduced mod secp256k1 order; if zero, the function fails.
  *
+ * IKM layout (HKDF-Extract input; self-describing per TOB-RIPCTXR-10):
+ *
+ *     IKM = version_tag (4) || k (4 BE) || witness_len (4 BE) ||
+ *           domain_len (4 BE) || witness || statement_hash || domain
+ *
+ * The 16-byte length-prefix preamble makes the IKM unambiguous under
+ * future witness/domain layout changes: two proof modules with
+ * different witness packings or domain widths cannot construct the
+ * same IKM from semantically distinct inputs, even if their
+ * concatenated `witness || statement_hash || domain` tails happen to
+ * coincide. version_tag ("MPT1") reserves a future-proof switch-over
+ * point if the layout ever needs to evolve further. The TOB May 2026
+ * revision audit (RIPCTXR-10, Informational) flagged the prior
+ * unprefixed layout as a brittle-API concern, not a present-day
+ * exploit (current call sites use distinct domains and fixed-width
+ * witnesses, so no concrete collision exists).
+ *
+ * This is a wire-format-breaking change: every existing transcript
+ * derived through this helper rederives with new nonce material.
+ *
  * @param[in]  ctx             secp256k1 context (for seckey_verify).
  * @param[out] nonces_out      Buffer of k*32 bytes to receive nonces.
  * @param[in]  k               Number of nonces to generate (max 8).
@@ -212,6 +232,12 @@ generate_deterministic_nonces(
     if (k == 0 || k > 8)
         return 0;
 
+    /* Caller bounds guard for the BE-32 length-tag encoding below. The
+     * call sites use small fixed widths (witness <= 8*32 = 256 bytes,
+     * domain <= 32 bytes) so this is defensive, not a real constraint. */
+    if (witness_len > 0xFFFFFFFFu || domain_len > 0xFFFFFFFFu)
+        return 0;
+
     /* Fresh entropy for defense-in-depth.
      *
      * The HKDF Extract step here uses a random `salt` rather than the more
@@ -236,7 +262,27 @@ generate_deterministic_nonces(
     if (RAND_bytes(salt, 32) != 1)
         return 0;
 
-    /* Extract: PRK = HMAC-SHA256(salt, witness || statement_hash || domain) */
+    /* IKM layout preamble: 4-byte version tag + 3 * uint32-BE = 16 bytes.
+     * Kept on the stack as a single contiguous buffer so the HKDF-Extract
+     * MAC sees it as one chunk before the witness/statement/domain tail. */
+    unsigned char ikm_preamble[16];
+    memcpy(ikm_preamble, "MPT1", 4);
+    ikm_preamble[4] = (unsigned char)((k >> 24) & 0xff);
+    ikm_preamble[5] = (unsigned char)((k >> 16) & 0xff);
+    ikm_preamble[6] = (unsigned char)((k >> 8) & 0xff);
+    ikm_preamble[7] = (unsigned char)(k & 0xff);
+    ikm_preamble[8] = (unsigned char)((witness_len >> 24) & 0xff);
+    ikm_preamble[9] = (unsigned char)((witness_len >> 16) & 0xff);
+    ikm_preamble[10] = (unsigned char)((witness_len >> 8) & 0xff);
+    ikm_preamble[11] = (unsigned char)(witness_len & 0xff);
+    ikm_preamble[12] = (unsigned char)((domain_len >> 24) & 0xff);
+    ikm_preamble[13] = (unsigned char)((domain_len >> 16) & 0xff);
+    ikm_preamble[14] = (unsigned char)((domain_len >> 8) & 0xff);
+    ikm_preamble[15] = (unsigned char)(domain_len & 0xff);
+
+    /* Extract: PRK = HMAC-SHA256(salt,
+     *   version_tag || k || witness_len || domain_len ||
+     *   witness || statement_hash || domain) */
     {
         EVP_MAC* mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
         if (!mac)
@@ -254,7 +300,9 @@ generate_deterministic_nonces(
         OSSL_PARAM params[] = {
             OSSL_PARAM_construct_utf8_string("digest", "SHA256", 0), OSSL_PARAM_construct_end()};
         size_t mac_len = 32;
-        if (!EVP_MAC_init(mctx, salt, 32, params) || !EVP_MAC_update(mctx, witness, witness_len) ||
+        if (!EVP_MAC_init(mctx, salt, 32, params) ||
+            !EVP_MAC_update(mctx, ikm_preamble, sizeof(ikm_preamble)) ||
+            !EVP_MAC_update(mctx, witness, witness_len) ||
             !EVP_MAC_update(mctx, statement_hash, 32) ||
             !EVP_MAC_update(mctx, (unsigned char const*)domain, domain_len) ||
             !EVP_MAC_final(mctx, prk, &mac_len, 32))
