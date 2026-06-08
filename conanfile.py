@@ -38,6 +38,8 @@ class MptCryptoConan(ConanFile):
     def generate(self):
         tc = CMakeToolchain(self)
         tc.variables["ENABLE_TESTS"] = self.options.tests
+        # Don't treat warnings as errors when built as a package/dependency:
+        tc.variables["MPT_CRYPTO_WERROR"] = False
         tc.generate()
 
         deps = CMakeDeps(self)
