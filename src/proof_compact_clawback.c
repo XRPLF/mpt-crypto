@@ -204,7 +204,12 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
           goto cleanup;
         }
       }
-      EVP_DigestFinal_ex(sh, stmt_hash, NULL);
+      if (EVP_DigestFinal_ex(sh, stmt_hash, NULL) != 1)
+      {
+        EVP_MD_CTX_free(sh);
+        OPENSSL_cleanse(witness_buf, sizeof(witness_buf));
+        goto cleanup;
+      }
       EVP_MD_CTX_free(sh);
 #undef SHASH
     }
