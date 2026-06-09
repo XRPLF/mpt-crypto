@@ -272,6 +272,7 @@ generate_deterministic_nonces(
                 EVP_MAC* mac = EVP_MAC_fetch(NULL, "HMAC", NULL);
                 if (!mac)
                 {
+                    OPENSSL_cleanse(prev, 32);
                     OPENSSL_cleanse(prk, 32);
                     OPENSSL_cleanse(nonces_out, k * 32);
                     return 0;
@@ -280,6 +281,7 @@ generate_deterministic_nonces(
                 if (!mctx)
                 {
                     EVP_MAC_free(mac);
+                    OPENSSL_cleanse(prev, 32);
                     OPENSSL_cleanse(prk, 32);
                     OPENSSL_cleanse(nonces_out, k * 32);
                     return 0;
@@ -317,6 +319,7 @@ generate_deterministic_nonces(
             if (!accepted)
             {
                 OPENSSL_cleanse(out, 32);
+                OPENSSL_cleanse(prev, 32);
                 OPENSSL_cleanse(prk, 32);
                 OPENSSL_cleanse(nonces_out, k * 32);
                 return 0;
@@ -326,6 +329,8 @@ generate_deterministic_nonces(
             memcpy(prev, out, 32);
             OPENSSL_cleanse(out, 32);
         }
+
+        OPENSSL_cleanse(prev, 32);
     }
 
     OPENSSL_cleanse(salt, 32);
