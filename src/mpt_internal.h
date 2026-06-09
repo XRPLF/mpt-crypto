@@ -212,7 +212,27 @@ generate_deterministic_nonces(
     if (k == 0 || k > 8)
         return 0;
 
-    /* Fresh entropy for defense-in-depth */
+    /* Fresh entropy for defense-in-depth.
+     *
+     * The HKDF Extract step here uses a random `salt` rather than the more
+     * common all-zero salt. The deterministic-nonce derivation
+     * (`HMAC(prk, witness || statement_hash || domain)`) is already collision-
+     * resistant under HMAC's PRF assumption, so the salt is not load-bearing
+     * for soundness. Its purpose is purely defense-in-depth:
+     *
+     *  - If a witness scalar were ever reused across two proofs (e.g., a
+     *    duplicate amount + same blinding factor due to a caller bug), an
+     *    all-zero-salt construction would produce identical `prk` and
+     *    identical nonce streams. The fresh per-call salt instead randomizes
+     *    `prk` so colliding (witness, statement_hash) inputs still yield
+     *    independent nonce streams.
+     *  - It also provides a hedge against any future weakness in the witness/
+     *    statement encoding that would otherwise allow an attacker to predict
+     *    or correlate `prk` across proofs.
+     *
+     * Note that the salt itself is NOT included in the proof; it only affects
+     * the prover's nonce derivation. The Fiat-Shamir transcript binds the
+     * resulting commitment values, so verifier soundness is unaffected. */
     if (RAND_bytes(salt, 32) != 1)
         return 0;
 

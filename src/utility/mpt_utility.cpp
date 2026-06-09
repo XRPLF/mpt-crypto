@@ -31,7 +31,21 @@
 extern "C" {
 /**
  * Context for secp256k1 operations.
- * Initialized once and reused across all operations to optimize performance
+ *
+ * Initialized once on first call and reused across all operations to optimize
+ * performance.
+ *
+ * Thread safety: a function-local `static` instance gives C++11-guaranteed
+ * thread-safe one-time initialization. Once constructed, the returned context
+ * is safe to share across threads for proof generation and verification:
+ * libsecp256k1 documents that all functions taking a `secp256k1_context const*`
+ * are thread-safe, and the entry points in this file (prove/verify) only use
+ * the context in that read-only mode.
+ *
+ * Callers must NOT invoke libsecp256k1 functions that mutate the context
+ * (e.g., `secp256k1_context_randomize`, `secp256k1_context_destroy`)
+ * concurrently with proof/verify operations on other threads. The constructor
+ * already performs the one randomize at init; no further mutation is needed.
  */
 secp256k1_context*
 mpt_secp256k1_context()
@@ -77,7 +91,26 @@ mpt_secp256k1_context()
 
 /**
  * @internal
- * Private helper to generate aggregated bulletproofs
+ * Private helper to generate aggregated bulletproofs.
+ *
+ * @param values         Array of `m` plaintext amounts to range-prove.
+ * @param blinding_ptrs  Array of `m` pointers to 32-byte Pedersen blinding
+ *                       factors. Each entry must be non-NULL.
+ * @param m              Aggregation count. Restricted to `{1, 2}` (see comment
+ *                       in body).
+ * @param context_hash   32-byte transaction-context hash bound into the
+ *                       Fiat--Shamir transcript.
+ * @param out_proof      Caller-allocated output buffer for the serialized
+ *                       proof. Treated as a raw byte buffer (`uint8_t*`):
+ *                       no alignment requirement beyond a `uint8_t*`. Must
+ *                       hold at least `kMPT_SINGLE_BULLETPROOF_SIZE` bytes
+ *                       when `m == 1`, or `kMPT_DOUBLE_BULLETPROOF_SIZE`
+ *                       bytes when `m == 2`.
+ * @param out_len        On entry: the size of `out_proof` in bytes. On exit:
+ *                       the number of bytes actually written. Must be
+ *                       non-NULL.
+ * @return 0 on success, -1 on any failure (invalid args, generator lookup
+ *         failure, prover failure, or unexpected serialized length).
  */
 static int
 mpt_get_bulletproof_agg(
