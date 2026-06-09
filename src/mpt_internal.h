@@ -15,6 +15,7 @@
 #include <openssl/rand.h>
 
 #include <secp256k1.h>
+#include <secp256k1_ecdh.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -42,6 +43,62 @@ static inline int
 pubkey_equal(secp256k1_context const* ctx, secp256k1_pubkey const* pk1, secp256k1_pubkey const* pk2)
 {
     return secp256k1_ec_pubkey_cmp(ctx, pk1, pk2) == 0;
+}
+
+/** ECDH hash callback that copies the raw uncompressed point bytes
+ *  (0x04 || x32 || y32) into the 65-byte output buffer. Used by
+ *  mpt_ct_pubkey_tweak_mul below. */
+static inline int
+mpt_raw_point_copy_hashfn(
+    unsigned char* output,
+    unsigned char const* x32,
+    unsigned char const* y32,
+    void* data)
+{
+    (void)data;
+    output[0] = 0x04;
+    memcpy(output + 1, x32, 32);
+    memcpy(output + 33, y32, 32);
+    return 1;
+}
+
+/** Constant-time replacement for secp256k1_ec_pubkey_tweak_mul on a secret scalar.
+ *
+ *  secp256k1_ec_pubkey_tweak_mul dispatches through secp256k1_ecmult ->
+ *  secp256k1_ecmult_strauss_wnaf, which uses the explicitly variable-time ops
+ *  secp256k1_gej_double_var / secp256k1_gej_add_ge_var. The scalar's wNAF
+ *  representation gates branches and memory accesses, leaking Hamming-weight
+ *  statistics through timing.
+ *
+ *  secp256k1_ecdh dispatches through secp256k1_ecmult_const, which uses
+ *  constant-time scalar recoding and constant-time gej_double / gej_add_ge.
+ *  By passing a custom hash callback that simply copies the raw (x, y)
+ *  coordinates, we recover the multiplication result as a serialized point
+ *  rather than the default SHA256-of-x.
+ *
+ *  Behaviour matches tweak_mul on the inputs callers care about: returns 1
+ *  with `*point := scalar * (*point)` on a valid in-range scalar, returns 0
+ *  on zero / overflow scalar (in which case `*point` is unchanged: ecdh's
+ *  output goes to the raw buffer, which is cleansed before return, and
+ *  pubkey_parse is skipped).
+ *
+ *  Caller must ensure `point` is initialized; on success it is overwritten
+ *  with the new point. The 65-byte intermediate is cleansed unconditionally. */
+static inline int
+mpt_ct_pubkey_tweak_mul(
+    secp256k1_context const* ctx,
+    secp256k1_pubkey* point,
+    unsigned char const* secret_scalar)
+{
+    unsigned char raw[65];
+    int ok = 0;
+
+    if (secp256k1_ecdh(ctx, raw, point, secret_scalar, mpt_raw_point_copy_hashfn, NULL) == 1)
+    {
+        ok = secp256k1_ec_pubkey_parse(ctx, point, raw, 65);
+    }
+    OPENSSL_cleanse(raw, sizeof(raw));
+    return ok;
 }
 
 /** Generates a random valid secp256k1 scalar (0 < scalar < order).

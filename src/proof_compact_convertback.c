@@ -220,7 +220,7 @@ int secp256k1_compact_convertback_prove(
     if (!secp256k1_ec_pubkey_create(ctx, &tbG, t_b))
       goto cleanup;
     tskB1 = *B1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tskB1, t_sk))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &tskB1, t_sk))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&tbG, &tskB1};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_sk2, pts, 2))
@@ -233,7 +233,7 @@ int secp256k1_compact_convertback_prove(
     if (!secp256k1_ec_pubkey_create(ctx, &tbG, t_b))
       goto cleanup;
     trH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &trH, t_rho))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &trH, t_rho))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&tbG, &trH};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_b, pts, 2))

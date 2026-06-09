@@ -232,7 +232,7 @@ int secp256k1_compact_clawback_prove(const secp256k1_context *ctx,
     goto cleanup;
 
   T2 = *C1;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &T2, t_sk))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &T2, t_sk))
     goto cleanup;
 
   /* 3. Challenge */

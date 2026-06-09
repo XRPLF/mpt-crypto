@@ -89,7 +89,7 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 
   /* 2. S = r * Q (Shared Secret) */
   S = *pubkey_Q;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, blinding_factor))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &S, blinding_factor))
     return 0;
 
   /* 3. C2 = S + m*G */
@@ -251,7 +251,7 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
 
   /* 1. Recover Shared Secret: S = privkey * c1. */
   S = *c1;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &S, privkey))
     return 0;
 
   /* Serialize c2 and S once up front; the loop never serializes the

@@ -283,7 +283,7 @@ int secp256k1_compact_standard_prove(
     for (size_t i = 0; i < n; i++)
     {
       secp256k1_pubkey aPk = Pk_vec[i];
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &aPk, alpha))
+      if (!mpt_ct_pubkey_tweak_mul(ctx, &aPk, alpha))
         goto cleanup;
       const secp256k1_pubkey *pts[2] = {&aPk, &betaG};
       if (!secp256k1_ec_pubkey_combine(ctx, &T2_vec[i], pts, 2))
@@ -297,7 +297,7 @@ int secp256k1_compact_standard_prove(
     if (!secp256k1_ec_pubkey_create(ctx, &betaG, beta))
       goto cleanup;
     alphaH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &alphaH, alpha))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &alphaH, alpha))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&betaG, &alphaH};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCm, pts, 2))
@@ -314,7 +314,7 @@ int secp256k1_compact_standard_prove(
     if (!secp256k1_ec_pubkey_create(ctx, &epsG, epsilon))
       goto cleanup;
     deltaH = H;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &deltaH, delta))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &deltaH, delta))
       goto cleanup;
     const secp256k1_pubkey *pts[2] = {&epsG, &deltaH};
     if (!secp256k1_ec_pubkey_combine(ctx, &T_PCb, pts, 2))
@@ -325,7 +325,7 @@ int secp256k1_compact_standard_prove(
   {
     secp256k1_pubkey gB1, epsG;
     gB1 = *B1;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &gB1, gamma))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &gB1, gamma))
       goto cleanup;
     if (!secp256k1_ec_pubkey_create(ctx, &epsG, epsilon))
       goto cleanup;
