@@ -88,6 +88,13 @@ mpt_get_bulletproof_agg(
     uint8_t* out_proof,
     size_t* out_len)
 {
+    // Today's protocols invoke aggregated bulletproofs only with m == 1
+    // (ConvertBack) or m == 2 (Send). The underlying primitive
+    // secp256k1_bulletproof_prove_agg accepts any power of 2 up to
+    // BP_MAX_VALUES (= 4), but we deliberately reject the unused cases here:
+    // the size constants kMPT_{SINGLE,DOUBLE}_BULLETPROOF_SIZE only cover
+    // these two, and broader values have no test coverage. Extend the check
+    // (and add a corresponding size constant) when a new use case appears.
     if ((m != 1 && m != 2) || !values || !blinding_ptrs || !out_proof || !out_len)
         return -1;
 
@@ -104,12 +111,13 @@ mpt_get_bulletproof_agg(
     }
 
     {
-        secp256k1_pubkey pk_base;
-        if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+        secp256k1_pubkey h_generator;
+        if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
             goto bp_cleanup;
 
         if (secp256k1_bulletproof_prove_agg(
-                ctx, out_proof, out_len, values, blindings_flat, m, &pk_base, context_hash) != 1)
+                ctx, out_proof, out_len, values, blindings_flat, m, &h_generator, context_hash) !=
+            1)
             goto bp_cleanup;
 
         size_t const expected =
@@ -210,6 +218,16 @@ sha512_half(uint8_t const* data, size_t len, uint8_t* out)
     unsigned int digest_len = 0;
     if (EVP_Digest(data, len, full_hash, &digest_len, EVP_sha512(), NULL) != 1)
         return -1;
+    // SHA-512 produces 64 bytes; we copy out the upper half (32 bytes).
+    // Verify the digest is at least the expected size before copying so a
+    // surprise digest-length mismatch cannot leak adjacent stack bytes or
+    // produce a truncated context hash that downstream callers then bind
+    // proofs against.
+    if (digest_len < 32)
+    {
+        OPENSSL_cleanse(full_hash, sizeof(full_hash));
+        return -1;
+    }
     memcpy(out, full_hash, 32);
     OPENSSL_cleanse(full_hash, sizeof(full_hash));
     return 0;
@@ -865,7 +883,9 @@ mpt_verify_aggregated_bulletproof(
     if (!proof || !compressed_commitments || !context_hash)
         return -1;
 
-    // m must be power of 2, in our case, it is either 1 or 2.
+    // m must be a power of 2; today's protocols invoke this verifier only
+    // with m == 1 (ConvertBack) or m == 2 (Send). See the matching note in
+    // mpt_get_bulletproof_agg above for the rationale and how to broaden.
     if (m != 1 && m != 2)
         return -1;
 
@@ -893,8 +913,8 @@ mpt_verify_aggregated_bulletproof(
         1)
         return -1;
 
-    secp256k1_pubkey pk_base;
-    if (secp256k1_mpt_get_h_generator(ctx, &pk_base) != 1)
+    secp256k1_pubkey h_generator;
+    if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
         return -1;
 
     if (secp256k1_bulletproof_verify_agg(
@@ -905,7 +925,7 @@ mpt_verify_aggregated_bulletproof(
             proof_len,
             commitments.data(),
             m,
-            &pk_base,
+            &h_generator,
             context_hash) != 1)
     {
         return -1;

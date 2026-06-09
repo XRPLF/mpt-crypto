@@ -6,9 +6,16 @@ find_package(OpenSSL REQUIRED)
 find_package(secp256k1 REQUIRED)
 
 # --- Add common options ---
+# -Werror is on by default for our own builds/CI, but consumers (e.g. rippled
+# via Conan) can disable it: third-party toolchains may inject flags that emit
+# warnings outside our control (e.g. -Wunused-command-line-argument).
+option(MPT_CRYPTO_WERROR "Treat compiler warnings as errors" ON)
 add_library(common INTERFACE)
 if(NOT MSVC)
-    target_compile_options(common INTERFACE -Wall -Wextra -Wpedantic -Werror)
+    target_compile_options(common INTERFACE -Wall -Wextra -Wpedantic)
+    if(MPT_CRYPTO_WERROR)
+        target_compile_options(common INTERFACE -Werror)
+    endif()
 endif()
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

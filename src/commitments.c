@@ -73,7 +73,11 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
         (unsigned char)(ctr >> 24), (unsigned char)(ctr >> 16),
         (unsigned char)(ctr >> 8), (unsigned char)(ctr & 0xFF)};
 
-    EVP_MD_CTX_reset(mdctx);
+    if (EVP_MD_CTX_reset(mdctx) != 1)
+    {
+      EVP_MD_CTX_free(mdctx);
+      return 0;
+    }
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     {
       EVP_MD_CTX_free(mdctx);
@@ -168,6 +172,10 @@ int secp256k1_mpt_get_generator_vector(const secp256k1_context *ctx,
 {
   MPT_ARG_CHECK(ctx != NULL);
   MPT_ARG_CHECK(vec != NULL);
+  /* The per-point derivation indexes generators with a uint32_t counter
+   * (`hash_to_point_nums(..., uint32_t index)`); reject lengths that would
+   * silently truncate when cast. */
+  MPT_ARG_CHECK(n <= UINT32_MAX);
   /* label is optional (NULL means use default NUMS derivation) */
 
   for (uint32_t i = 0; i < (uint32_t)n; i++)

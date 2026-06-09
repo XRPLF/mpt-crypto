@@ -747,9 +747,20 @@ a single Schnorr response suffices.
 
     \item \textbf{Challenge (Fiat--Shamir).}
           \[
-            c = H\bigl(C \| \Delta D_2 \| \cdots \| \Delta D_n
+            c = H\bigl(C
+            \| \Delta D_2 \| \cdots \| \Delta D_n
+            \| \Delta P_2 \| \cdots \| \Delta P_n
             \| R_G \| R_2 \| \cdots \| R_n\bigr).
           \]
+          The public bases $\Delta P_i$ are included so that
+          the challenge binds to the full public statement,
+          not just to the commitments $\Delta D_i$ and
+          announcements $R_i$.  Omitting them would let a
+          malicious prover choose $\Delta P_i = s^{-1}(R_i + c\,\Delta D_i)$
+          for arbitrary $R_i$ after seeing $c$, making the
+          verifier's reconstruction equation hold for a
+          statement different from the one the prover
+          committed to.
 
     \item \textbf{Response.}
           $s = k + c \cdot r$.
@@ -767,8 +778,10 @@ The verifier reconstructs:
   \quad (i = 2, \ldots, n),
 \]
 and checks $c \stackrel{?}{=}
-H(C \| \Delta D_2 \| \cdots \| \Delta D_n
-\| R_G' \| R_2' \| \cdots \| R_n')$.
+H\bigl(C
+\| \Delta D_2 \| \cdots \| \Delta D_n
+\| \Delta P_2 \| \cdots \| \Delta P_n
+\| R_G' \| R_2' \| \cdots \| R_n'\bigr)$.
 
 \paragraph{Proof size.}
 $\pi_c = (c, s) \in \Zq^2$: \textbf{64~bytes}, independent of~$n$.

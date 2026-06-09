@@ -30,15 +30,15 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   EXPECT(blindings != NULL && commitments != NULL);
   EXPECT(RAND_bytes(context_id, 32) == 1);
 
-  secp256k1_pubkey pk_base;
-  EXPECT(secp256k1_mpt_get_h_generator(ctx, &pk_base));
+  secp256k1_pubkey h_generator;
+  EXPECT(secp256k1_mpt_get_h_generator(ctx, &h_generator));
 
   /* ---- Commitments ---- */
   for (size_t i = 0; i < num_values; i++)
   {
     random_scalar(ctx, blindings[i]);
     EXPECT(secp256k1_bulletproof_create_commitment(
-        ctx, &commitments[i], values[i], blindings[i], &pk_base));
+        ctx, &commitments[i], values[i], blindings[i], &h_generator));
   }
 
   /* ---- Generator vectors ---- */
@@ -61,7 +61,7 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
 
   EXPECT(secp256k1_bulletproof_prove_agg(ctx, proof, &proof_len, values,
                                          (const unsigned char *)blindings,
-                                         num_values, &pk_base, context_id));
+                                         num_values, &h_generator, context_id));
 
   timespec_get(&t_p_end, TIME_UTC);
   printf("  Proof size: %zu bytes\n", proof_len);
@@ -73,8 +73,8 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   timespec_get(&t_v_start, TIME_UTC);
 
   int ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
-                                            commitments, num_values, &pk_base,
-                                            context_id);
+                                            commitments, num_values,
+                                            &h_generator, context_id);
 
   timespec_get(&t_v_end, TIME_UTC);
   EXPECT(ok);
@@ -92,8 +92,8 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
       struct timespec ts, te;
       timespec_get(&ts, TIME_UTC);
       ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
-                                            commitments, num_values, &pk_base,
-                                            context_id);
+                                            commitments, num_values,
+                                            &h_generator, context_id);
       timespec_get(&te, TIME_UTC);
       EXPECT(ok);
       total_ms += elapsed_ms(ts, te);
@@ -122,11 +122,11 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
       ctx, &bad_commitments[num_values - 1],
       (values[num_values - 1] == UINT64_MAX) ? values[num_values - 1] - 1
                                              : values[num_values - 1] + 1,
-      bad_blinding, &pk_base));
+      bad_blinding, &h_generator));
 
   ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
-                                        bad_commitments, num_values, &pk_base,
-                                        context_id);
+                                        bad_commitments, num_values,
+                                        &h_generator, context_id);
   EXPECT(ok == 0);
   printf("  PASSED (Rejected tampered-value proof)\n");
 
@@ -144,11 +144,11 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
 
   EXPECT(secp256k1_bulletproof_create_commitment(
       ctx, &bad_commitments[num_values - 1], values[num_values - 1],
-      alt_blinding, &pk_base));
+      alt_blinding, &h_generator));
 
   ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, proof, proof_len,
-                                        bad_commitments, num_values, &pk_base,
-                                        context_id);
+                                        bad_commitments, num_values,
+                                        &h_generator, context_id);
   EXPECT(ok == 0);
   printf("  PASSED (Rejected same-value/different-blinding proof)\n");
 

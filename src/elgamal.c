@@ -89,7 +89,7 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 
   /* 2. S = r * Q (Shared Secret) */
   S = *pubkey_Q;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, blinding_factor))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &S, blinding_factor))
     return 0;
 
   /* 3. C2 = S + m*G */
@@ -112,6 +112,127 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 
 /* --- Decryption --- */
 
+/* Maximum recoverable plaintext for the linear DLP search.  Documented in
+ * the public header (secp256k1_mpt.h, doxygen on secp256k1_elgamal_decrypt).
+ * Off-chain callers requiring larger ranges should switch to BSGS or
+ * Pollard's kangaroo. */
+#define MPT_ELGAMAL_DECRYPT_MAX_RANGE ((uint64_t)1000000)
+
+/* Branchless brute-force DLP solver over the range [1, max_range].
+ *
+ * Runs exactly `max_range` iterations regardless of whether and where the
+ * target is found.  This is a "fixed iteration count" property, not a
+ * full constant-time guarantee: the underlying libsecp256k1 EC operations
+ * are themselves variable-time, so this loop hides the position of the
+ * match but not microarchitectural variations of individual point ops.
+ * The public-API doxygen documents this caveat.
+ *
+ * On success, `*out_amount` holds the recovered `i` such that `i*G`
+ * serializes to `target_ser`, and `*out_is_found` is 1; if no match is
+ * found, `*out_is_found` is 0.  Returns 0 on internal failure (e.g.,
+ * libsecp256k1 serialization fail). */
+static int secp256k1_solve_dlp_small_range_fixed(
+    const secp256k1_context *ctx, uint64_t *out_amount, uint64_t *out_is_found,
+    const unsigned char target_ser[33], uint64_t max_range)
+{
+  if (max_range == 0)
+  {
+    *out_amount = 0;
+    *out_is_found = 0;
+    return 1;
+  }
+
+  unsigned char one[32] = {0};
+  one[31] = 1;
+
+  secp256k1_pubkey G_point;
+  if (!secp256k1_ec_pubkey_create(ctx, &G_point, one))
+  {
+    OPENSSL_cleanse(one, 32);
+    return 0;
+  }
+
+  secp256k1_pubkey current_M = G_point; /* start at 1*G */
+  secp256k1_pubkey next_M;
+  const secp256k1_pubkey *pts[2];
+  unsigned char current_M_ser[33];
+
+  uint64_t found_amount = 0;
+  uint64_t is_found = 0;
+  unsigned char global_ser_error = 0;
+
+  for (uint64_t i = 1; i <= max_range; ++i)
+  {
+    /* Serialize current_M.  Use a fallback buffer so a libsecp failure
+     * cannot leak data through the comparison below. */
+    size_t ser_len = 33;
+    unsigned char temp_ser[33] = {0};
+    int ser_ok = secp256k1_ec_pubkey_serialize(
+        ctx, temp_ser, &ser_len, &current_M, SECP256K1_EC_COMPRESSED);
+
+    /* Branchless: ser_mask = 0xFF iff ser_ok==1, else 0x00. */
+    unsigned char ser_mask = (unsigned char)(0 - ser_ok);
+    for (int j = 0; j < 33; j++)
+      current_M_ser[j] = temp_ser[j] & ser_mask;
+
+    /* Track any serialization anomaly across all iterations; an outer
+     * check turns the result into a failure if anything went wrong. */
+    global_ser_error |= (unsigned char)(ser_ok ^ 1);
+    global_ser_error |= (unsigned char)(ser_len ^ 33);
+
+    /* Constant-time byte-by-byte comparison: accumulate OR of XORs. */
+    unsigned char match_diff = 0;
+    for (int j = 0; j < 33; j++)
+      match_diff |= current_M_ser[j] ^ target_ser[j];
+
+    /* Mix in serialization status: a failed iteration must never match. */
+    match_diff |= (unsigned char)(ser_ok ^ 1);
+    match_diff |= (unsigned char)(ser_len ^ 33);
+
+    /* Saturate diff to a 1-bit match flag (1 iff match_diff==0). */
+    uint64_t diff64 = (uint64_t)match_diff;
+    uint64_t match = 1 ^ (((diff64 | (~diff64 + 1)) >> 63) & 1);
+
+    /* Constant-time conditional move: when `match` is 1, overwrite
+     * `found_amount` with `i`; otherwise leave it unchanged.  At most
+     * one iteration can match because G has prime order and i ranges
+     * over [1, max_range] << ord(G), so each `i*G` is distinct; no
+     * "stick on first match" guard is needed. */
+    uint64_t match_mask = ~(match - 1);
+    found_amount ^= (found_amount ^ i) & match_mask;
+    is_found |= match;
+
+    /* current_M += G  (always executed; result placed via byte-level cmov). */
+    pts[0] = &current_M;
+    pts[1] = &G_point;
+    int combine_ok = secp256k1_ec_pubkey_combine(ctx, &next_M, pts, 2);
+    unsigned char combine_mask = (unsigned char)(0 - combine_ok);
+    unsigned char *curr_ptr = (unsigned char *)&current_M;
+    unsigned char *next_ptr = (unsigned char *)&next_M;
+    for (size_t b = 0; b < sizeof(secp256k1_pubkey); b++)
+      curr_ptr[b] =
+          (curr_ptr[b] & ~combine_mask) | (next_ptr[b] & combine_mask);
+
+    /* Combine failures are tracked the same way as serialization failures
+     * so we don't leak via the loop trip count. */
+    global_ser_error |= (unsigned char)(combine_ok ^ 1);
+  }
+
+  OPENSSL_cleanse(current_M_ser, 33);
+  OPENSSL_cleanse(one, 32);
+
+  if (global_ser_error != 0)
+  {
+    *out_amount = 0;
+    *out_is_found = 0;
+    return 0;
+  }
+
+  *out_amount = found_amount;
+  *out_is_found = is_found;
+  return 1;
+}
+
 int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
                               const secp256k1_pubkey *c1,
                               const secp256k1_pubkey *c2,
@@ -123,59 +244,86 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
   MPT_ARG_CHECK(c2 != NULL);
   MPT_ARG_CHECK(privkey != NULL);
 
-  secp256k1_pubkey S, M_target, current_M, G_point, next_M;
+  secp256k1_pubkey S, M_target_sum, neg_S;
   const secp256k1_pubkey *pts[2];
-  uint64_t i;
-  unsigned char one[32] = {0};
-  one[31] = 1;
+  unsigned char c2_ser[33], S_ser[33], M_target_ser[33];
+  size_t ser_len;
 
-  /* 1. Recover Shared Secret: S = privkey * C1 */
+  /* 1. Recover Shared Secret: S = privkey * c1. */
   S = *c1;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &S, privkey))
     return 0;
 
-  /* 2. Check for Amount = 0 (C2 == S) */
-  /* This is much faster than doing point subtraction first */
-  if (pubkey_equal(ctx, c2, &S))
+  /* Serialize c2 and S once up front; the loop never serializes the
+   * input ciphertext side, only candidate points i*G. */
+  ser_len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, c2_ser, &ser_len, c2,
+                                     SECP256K1_EC_COMPRESSED) ||
+      ser_len != 33)
+    return 0;
+  ser_len = 33;
+  if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
+                                     SECP256K1_EC_COMPRESSED) ||
+      ser_len != 33)
   {
-    *amount = 0;
-    return 1;
+    OPENSSL_cleanse(c2_ser, 33);
+    return 0;
   }
 
-  /* 3. Prepare Target: M_target = C2 - S */
-  /* M_target = C2 + (-S) */
-  if (!secp256k1_ec_pubkey_negate(ctx, &S))
+  /* 2. Constant-time check for amount=0 (c2 == S).  No early return: we
+   * run the full DLP loop unconditionally so an outside observer cannot
+   * distinguish the m=0 path from the m>0 path by timing. */
+  unsigned char zero_diff_u8 = 0;
+  for (int j = 0; j < 33; j++)
+    zero_diff_u8 |= c2_ser[j] ^ S_ser[j];
+  uint64_t zero_diff64 = (uint64_t)zero_diff_u8;
+  uint64_t match_zero = 1 ^ (((zero_diff64 | (~zero_diff64 + 1)) >> 63) & 1);
+
+  /* 3. Compute M_target_sum = c2 - S = c2 + (-S).  If this fails (point
+   * at infinity, which is exactly the m=0 case), we leave M_target_ser
+   * as the constant zero buffer so the loop simply never matches. */
+  neg_S = S;
+  if (!secp256k1_ec_pubkey_negate(ctx, &neg_S))
+  {
+    OPENSSL_cleanse(S_ser, 33);
+    OPENSSL_cleanse(c2_ser, 33);
     return 0;
+  }
   pts[0] = c2;
-  pts[1] = &S;
-  if (!secp256k1_ec_pubkey_combine(ctx, &M_target, pts, 2))
-    return 0;
-
-  /* 4. Brute Force Search (1 to 1,000,000) */
-  /* Optimization: Use point comparison, no serialization inside loop */
-
-  if (!secp256k1_ec_pubkey_create(ctx, &G_point, one))
-    return 0;          // G
-  current_M = G_point; // Start at 1*G
-
-  for (i = 1; i <= 1000000; ++i)
+  pts[1] = &neg_S;
+  memset(M_target_ser, 0, 33);
+  if (secp256k1_ec_pubkey_combine(ctx, &M_target_sum, pts, 2))
   {
-    // Fast comparison
-    if (pubkey_equal(ctx, &current_M, &M_target))
-    {
-      *amount = i;
-      return 1;
-    }
-
-    // Increment: current_M = current_M + G
-    pts[0] = &current_M;
-    pts[1] = &G_point;
-    if (!secp256k1_ec_pubkey_combine(ctx, &next_M, pts, 2))
-      return 0;
-    current_M = next_M;
+    ser_len = 33;
+    unsigned char tmp[33];
+    if (secp256k1_ec_pubkey_serialize(ctx, tmp, &ser_len, &M_target_sum,
+                                      SECP256K1_EC_COMPRESSED) &&
+        ser_len == 33)
+      memcpy(M_target_ser, tmp, 33);
+    OPENSSL_cleanse(tmp, 33);
   }
 
-  return 0; // Amount not found in range
+  /* 4. Fixed-iteration DLP search. */
+  uint64_t loop_amount = 0;
+  uint64_t match_loop = 0;
+  int solver_ok = secp256k1_solve_dlp_small_range_fixed(
+      ctx, &loop_amount, &match_loop, M_target_ser,
+      MPT_ELGAMAL_DECRYPT_MAX_RANGE);
+
+  /* 5. Constant-time resolution: prefer the m=0 path if it matched. */
+  uint64_t is_found = match_zero | match_loop;
+  uint64_t zero_mask = ~(match_zero - 1);
+  *amount = (loop_amount & ~zero_mask); /* loop_amount when match_zero=0 */
+  /* zero_mask=all-ones if match_zero=1 — *amount stays 0 in that case. */
+
+  /* 6. Scrub sensitive intermediates. */
+  OPENSSL_cleanse(S_ser, 33);
+  OPENSSL_cleanse(c2_ser, 33);
+  OPENSSL_cleanse(M_target_ser, 33);
+
+  if (!solver_ok)
+    return 0;
+  return (int)is_found;
 }
 
 /* --- Homomorphic Operations --- */
@@ -274,21 +422,24 @@ int generate_canonical_encrypted_zero(
   memcpy(hash_input + 7, account_id, 20);
   memcpy(hash_input + 27, mpt_issuance_id, 24);
 
-  /* Rejection sampling loop to ensure scalar is valid */
-  do
+  /* Initial hash of the domain-tagged input. */
+  unsigned int md_len = 32;
+  if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
+                 NULL) != 1)
+    return 0;
+
+  /* Rejection sampling: chain-hash the 32-byte previous output until it is a
+   * valid secp256k1 scalar. The probability of needing more than one iteration
+   * is ~2^-128, so in practice the loop body executes zero times. The chain
+   * deliberately hashes only the previous output (not the full 51-byte
+   * domain-tagged buffer): mixing stale tail bytes from `hash_input` would
+   * yield a non-standard construction without any security benefit. */
+  while (!secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
   {
-    unsigned int md_len = 32;
-    if (EVP_Digest(hash_input, 51, deterministic_scalar, &md_len, EVP_sha256(),
-                   NULL) != 1)
+    if (EVP_Digest(deterministic_scalar, 32, deterministic_scalar, &md_len,
+                   EVP_sha256(), NULL) != 1)
       return 0;
-
-    if (secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
-      break;
-
-    // Re-hash the output for next iteration (chain method for determinism)
-    memcpy(hash_input, deterministic_scalar, 32);
-
-  } while (1);
+  }
 
   ret = secp256k1_elgamal_encrypt(ctx, enc_zero_c1, enc_zero_c2, pubkey, 0,
                                   deterministic_scalar);

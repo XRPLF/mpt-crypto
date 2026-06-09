@@ -31,6 +31,35 @@ secp256k1_elgamal_encrypt(
 
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
+ *
+ * The function uses a linear discrete-logarithm search over a fixed range
+ * and can only successfully recover plaintext amounts in [0, 1,000,000].
+ * If the ciphertext encrypts a value greater than 1,000,000 the search
+ * exhausts its range and the function returns 0 (not found).  Callers
+ * that read the public API contract as supporting arbitrary 64-bit
+ * amounts should not rely on this function for those cases.
+ *
+ * To mitigate amount-dependent timing side channels (TOB-RIPCTX-1 / -4,
+ * reintroduced as TOB-RIPCTXR-1), the search executes with a fixed
+ * iteration count: it always runs to the maximum of 1,000,000 iterations
+ * regardless of where (or whether) the match is found.  This is a fixed
+ * iteration count, not strict constant time: the underlying libsecp256k1
+ * curve operations are inherently variable-time, so this function does
+ * not protect against attackers that can observe microarchitectural
+ * variation of individual point operations.  In shared / multitenant
+ * deployments where such attacks are relevant, callers should not
+ * expose decryption latency to untrusted observers.
+ *
+ * Architectural note: on-chain validators and verifiers never decrypt
+ * ciphertexts; this function is intended for testing and basic client-
+ * side operations.  Off-chain applications (wallets, audit tooling) that
+ * need to decrypt larger balances should use more efficient discrete
+ * logarithm algorithms such as baby-step giant-step (O(sqrt(n))) or
+ * Pollard's kangaroo.
+ *
+ * @return 1 if the ciphertext decrypts to an amount in [0, 1,000,000]
+ *         and `*amount` is set; 0 otherwise.  A 0 return covers both
+ *         "amount out of range" and "internal failure".
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt(
@@ -92,16 +121,25 @@ generate_canonical_encrypted_zero(
 );
 
 /**
- * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*Pk_base.
+ * @brief Computes a Pedersen Commitment: C = value*G + blinding_factor*H.
  *
  * This function creates the commitment point (C) that the Bulletproof proves
- * the range of. Pk_base is the dynamic secondary generator (H).
+ * the range of.
  *
  * @param[in]   ctx             A pointer to the context.
  * @param[out]  commitment_C    The resulting commitment point C.
  * @param[in]   value           The secret amount v (uint64_t).
  * @param[in]   blinding_factor The secret randomness r (32 bytes).
- * @param[in]   pk_base         The recipient's public key (used as the H generator).
+ * @param[in]   h_generator     The Pedersen blinding generator H, as returned
+ *                              by secp256k1_mpt_get_h_generator(). This MUST
+ *                              be the standardized nothing-up-my-sleeve H
+ *                              generator; it must NOT be a holder, issuer,
+ *                              auditor, or recipient encryption public key.
+ *                              Pedersen binding requires that the discrete
+ *                              log of H be unknown to all parties; supplying
+ *                              a key whose discrete log is known to any party
+ *                              breaks binding and lets that party compute
+ *                              alternate openings of the same commitment.
  *
  * @return 1 on success, 0 on failure.
  */
@@ -111,7 +149,7 @@ secp256k1_bulletproof_create_commitment(
     secp256k1_pubkey* commitment_C,
     uint64_t value,
     unsigned char const* blinding_factor,
-    secp256k1_pubkey const* pk_base);
+    secp256k1_pubkey const* h_generator);
 
 int
 secp256k1_bulletproof_prove(
@@ -120,7 +158,7 @@ secp256k1_bulletproof_prove(
     size_t* proof_len,
     uint64_t value,
     unsigned char const* blinding_factor,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id, /* <--- AND HERE */
     unsigned int proof_type);
 
@@ -132,7 +170,7 @@ secp256k1_bulletproof_verify(
     unsigned char const* proof,
     size_t proof_len,
     secp256k1_pubkey const* commitment_C,
-    secp256k1_pubkey const* pk_base, /* This is generator H */
+    secp256k1_pubkey const* h_generator, /* This is generator H */
     unsigned char const* context_id);
 /**
  * Verifies that (c1, c2) is a valid ElGamal encryption of 'amount'
@@ -213,7 +251,7 @@ secp256k1_bulletproof_prove_agg(
     uint64_t const* values,
     unsigned char const* blindings_flat,
     size_t m,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id);
 int
 secp256k1_bulletproof_verify_agg(
@@ -224,7 +262,7 @@ secp256k1_bulletproof_verify_agg(
     size_t proof_len,
     secp256k1_pubkey const* commitment_C_vec, /* length m */
     size_t m,
-    secp256k1_pubkey const* pk_base,
+    secp256k1_pubkey const* h_generator,
     unsigned char const* context_id);
 
 /*
