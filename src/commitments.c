@@ -55,8 +55,8 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
                                      const unsigned char *label,
                                      size_t label_len, uint32_t index)
 {
-  unsigned char hash[32];
-  unsigned char compressed[33];
+  unsigned char hash[kMPT_HALF_SHA_SIZE];
+  unsigned char compressed[kMPT_PUBKEY_SIZE];
   uint32_t ctr = 0;
 
   unsigned char idx_be[4] = {
@@ -119,9 +119,9 @@ int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
 
     compressed[0] =
         0x02; // Force even Y (standard convention for unique points)
-    memcpy(&compressed[1], hash, 32);
+    memcpy(&compressed[1], hash, kMPT_HALF_SHA_SIZE);
 
-    if (secp256k1_ec_pubkey_parse(ctx, out, compressed, 33) == 1)
+    if (secp256k1_ec_pubkey_parse(ctx, out, compressed, kMPT_PUBKEY_SIZE) == 1)
     {
       EVP_MD_CTX_free(mdctx);
       return 1;
@@ -207,7 +207,7 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
   MPT_ARG_CHECK(rho != NULL);
 
   secp256k1_pubkey mG, rH, H;
-  unsigned char m_scalar[32] = {0};
+  unsigned char m_scalar[kMPT_SCALAR_SIZE] = {0};
   int ok = 0;
 
   /* 0. Input Check */
@@ -251,6 +251,6 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
 
 cleanup:
   /* Securely clear the amount scalar from stack */
-  OPENSSL_cleanse(m_scalar, 32);
+  OPENSSL_cleanse(m_scalar, kMPT_SCALAR_SIZE);
   return ok;
 }

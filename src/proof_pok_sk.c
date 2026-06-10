@@ -26,8 +26,8 @@ static int build_pok_challenge(const secp256k1_context *ctx,
                                const unsigned char *context_id)
 {
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-  unsigned char buf[33];
-  unsigned char h[32];
+  unsigned char buf[kMPT_PUBKEY_SIZE];
+  unsigned char h[kMPT_HALF_SHA_SIZE];
   size_t len;
   int ok = 0;
 
@@ -42,12 +42,12 @@ static int build_pok_challenge(const secp256k1_context *ctx,
 #define SER(pk_ptr)                                                            \
   do                                                                           \
   {                                                                            \
-    len = 33;                                                                  \
+    len = kMPT_PUBKEY_SIZE;                                                    \
     if (!secp256k1_ec_pubkey_serialize(ctx, buf, &len, pk_ptr,                 \
                                        SECP256K1_EC_COMPRESSED) ||             \
-        len != 33)                                                             \
+        len != kMPT_PUBKEY_SIZE)                                               \
       goto cleanup;                                                            \
-    if (EVP_DigestUpdate(mdctx, buf, 33) != 1)                                 \
+    if (EVP_DigestUpdate(mdctx, buf, kMPT_PUBKEY_SIZE) != 1)                   \
       goto cleanup;                                                            \
   } while (0)
 
@@ -58,7 +58,7 @@ static int build_pok_challenge(const secp256k1_context *ctx,
 
   if (context_id)
   {
-    if (EVP_DigestUpdate(mdctx, context_id, 32) != 1)
+    if (EVP_DigestUpdate(mdctx, context_id, kMPT_HALF_SHA_SIZE) != 1)
       goto cleanup;
   }
 
@@ -86,8 +86,8 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
   MPT_ARG_CHECK(sk != NULL);
   /* context_id is optional */
 
-  unsigned char k[32];
-  unsigned char e[32], s[32];
+  unsigned char k[kMPT_SCALAR_SIZE];
+  unsigned char e[kMPT_SCALAR_SIZE], s[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T;
   int ok = 0;
 
@@ -96,10 +96,10 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
 
   /* 1. Deterministic nonce */
   {
-    unsigned char stmt_hash[32];
+    unsigned char stmt_hash[kMPT_HALF_SHA_SIZE];
     {
       EVP_MD_CTX *sh = EVP_MD_CTX_new();
-      unsigned char sbuf[33];
+      unsigned char sbuf[kMPT_PUBKEY_SIZE];
       size_t slen;
       if (!sh)
         goto cleanup;
@@ -108,22 +108,22 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
         EVP_MD_CTX_free(sh);
         goto cleanup;
       }
-      slen = 33;
+      slen = kMPT_PUBKEY_SIZE;
       if (!secp256k1_ec_pubkey_serialize(ctx, sbuf, &slen, pk,
                                          SECP256K1_EC_COMPRESSED) ||
-          slen != 33)
+          slen != kMPT_PUBKEY_SIZE)
       {
         EVP_MD_CTX_free(sh);
         goto cleanup;
       }
-      if (EVP_DigestUpdate(sh, sbuf, 33) != 1)
+      if (EVP_DigestUpdate(sh, sbuf, kMPT_PUBKEY_SIZE) != 1)
       {
         EVP_MD_CTX_free(sh);
         goto cleanup;
       }
       if (context_id)
       {
-        if (EVP_DigestUpdate(sh, context_id, 32) != 1)
+        if (EVP_DigestUpdate(sh, context_id, kMPT_HALF_SHA_SIZE) != 1)
         {
           EVP_MD_CTX_free(sh);
           goto cleanup;
@@ -137,11 +137,12 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
       EVP_MD_CTX_free(sh);
     }
 
-    unsigned char nonces[32];
-    if (!generate_deterministic_nonces(ctx, nonces, 1, sk, 32, stmt_hash,
-                                       DOMAIN_POK_SK, strlen(DOMAIN_POK_SK)))
+    unsigned char nonces[kMPT_SCALAR_SIZE];
+    if (!generate_deterministic_nonces(ctx, nonces, 1, sk, kMPT_SCALAR_SIZE,
+                                       stmt_hash, DOMAIN_POK_SK,
+                                       strlen(DOMAIN_POK_SK)))
       goto cleanup;
-    memcpy(k, nonces, 32);
+    memcpy(k, nonces, kMPT_SCALAR_SIZE);
     OPENSSL_cleanse(nonces, sizeof(nonces));
   }
 
@@ -157,15 +158,15 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
   compute_sigma_response(s, k, e, sk);
 
   /* 5. Serialize: e || s */
-  memcpy(proof_out, e, 32);
-  memcpy(proof_out + 32, s, 32);
+  memcpy(proof_out, e, kMPT_SCALAR_SIZE);
+  memcpy(proof_out + 32, s, kMPT_SCALAR_SIZE);
 
   ok = 1;
 
 cleanup:
-  OPENSSL_cleanse(k, 32);
-  OPENSSL_cleanse(e, 32);
-  OPENSSL_cleanse(s, 32);
+  OPENSSL_cleanse(k, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(e, kMPT_SCALAR_SIZE);
+  OPENSSL_cleanse(s, kMPT_SCALAR_SIZE);
   return ok;
 }
 
@@ -181,12 +182,13 @@ int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
   MPT_ARG_CHECK(pk != NULL);
   /* context_id is optional */
 
-  unsigned char e[32], s[32], e_prime[32], neg_e[32];
+  unsigned char e[kMPT_SCALAR_SIZE], s[kMPT_SCALAR_SIZE];
+  unsigned char e_prime[kMPT_SCALAR_SIZE], neg_e[kMPT_SCALAR_SIZE];
   secp256k1_pubkey T;
 
   /* 1. Deserialize: e || s */
-  memcpy(e, proof, 32);
-  memcpy(s, proof + 32, 32);
+  memcpy(e, proof, kMPT_SCALAR_SIZE);
+  memcpy(s, proof + 32, kMPT_SCALAR_SIZE);
 
   if (!secp256k1_ec_seckey_verify(ctx, e))
     return 0;
@@ -213,5 +215,5 @@ int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
     return 0;
 
   /* 4. Accept iff e' == e */
-  return CRYPTO_memcmp(e, e_prime, 32) == 0;
+  return CRYPTO_memcmp(e, e_prime, kMPT_SCALAR_SIZE) == 0;
 }
