@@ -52,7 +52,7 @@ jobs:
       matrix:
         include:
           # ── macOS ARM64 (Apple Silicon) ──
-          - os: macos-14
+          - os: macos15
             platform: darwin-aarch64
             lib_filename: libmpt-crypto.dylib
 
@@ -62,14 +62,16 @@ jobs:
             lib_filename: libmpt-crypto.dylib
 
           # ── Linux ARM64 ──
-          - os: ubuntu-24.04-arm
+          - os: heavy-arm64
             platform: linux-aarch64
             lib_filename: libmpt-crypto.so
+            container: '{ "image": "ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696" }'
 
           # ── Linux x86_64 ──
-          - os: ubuntu-latest
+          - os: heavy
             platform: linux-x86-64
             lib_filename: libmpt-crypto.so
+            container: '{ "image": "ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696" }'
 
           # ── Linux s390x (IBM Z) — built via QEMU user-mode emulation ──
           - os: ubuntu-latest
@@ -79,13 +81,18 @@ jobs:
             docker_image: s390x/ubuntu:24.04
 
           # ── Windows x86_64 ──
-          - os: windows-latest
+          - os: windows
             platform: win32-x86-64
             lib_filename: mpt-crypto.dll
 
     runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container != '' && fromJson(matrix.container) || null }}
 
     steps:
+      - name: Cleanup workspace
+        if: matrix.os == 'macos15'
+        uses: XRPLF/actions/cleanup-workspace@c7d9ce5ebb03c752a354889ecd870cadfc2b1cd4
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up QEMU
@@ -94,19 +101,11 @@ jobs:
         with:
           platforms: ${{ matrix.docker_platform }}
 
-      - name: Set up Python
+      - name: Prepare runner
         if: matrix.docker_platform == ''
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: XRPLF/actions/prepare-runner@2cbf481018d930656e9276fcc20dc0e3a0be5b6d
         with:
-          python-version: "3.12"
-
-      - name: Install Conan and Ninja
-        if: matrix.docker_platform == ''
-        run: pip install conan ninja
-
-      - name: Set up MSVC environment
-        if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@a102174a2b586eec2ea151a69e6fd14404a8ce7c # v1.13.0
+          enable_ccache: false
 
       - name: Build and test
         if: matrix.docker_platform == ''
