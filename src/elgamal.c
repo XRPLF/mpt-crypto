@@ -37,6 +37,7 @@
  */
 #include "mpt_internal.h"
 #include "secp256k1_mpt.h"
+#include "bsgs_dlp.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <string.h>

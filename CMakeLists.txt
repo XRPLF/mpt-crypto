@@ -25,6 +25,7 @@ add_library(
     src/bulletproof_aggregated.c
     src/commitments.c
     src/elgamal.c
+    src/bsgs_dlp.c
     src/mpt_scalar.c
     src/proof_pok_sk.c
     src/proof_compact_standard.c
@@ -35,6 +36,7 @@ add_library(
 
 # --- Set Include Directories ---
 target_include_directories(mpt-crypto PUBLIC include)
+target_include_directories(mpt-crypto PRIVATE secp256k1_internal)
 
 # --- Link Common Options ---
 target_link_libraries(mpt-crypto PUBLIC common)
