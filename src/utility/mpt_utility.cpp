@@ -84,6 +84,7 @@ mpt_secp256k1_context()
             if (ctx)
             {
                 unsigned char seed[kMPT_BLINDING_FACTOR_SIZE];
+                CleanseGuard const seed_guard{seed, sizeof(seed)};
 
                 if (RAND_bytes(seed, kMPT_BLINDING_FACTOR_SIZE) != 1)
                 {
