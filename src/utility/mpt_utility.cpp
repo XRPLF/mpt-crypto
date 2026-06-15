@@ -44,9 +44,10 @@ struct CleanseGuard
     {
         OPENSSL_cleanse(ptr, len);
     }
-    
+
     CleanseGuard(CleanseGuard const&) = delete;
-    CleanseGuard& operator=(CleanseGuard const&) = delete;
+    CleanseGuard&
+    operator=(CleanseGuard const&) = delete;
 };
 }  // namespace
 
@@ -173,8 +174,7 @@ mpt_get_bulletproof_agg(
             ctx, out_proof, out_len, values, blindings_flat, m, &h_generator, context_hash) != 1)
         return -1;
 
-    size_t const expected =
-        (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+    size_t const expected = (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
     if (*out_len != expected)
         return -1;
 
