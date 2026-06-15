@@ -28,6 +28,28 @@
 #define MPT_HTOBE64(x) htobe64(x)
 #endif
 
+namespace {
+// RAII guard that wipes a fixed-size secret buffer when it leaves scope, so
+// every return path cleanses sensitive material.
+struct CleanseGuard
+{
+    void* const ptr;
+    size_t const len;
+
+    CleanseGuard(void* p, size_t l) : ptr(p), len(l)
+    {
+    }
+
+    ~CleanseGuard()
+    {
+        OPENSSL_cleanse(ptr, len);
+    }
+    
+    CleanseGuard(CleanseGuard const&) = delete;
+    CleanseGuard& operator=(CleanseGuard const&) = delete;
+};
+}  // namespace
+
 extern "C" {
 /**
  * Context for secp256k1 operations.
@@ -134,36 +156,29 @@ mpt_get_bulletproof_agg(
     secp256k1_context const* ctx = mpt_secp256k1_context();
 
     uint8_t blindings_flat[64];
-    int rc = -1;
+    CleanseGuard const blindings_guard{blindings_flat, sizeof(blindings_flat)};
 
     for (size_t i = 0; i < m; ++i)
     {
         if (!blinding_ptrs[i])
-            goto bp_cleanup;
+            return -1;
         std::memcpy(blindings_flat + (i * 32), blinding_ptrs[i], 32);
     }
 
-    {
-        secp256k1_pubkey h_generator;
-        if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
-            goto bp_cleanup;
+    secp256k1_pubkey h_generator;
+    if (secp256k1_mpt_get_h_generator(ctx, &h_generator) != 1)
+        return -1;
 
-        if (secp256k1_bulletproof_prove_agg(
-                ctx, out_proof, out_len, values, blindings_flat, m, &h_generator, context_hash) !=
-            1)
-            goto bp_cleanup;
+    if (secp256k1_bulletproof_prove_agg(
+            ctx, out_proof, out_len, values, blindings_flat, m, &h_generator, context_hash) != 1)
+        return -1;
 
-        size_t const expected =
-            (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
-        if (*out_len != expected)
-            goto bp_cleanup;
+    size_t const expected =
+        (m == 1) ? kMPT_SINGLE_BULLETPROOF_SIZE : kMPT_DOUBLE_BULLETPROOF_SIZE;
+    if (*out_len != expected)
+        return -1;
 
-        rc = 0;
-    }
-
-bp_cleanup:
-    OPENSSL_cleanse(blindings_flat, sizeof(blindings_flat));
-    return rc;
+    return 0;
 }
 
 /**
@@ -339,7 +354,7 @@ mpt_get_convert_context_hash(
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT, acc, iss, seq);
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_CONVERT, acc, iss, seq);
     s.addRaw(acc.bytes, sizeof(acc.bytes));
     s.add32(0);
 
@@ -360,7 +375,7 @@ mpt_get_convert_back_context_hash(
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CONVERT_BACK, acc, iss, seq);
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_CONVERT_BACK, acc, iss, seq);
     s.addRaw(acc.bytes, sizeof(acc.bytes));
     s.add32(ver);
 
@@ -382,7 +397,7 @@ mpt_get_send_context_hash(
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_SEND, acc, iss, seq);
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_SEND, acc, iss, seq);
     s.addRaw(dest.bytes, sizeof(dest.bytes));
     s.add32(ver);
 
@@ -403,7 +418,7 @@ mpt_get_clawback_context_hash(
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
-    mpt_add_common_zkp_fields(s, ttCONFIDENTIAL_MPT_CLAWBACK, acc, iss, seq);
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_CLAWBACK, acc, iss, seq);
     s.addRaw(holder.bytes, sizeof(holder.bytes));
     s.add32(0);
 
@@ -713,28 +728,22 @@ mpt_get_confidential_send_proof(
 
     uint8_t neg_r[32];
     uint8_t rho_rem[32];
-    int rc = -1;
+    CleanseGuard const neg_r_guard{neg_r, sizeof(neg_r)};
+    CleanseGuard const rho_rem_guard{rho_rem, sizeof(rho_rem)};
 
     secp256k1_mpt_scalar_negate(neg_r, tx_blinding_factor);
     secp256k1_mpt_scalar_add(rho_rem, balance_params->blinding_factor, neg_r);
 
-    {
-        uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
-        uint8_t* bp_ptr = out_proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE;
-        size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
+    uint8_t const* bp_blinding_ptrs[2] = {tx_blinding_factor, rho_rem};
+    uint8_t* bp_ptr = out_proof + SECP256K1_COMPACT_STANDARD_PROOF_SIZE;
+    size_t actual_bp_len = kMPT_DOUBLE_BULLETPROOF_SIZE;
 
-        if (mpt_get_bulletproof_agg(
-                bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
-            goto send_cleanup;
+    if (mpt_get_bulletproof_agg(
+            bp_values, bp_blinding_ptrs, 2, context_hash, bp_ptr, &actual_bp_len) != 0)
+        return -1;
 
-        *out_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + actual_bp_len;
-        rc = 0;
-    }
-
-send_cleanup:
-    OPENSSL_cleanse(neg_r, sizeof(neg_r));
-    OPENSSL_cleanse(rho_rem, sizeof(rho_rem));
-    return rc;
+    *out_len = SECP256K1_COMPACT_STANDARD_PROOF_SIZE + actual_bp_len;
+    return 0;
 }
 
 int

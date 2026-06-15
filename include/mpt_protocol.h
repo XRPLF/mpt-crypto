@@ -8,11 +8,11 @@ extern "C" {
 #endif
 
 // XRPL Transaction Types, the number MUST match rippled's definitions
-#define ttCONFIDENTIAL_MPT_CONVERT 85
-#define ttCONFIDENTIAL_MPT_MERGE_INBOX 86
-#define ttCONFIDENTIAL_MPT_CONVERT_BACK 87
-#define ttCONFIDENTIAL_MPT_SEND 88
-#define ttCONFIDENTIAL_MPT_CLAWBACK 89
+#define kCONFIDENTIAL_MPT_CONVERT 85
+#define kCONFIDENTIAL_MPT_MERGE_INBOX 86
+#define kCONFIDENTIAL_MPT_CONVERT_BACK 87
+#define kCONFIDENTIAL_MPT_SEND 88
+#define kCONFIDENTIAL_MPT_CLAWBACK 89
 
 // General crypto primitive sizes in bytes
 #define kMPT_HALF_SHA_SIZE 32
