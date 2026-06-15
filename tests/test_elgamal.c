@@ -69,7 +69,7 @@ static void test_encryption_decryption_roundtrip(const secp256k1_context *ctx)
 {
   unsigned char privkey[32], blinding_factor[32];
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
-  uint64_t original_amount = 10001;
+  uint64_t original_amount = 1001;
   uint64_t decrypted_amount = 0;
   printf("Running test: encryption-decryption round trip...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
@@ -87,7 +87,7 @@ static void test_homomorphic_operations(const secp256k1_context *ctx)
 {
   unsigned char privkey[32];
   secp256k1_pubkey pubkey;
-  uint64_t amount_a = 5000, amount_b = 1234;
+  uint64_t amount_a = 1000, amount_b = 500;
   secp256k1_pubkey a_c1, a_c2, b_c1, b_c2, result_c1, result_c2;
   uint64_t decrypted_result;
 
@@ -181,7 +181,7 @@ static void test_verify_encryption(const secp256k1_context *ctx)
 {
   unsigned char privkey[32], blinding_factor[32];
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
-  uint64_t amount = 5000;
+  uint64_t amount = 1500;
   uint64_t zero_amount = 0;
 
   printf("Running test: secp256k1_elgamal_verify_encryption...\n");
@@ -218,8 +218,7 @@ static void test_decryption_boundaries(const secp256k1_context *ctx)
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
   uint64_t decrypted_amount = 0;
 
-  printf("Running test: decryption boundary limits (0, 1, 1,000,000, "
-         "1,000,001)...\n");
+  printf("Running test: decryption boundary limits (0, 1, 2000, 2001)...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
   // Need a random scalar for the blinding factor
@@ -243,18 +242,18 @@ static void test_decryption_boundaries(const secp256k1_context *ctx)
          1);
   EXPECT(decrypted_amount == 1);
 
-  /* Exact upper boundary: 1,000,000.  Must succeed; the fixed-iteration
+  /* Exact upper boundary: 2,000.  Must succeed; the fixed-iteration
    * loop runs to completion and the last iteration matches. */
   decrypted_amount = 0xDEADBEEFu;
-  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000000,
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 2000,
                                    blinding_factor) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
          1);
-  EXPECT(decrypted_amount == 1000000);
+  EXPECT(decrypted_amount == 2000);
 
-  /* Just outside the boundary: 1,000,001.  Decrypt must gracefully fail
+  /* Just outside the boundary: 2,001.  Decrypt must gracefully fail
    * (return 0) without producing a stale `decrypted_amount`. */
-  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000001,
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 2001,
                                    blinding_factor) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
          0);
