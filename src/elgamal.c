@@ -116,7 +116,7 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
  * the public header (secp256k1_mpt.h, doxygen on secp256k1_elgamal_decrypt).
  * Off-chain callers requiring larger ranges should switch to BSGS or
  * Pollard's kangaroo. */
-#define MPT_ELGAMAL_DECRYPT_MAX_RANGE ((uint64_t)1000000)
+#define MPT_ELGAMAL_DECRYPT_MAX_RANGE ((uint64_t)2000)
 
 /* Branchless brute-force DLP solver over the range [1, max_range].
  *
