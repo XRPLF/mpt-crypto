@@ -79,7 +79,7 @@ jobs:
             docker_image: s390x/ubuntu:24.04
 
           # ── Windows x86_64 ──
-          - os: windows-latest
+          - os: windows-2022
             platform: win32-x86-64
             lib_filename: mpt-crypto.dll
 
