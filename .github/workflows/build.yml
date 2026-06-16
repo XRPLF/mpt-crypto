@@ -83,22 +83,12 @@ jobs:
 
       - name: Run CMake
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            cmake \
-              -B "${BUILD_DIR}" \
-              -S . \
-              -G "Visual Studio 17 2022" \
-              -A x64 \
-              -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake
-          else
-            cmake \
-              -B "${BUILD_DIR}" \
-              -S . \
-              -G Ninja \
-              -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
-              -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
-          fi
-        shell: bash
+          cmake \
+          -B "${BUILD_DIR}" \
+          -S . \
+          -G Ninja \
+          -DCMAKE_TOOLCHAIN_FILE:FILEPATH=build/generators/conan_toolchain.cmake \
+          -DCMAKE_BUILD_TYPE="${BUILD_TYPE}"
 
       - name: Build
         run: ninja
