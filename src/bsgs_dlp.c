@@ -816,11 +816,12 @@ bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
         return 0;
     }
 
+    uint64_t max_m  = (b->bits_total < 64) ? ((1ULL << b->bits_total) - 1) : UINT64_MAX;
     int      result = 0;
     uint64_t j      = 1;
 
     /* Windowed main loop — full W-sized batches. */
-    while (j + (uint64_t)W <= b->J && !result)
+    while (j + (uint64_t)W <= b->J + 1 && !result)
     {
         int early = 0;
         for (size_t w = 0; w < W; w++)
@@ -862,12 +863,12 @@ bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
             {
                 uint64_t m1 = j_win[w] * b->M + (uint64_t)cands[ci];
                 uint64_t m2 = j_win[w] * b->M - (uint64_t)cands[ci];
-                if (verify_candidate(ctx, m1, t33))
+                if (m1 <= max_m && verify_candidate(ctx, m1, t33))
                 {
                     *out_m = m1;
                     result = 1;
                 }
-                else if (verify_candidate(ctx, m2, t33))
+                else if (m2 >= 1 && m2 <= max_m && verify_candidate(ctx, m2, t33))
                 {
                     *out_m = m2;
                     result = 1;
@@ -877,7 +878,7 @@ bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
     }
 
     /* Tail loop — remaining steps that don't fill a full window. */
-    for (; j < b->J && !result; j++)
+    for (; j <= b->J && !result; j++)
     {
         if (gej_eq_ge(&jMGj, &target_ge))
         {
@@ -898,12 +899,12 @@ bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
         {
             uint64_t m1 = j * b->M + (uint64_t)cands[ci];
             uint64_t m2 = j * b->M - (uint64_t)cands[ci];
-            if (verify_candidate(ctx, m1, t33))
+            if (m1 <= max_m && verify_candidate(ctx, m1, t33))
             {
                 *out_m = m1;
                 result = 1;
             }
-            else if (verify_candidate(ctx, m2, t33))
+            else if (m2 >= 1 && m2 <= max_m && verify_candidate(ctx, m2, t33))
             {
                 *out_m = m2;
                 result = 1;
