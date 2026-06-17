@@ -8,8 +8,8 @@
  *   3. Decrypt m=1 (first baby step, j=0 path)
  *   4. Decrypt a value within the first giant step (small i, j=0)
  *   5. Decrypt a value requiring giant steps (j > 0)
- *   6. Decrypt the maximum value for bits_total=40 (boundary)
- *   7. Decrypt fails gracefully for a value outside bits_total=40 range
+ *   6. Decrypt the maximum value for bits_total=28 (boundary)
+ *   7. Decrypt fails gracefully for a value outside bits_total=28 range
  *   8. Round-trip: encrypt then decrypt_bsgs, verify recovered == original
  *   9. Cache save and load round-trip (baby table persists across contexts)
  *  10. NULL argument rejection
