@@ -33,33 +33,42 @@ secp256k1_elgamal_encrypt(
 /**
  * @brief Decrypts an ElGamal ciphertext to recover the amount.
  *
- * The function uses a linear discrete-logarithm search over a fixed range
- * and can only successfully recover plaintext amounts in [0, 1,000,000].
- * If the ciphertext encrypts a value greater than 1,000,000 the search
- * exhausts its range and the function returns 0 (not found).  Callers
- * that read the public API contract as supporting arbitrary 64-bit
- * amounts should not rely on this function for those cases.
+ * The function uses a linear discrete-logarithm search over the caller-
+ * specified range [range_low, range_high] and can only successfully recover
+ * plaintext amounts within that range. If the ciphertext encrypts a value
+ * outside the range, the search exhausts its iterations and the function
+ * returns 0 (not found). The recommended default range is [0, 1,000,000].
  *
  * To mitigate amount-dependent timing side channels (TOB-RIPCTX-1 / -4,
  * reintroduced as TOB-RIPCTXR-1), the search executes with a fixed
- * iteration count: it always runs to the maximum of 1,000,000 iterations
- * regardless of where (or whether) the match is found.  This is a fixed
- * iteration count, not strict constant time: the underlying libsecp256k1
- * curve operations are inherently variable-time, so this function does
- * not protect against attackers that can observe microarchitectural
- * variation of individual point operations.  In shared / multitenant
- * deployments where such attacks are relevant, callers should not
- * expose decryption latency to untrusted observers.
+ * iteration count: it always runs to completion over the full specified
+ * range regardless of where (or whether) the match is found. This is a
+ * fixed iteration count, not strict constant time: the underlying
+ * libsecp256k1 curve operations are inherently variable-time, so this
+ * function does not protect against attackers that can observe
+ * microarchitectural variation of individual point operations. In shared /
+ * multitenant deployments where such attacks are relevant, callers should
+ * not expose decryption latency to untrusted observers.
  *
  * Architectural note: on-chain validators and verifiers never decrypt
  * ciphertexts; this function is intended for testing and basic client-
- * side operations.  Off-chain applications (wallets, audit tooling) that
+ * side operations. Off-chain applications (wallets, audit tooling) that
  * need to decrypt larger balances should use more efficient discrete
  * logarithm algorithms such as baby-step giant-step (O(sqrt(n))) or
  * Pollard's kangaroo.
  *
- * @return 1 if the ciphertext decrypts to an amount in [0, 1,000,000]
- *         and `*amount` is set; 0 otherwise.  A 0 return covers both
+ * @param[in]  ctx        A pointer to a valid secp256k1 context.
+ * @param[out] amount     Set to the decrypted plaintext amount on success.
+ * @param[in]  c1         The C1 component of the ElGamal ciphertext.
+ * @param[in]  c2         The C2 component of the ElGamal ciphertext.
+ * @param[in]  privkey    The 32-byte ElGamal private key.
+ * @param[in]  range_low  Lower bound of the search range (inclusive).
+ * @param[in]  range_high Upper bound of the search range (inclusive).
+ *                        Must be >= range_low; returns 0 otherwise.
+ *                        Recommended default: range_low=0, range_high=1000000.
+ *
+ * @return 1 if the ciphertext decrypts to an amount in [range_low, range_high]
+ *         and `*amount` is set; 0 otherwise. A 0 return covers both
  *         "amount out of range" and "internal failure".
  */
 SECP256K1_API int
@@ -68,7 +77,9 @@ secp256k1_elgamal_decrypt(
     uint64_t* amount,
     secp256k1_pubkey const* c1,
     secp256k1_pubkey const* c2,
-    unsigned char const* privkey);
+    unsigned char const* privkey,
+    uint64_t range_low,
+    uint64_t range_high);
 
 /**
  * @brief Homomorphically adds two ElGamal ciphertexts.

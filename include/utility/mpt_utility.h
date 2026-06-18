@@ -180,7 +180,9 @@ int
 mpt_decrypt_amount(
     uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t* out_amount);
+    uint64_t* out_amount,
+    uint64_t range_low,
+    uint64_t range_high);
 
 /* ============================================================================
  * ZKProof Generation

@@ -498,7 +498,9 @@ int
 mpt_decrypt_amount(
     uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t* out_amount)
+    uint64_t* out_amount,
+    uint64_t range_low,
+    uint64_t range_high)
 {
     if (!in_ciphertext || !privkey || !out_amount)
         return -1;
@@ -511,7 +513,7 @@ mpt_decrypt_amount(
     if (!mpt_make_ec_pair(in_ciphertext, &c1, &c2))
         return -1;
 
-    if (secp256k1_elgamal_decrypt(ctx, out_amount, &c1, &c2, privkey) != 1)
+    if (secp256k1_elgamal_decrypt(ctx, out_amount, &c1, &c2, privkey, range_low, range_high) != 1)
         return -1;
 
     return 0;
