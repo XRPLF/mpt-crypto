@@ -504,6 +504,8 @@ mpt_decrypt_amount(
 {
     if (!in_ciphertext || !privkey || !out_amount)
         return -1;
+    if (range_low > range_high)
+        return -2;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)

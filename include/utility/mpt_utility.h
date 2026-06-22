@@ -174,7 +174,11 @@ mpt_encrypt_amount(
  * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
  * @param privkey    [in]  The 32-byte private key.
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
- * @return 0 on success, -1 on failure.
+ * @param range_low  [in]  Lower bound of the search range (inclusive).
+ * @param range_high [in]  Upper bound of the search range (inclusive).
+ * @return 0 on success, -1 on failure, -2 if range_low > range_high.
+ * @note Performance scales linearly with (range_high - range_low). A range of [0, 1,000,000] takes
+ * approximately 3 seconds on Apple Silicon. Do not pass arbitrarily large ranges.
  */
 int
 mpt_decrypt_amount(
