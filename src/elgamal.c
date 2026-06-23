@@ -112,20 +112,14 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
 
 /* --- Decryption --- */
 
-/* Maximum recoverable plaintext for the linear DLP search.  Documented in
- * the public header (secp256k1_mpt.h, doxygen on secp256k1_elgamal_decrypt).
- * Off-chain callers requiring larger ranges should switch to BSGS or
- * Pollard's kangaroo. */
-#define MPT_ELGAMAL_DECRYPT_MAX_RANGE ((uint64_t)2000)
-
-/* Branchless brute-force DLP solver over the range [1, max_range].
+/* Branchless brute-force DLP solver over the range [range_low, range_high].
  *
- * Runs exactly `max_range` iterations regardless of whether and where the
- * target is found.  This is a "fixed iteration count" property, not a
- * full constant-time guarantee: the underlying libsecp256k1 EC operations
- * are themselves variable-time, so this loop hides the position of the
- * match but not microarchitectural variations of individual point ops.
- * The public-API doxygen documents this caveat.
+ * Runs exactly `range_high - effective_low + 1` iterations regardless of
+ * whether and where the target is found, where effective_low = max(1,
+ * range_low). This is a "fixed iteration count" property, not a full
+ * constant-time guarantee: the underlying libsecp256k1 EC operations are
+ * themselves variable-time, so this loop hides the position of the match but
+ * not microarchitectural variations of individual point ops.
  *
  * On success, `*out_amount` holds the recovered `i` such that `i*G`
  * serializes to `target_ser`, and `*out_is_found` is 1; if no match is
@@ -133,9 +127,13 @@ int secp256k1_elgamal_encrypt(const secp256k1_context *ctx,
  * libsecp256k1 serialization fail). */
 static int secp256k1_solve_dlp_small_range_fixed(
     const secp256k1_context *ctx, uint64_t *out_amount, uint64_t *out_is_found,
-    const unsigned char target_ser[33], uint64_t max_range)
+    const unsigned char target_ser[33], uint64_t range_low, uint64_t range_high)
 {
-  if (max_range == 0)
+  /* The zero case (m=0) is handled separately by the caller.
+   * Effective start for this loop is max(1, range_low). */
+  uint64_t effective_low = (range_low < 1) ? 1 : range_low;
+
+  if (effective_low > range_high)
   {
     *out_amount = 0;
     *out_is_found = 0;
@@ -152,7 +150,33 @@ static int secp256k1_solve_dlp_small_range_fixed(
     return 0;
   }
 
-  secp256k1_pubkey current_M = G_point; /* start at 1*G */
+  /* Compute starting point: effective_low * G.
+   * If effective_low == 1, this is just G_point.
+   * Otherwise, encode effective_low as a 32-byte big-endian scalar and
+   * compute the starting point via scalar multiplication. */
+  secp256k1_pubkey current_M;
+  if (effective_low == 1)
+  {
+    current_M = G_point;
+  }
+  else
+  {
+    unsigned char start_scalar[kMPT_SCALAR_SIZE] = {0};
+    uint64_t tmp = effective_low;
+    for (int k = 0; k < 8; k++)
+    {
+      start_scalar[kMPT_SCALAR_SIZE - 1 - k] = (unsigned char)(tmp & 0xFF);
+      tmp >>= 8;
+    }
+    int ok = secp256k1_ec_pubkey_create(ctx, &current_M, start_scalar);
+    OPENSSL_cleanse(start_scalar, kMPT_SCALAR_SIZE);
+    if (!ok)
+    {
+      OPENSSL_cleanse(one, kMPT_SCALAR_SIZE);
+      return 0;
+    }
+  }
+
   secp256k1_pubkey next_M;
   const secp256k1_pubkey *pts[2];
   unsigned char current_M_ser[33];
@@ -161,7 +185,7 @@ static int secp256k1_solve_dlp_small_range_fixed(
   uint64_t is_found = 0;
   unsigned char global_ser_error = 0;
 
-  for (uint64_t i = 1; i <= max_range; ++i)
+  for (uint64_t i = effective_low; i <= range_high; ++i)
   {
     /* Serialize current_M.  Use a fallback buffer so a libsecp failure
      * cannot leak data through the comparison below. */
@@ -194,10 +218,7 @@ static int secp256k1_solve_dlp_small_range_fixed(
     uint64_t match = 1 ^ (((diff64 | (~diff64 + 1)) >> 63) & 1);
 
     /* Constant-time conditional move: when `match` is 1, overwrite
-     * `found_amount` with `i`; otherwise leave it unchanged.  At most
-     * one iteration can match because G has prime order and i ranges
-     * over [1, max_range] << ord(G), so each `i*G` is distinct; no
-     * "stick on first match" guard is needed. */
+     * `found_amount` with `i`; otherwise leave it unchanged. */
     uint64_t match_mask = ~(match - 1);
     found_amount ^= (found_amount ^ i) & match_mask;
     is_found |= match;
@@ -213,8 +234,6 @@ static int secp256k1_solve_dlp_small_range_fixed(
       curr_ptr[b] =
           (curr_ptr[b] & ~combine_mask) | (next_ptr[b] & combine_mask);
 
-    /* Combine failures are tracked the same way as serialization failures
-     * so we don't leak via the loop trip count. */
     global_ser_error |= (unsigned char)(combine_ok ^ 1);
   }
 
@@ -236,13 +255,18 @@ static int secp256k1_solve_dlp_small_range_fixed(
 int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
                               const secp256k1_pubkey *c1,
                               const secp256k1_pubkey *c2,
-                              const unsigned char *privkey)
+                              const unsigned char *privkey, uint64_t range_low,
+                              uint64_t range_high)
 {
   MPT_ARG_CHECK(ctx != NULL);
   MPT_ARG_CHECK(amount != NULL);
   MPT_ARG_CHECK(c1 != NULL);
   MPT_ARG_CHECK(c2 != NULL);
   MPT_ARG_CHECK(privkey != NULL);
+
+  /* Validate range */
+  if (range_low > range_high)
+    return 0;
 
   secp256k1_pubkey S, M_target_sum, neg_S;
   const secp256k1_pubkey *pts[2];
@@ -279,6 +303,10 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
   uint64_t zero_diff64 = (uint64_t)zero_diff_u8;
   uint64_t match_zero = 1 ^ (((zero_diff64 | (~zero_diff64 + 1)) >> 63) & 1);
 
+  /* Only accept zero match if 0 is within [range_low, range_high]. */
+  uint64_t zero_in_range = (range_low == 0) ? (uint64_t)1 : (uint64_t)0;
+  uint64_t effective_match_zero = match_zero & (~(zero_in_range - 1));
+
   /* 3. Compute M_target_sum = c2 - S = c2 + (-S).  If this fails (point
    * at infinity, which is exactly the m=0 case), we leave M_target_ser
    * as the constant zero buffer so the loop simply never matches. */
@@ -303,16 +331,15 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
     OPENSSL_cleanse(tmp, 33);
   }
 
-  /* 4. Fixed-iteration DLP search. */
+  /* 4. Fixed-iteration DLP search over [range_low, range_high]. */
   uint64_t loop_amount = 0;
   uint64_t match_loop = 0;
   int solver_ok = secp256k1_solve_dlp_small_range_fixed(
-      ctx, &loop_amount, &match_loop, M_target_ser,
-      MPT_ELGAMAL_DECRYPT_MAX_RANGE);
+      ctx, &loop_amount, &match_loop, M_target_ser, range_low, range_high);
 
   /* 5. Constant-time resolution: prefer the m=0 path if it matched. */
-  uint64_t is_found = match_zero | match_loop;
-  uint64_t zero_mask = ~(match_zero - 1);
+  uint64_t is_found = effective_match_zero | match_loop;
+  uint64_t zero_mask = ~(effective_match_zero - 1);
   *amount = (loop_amount & ~zero_mask); /* loop_amount when match_zero=0 */
   /* zero_mask=all-ones if match_zero=1 — *amount stays 0 in that case. */
 
@@ -430,10 +457,7 @@ int generate_canonical_encrypted_zero(
 
   /* Rejection sampling: chain-hash the 32-byte previous output until it is a
    * valid secp256k1 scalar. The probability of needing more than one iteration
-   * is ~2^-128, so in practice the loop body executes zero times. The chain
-   * deliberately hashes only the previous output (not the full 51-byte
-   * domain-tagged buffer): mixing stale tail bytes from `hash_input` would
-   * yield a non-standard construction without any security benefit. */
+   * is ~2^-128, so in practice the loop body executes zero times. */
   while (!secp256k1_ec_seckey_verify(ctx, deterministic_scalar))
   {
     if (EVP_Digest(deterministic_scalar, kMPT_HALF_SHA_SIZE,
@@ -444,7 +468,7 @@ int generate_canonical_encrypted_zero(
   ret = secp256k1_elgamal_encrypt(ctx, enc_zero_c1, enc_zero_c2, pubkey, 0,
                                   deterministic_scalar);
 
-  OPENSSL_cleanse(deterministic_scalar, kMPT_SCALAR_SIZE); // Secure cleanup
+  OPENSSL_cleanse(deterministic_scalar, kMPT_SCALAR_SIZE);
   return ret;
 }
 

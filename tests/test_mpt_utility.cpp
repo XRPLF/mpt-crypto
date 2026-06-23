@@ -162,8 +162,8 @@ test_encryption_decryption_integrate()
         0,
         1,
         1000,
-        // todo: due to the lib's current limitation, large numbers
-        // are not supported yet. We need to add them back once the limitation is fixed.
+        // Large amounts are omitted for test performance. With BSGS these
+        // will be fast and can be re-enabled.
         // 123456789,
         // 10000000000ULL
     };
@@ -174,7 +174,7 @@ test_encryption_decryption_integrate()
 
         EXPECT(mpt_generate_blinding_factor(bf) == 0);
         EXPECT(mpt_encrypt_amount(original_amount, pub, bf, ciphertext) == 0);
-        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == 0);
+        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount, 0, 2000) == 0);
         EXPECT(decrypted_amount == original_amount);
     }
 }

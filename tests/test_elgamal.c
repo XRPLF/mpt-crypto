@@ -57,7 +57,6 @@ static void test_encryption(const secp256k1_context *ctx)
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
   printf("Running test: secp256k1_elgamal_encrypt (smoke test)...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
-  // Note: Reusing generate_keypair is a convenient way to get a random scalar
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, blinding_factor,
                                             &temp_pubkey) == 1);
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 12345,
@@ -77,8 +76,8 @@ static void test_encryption_decryption_roundtrip(const secp256k1_context *ctx)
                                             &temp_pubkey) == 1);
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, original_amount,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 1);
   EXPECT(original_amount == decrypted_amount);
   printf("Test passed!\n");
 }
@@ -112,13 +111,13 @@ static void test_homomorphic_operations(const secp256k1_context *ctx)
   EXPECT(secp256k1_elgamal_add(ctx, &result_c1, &result_c2, &a_c1, &a_c2, &b_c1,
                                &b_c2) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_result, &result_c1,
-                                   &result_c2, privkey) == 1);
+                                   &result_c2, privkey, 0, 2000) == 1);
   EXPECT(decrypted_result == amount_a + amount_b);
 
   EXPECT(secp256k1_elgamal_subtract(ctx, &result_c1, &result_c2, &a_c1, &a_c2,
                                     &b_c1, &b_c2) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_result, &result_c1,
-                                   &result_c2, privkey) == 1);
+                                   &result_c2, privkey, 0, 2000) == 1);
   EXPECT(decrypted_result == amount_a - amount_b);
   printf("Test passed!\n");
 }
@@ -128,15 +127,15 @@ static void test_zero_encryption(const secp256k1_context *ctx)
   unsigned char privkey[32], blinding_factor[32];
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
   uint64_t original_amount = 0;
-  uint64_t decrypted_amount = 999; // Non-zero initial value
+  uint64_t decrypted_amount = 999;
   printf("Running test: encrypting a random zero...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, blinding_factor,
                                             &temp_pubkey) == 1);
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, original_amount,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 1);
   EXPECT(original_amount == decrypted_amount);
   printf("Test passed!\n");
 }
@@ -148,29 +147,23 @@ static void test_canonical_zero(const secp256k1_context *ctx)
   secp256k1_pubkey c1_a, c2_a, c1_b, c2_b;
   uint64_t decrypted_amount = 999;
 
-  // Use placeholder byte arrays for IDs (20 bytes for account, 24 for issuance)
-  unsigned char account_id[20] = {1};  // Example ID
-  unsigned char issuance_id[24] = {2}; // Example ID
+  unsigned char account_id[20] = {1};
+  unsigned char issuance_id[24] = {2};
 
   printf("Running test: canonical encrypted zero...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-  // Generate it once
   EXPECT(generate_canonical_encrypted_zero(ctx, &c1_a, &c2_a, &pubkey,
                                            account_id, issuance_id) == 1);
-
-  // Generate it a second time with the same inputs
   EXPECT(generate_canonical_encrypted_zero(ctx, &c1_b, &c2_b, &pubkey,
                                            account_id, issuance_id) == 1);
 
-  // 1. Verify that it decrypts to zero
+  /* 1. Verify that it decrypts to zero */
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1_a, &c2_a,
-                                   privkey) == 1);
+                                   privkey, 0, 2000) == 1);
   EXPECT(decrypted_amount == 0);
 
-  // 2. Verify that the output is deterministic (both ciphertexts are identical)
-  //    We compare the internal structs directly for this test, assuming
-  //    determinism holds internally.
+  /* 2. Verify determinism */
   EXPECT(memcmp(&c1_a, &c1_b, sizeof(c1_a)) == 0);
   EXPECT(memcmp(&c2_a, &c2_b, sizeof(c2_a)) == 0);
 
@@ -195,7 +188,7 @@ static void test_verify_encryption(const secp256k1_context *ctx)
   EXPECT(secp256k1_elgamal_verify_encryption(ctx, &c1, &c2, &pubkey, amount,
                                              blinding_factor) == 1);
 
-  /* 2. Test zero-value encryption verification (The special case we added) */
+  /* 2. Test zero-value encryption verification */
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, zero_amount,
                                    blinding_factor) == 1);
   EXPECT(secp256k1_elgamal_verify_encryption(
@@ -206,57 +199,94 @@ static void test_verify_encryption(const secp256k1_context *ctx)
                                              blinding_factor) == 0);
 
   /* 4. Test detection of tampered ciphertext */
-  c2 = c1; // Force a mismatch
+  c2 = c1;
   EXPECT(secp256k1_elgamal_verify_encryption(
              ctx, &c1, &c2, &pubkey, zero_amount, blinding_factor) == 0);
 
   printf("Test passed!\n");
 }
+
 static void test_decryption_boundaries(const secp256k1_context *ctx)
 {
   unsigned char privkey[32], blinding_factor[32];
   secp256k1_pubkey pubkey, c1, c2, temp_pubkey;
   uint64_t decrypted_amount = 0;
 
-  printf("Running test: decryption boundary limits (0, 1, 2000, 2001)...\n");
+  printf("Running test: decryption boundary limits with [range_low, "
+         "range_high]...\n");
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
-
-  // Need a random scalar for the blinding factor
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, blinding_factor,
                                             &temp_pubkey) == 1);
 
-  /* amount = 0: exercises the c2 == S fast-path in the constant-time
-   * branchless arithmetic.  Must decrypt to exactly 0. */
+  /* --- Default range [0, 2000] tests --- */
+
+  /* amount = 0: must succeed with range [0, 2000]. */
   decrypted_amount = 0xDEADBEEFu;
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 0,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 1);
   EXPECT(decrypted_amount == 0);
 
-  /* amount = 1: smallest positive value; first DLP iteration matches. */
+  /* amount = 1: smallest positive value. */
   decrypted_amount = 0xDEADBEEFu;
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 1);
   EXPECT(decrypted_amount == 1);
 
-  /* Exact upper boundary: 2,000.  Must succeed; the fixed-iteration
-   * loop runs to completion and the last iteration matches. */
+  /* amount = 2000: exact upper boundary with [0, 2000]. */
   decrypted_amount = 0xDEADBEEFu;
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 2000,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 1);
   EXPECT(decrypted_amount == 2000);
 
-  /* Just outside the boundary: 2,001.  Decrypt must gracefully fail
-   * (return 0) without producing a stale `decrypted_amount`. */
+  /* amount = 2001: just outside [0, 2000], must fail. */
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 2001,
                                    blinding_factor) == 1);
-  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey) ==
-         0);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   2000) == 0);
+
+  /* --- Custom range [500, 1500] tests --- */
+
+  /* amount = 1000: within [500, 1500], must succeed. */
+  decrypted_amount = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 1000,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
+                                   500, 1500) == 1);
+  EXPECT(decrypted_amount == 1000);
+
+  /* amount = 200: below [500, 1500], must fail. */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 200,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
+                                   500, 1500) == 0);
+
+  /* amount = 2000: above [500, 1500], must fail. */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 2000,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
+                                   500, 1500) == 0);
+
+  /* --- Invalid range test --- */
+
+  /* range_low > range_high: must fail immediately. */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 100,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
+                                   1000, 500) == 0);
+
+  /* --- Zero exclusion test --- */
+
+  /* amount = 0 with range_low > 0: must fail (zero excluded from range). */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 0,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 1,
+                                   2000) == 0);
 
   printf("Test passed!\n");
 }
