@@ -36,7 +36,6 @@ add_library(
 
 # --- Set Include Directories ---
 target_include_directories(mpt-crypto PUBLIC include)
-target_include_directories(mpt-crypto PRIVATE secp256k1_internal)
 
 # --- Link Common Options ---
 target_link_libraries(mpt-crypto PUBLIC common)

@@ -44,10 +44,10 @@
 #include <private/int128_impl.h>
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-#include <field.h>
-#include <field_impl.h>
-#include <group.h>
-#include <group_impl.h>
+#include <private/field.h>
+#include <private/field_impl.h>
+#include <private/group.h>
+#include <private/group_impl.h>
 #pragma clang diagnostic pop
 
 /* =========================================================================
