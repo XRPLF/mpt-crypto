@@ -125,12 +125,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARCHIVE="mpt-crypto-natives-${GITHUB_REF_NAME}.tar.gz"
-          mv mpt-crypto-natives.tar.gz "${ARCHIVE}" 
-          
+          mv mpt-crypto-natives.tar.gz "${ARCHIVE}"
+
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             PRERELEASE_FLAG="--prerelease"
           fi
-          
+
           gh release create "${GITHUB_REF_NAME}" \
             "${ARCHIVE}" \
             --repo "${GITHUB_REPOSITORY}" \
