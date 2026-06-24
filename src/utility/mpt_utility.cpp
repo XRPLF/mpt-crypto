@@ -304,7 +304,7 @@ mpt_make_ec_pair(
     secp256k1_pubkey* out1,
     secp256k1_pubkey* out2)
 {
-    if (!out1 || !out2)
+    if (!buffer || !out1 || !out2)
         return false;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
@@ -352,6 +352,9 @@ mpt_get_convert_context_hash(
     uint32_t seq,
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
+    if (!out_hash)
+        return -1;
+
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
@@ -373,6 +376,9 @@ mpt_get_convert_back_context_hash(
     uint32_t ver,
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
+    if (!out_hash)
+        return -1;
+
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
@@ -395,6 +401,9 @@ mpt_get_send_context_hash(
     uint32_t ver,
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
+    if (!out_hash)
+        return -1;
+
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
@@ -416,6 +425,9 @@ mpt_get_clawback_context_hash(
     account_id holder,
     uint8_t out_hash[kMPT_HALF_SHA_SIZE])
 {
+    if (!out_hash)
+        return -1;
+
     uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
     Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
 
@@ -432,6 +444,9 @@ mpt_get_clawback_context_hash(
 int
 mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey)
 {
+    if (!out_privkey || !out_pubkey)
+        return -1;
+
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return -1;
@@ -876,13 +891,6 @@ mpt_compute_convert_back_remainder(
     if (!commitment_in || !remainder)
         return -1;
 
-    // Subtracting zero leaves the commitment unchanged
-    if (amount == 0)
-    {
-        std::memcpy(remainder, commitment_in, kMPT_PEDERSEN_COMMIT_SIZE);
-        return 0;
-    }
-
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
         return -1;
@@ -890,6 +898,13 @@ mpt_compute_convert_back_remainder(
     secp256k1_pubkey pc_balance;
     if (secp256k1_ec_pubkey_parse(ctx, &pc_balance, commitment_in, kMPT_PEDERSEN_COMMIT_SIZE) != 1)
         return -1;
+
+    // Subtracting zero leaves the commitment unchanged
+    if (amount == 0)
+    {
+        std::memcpy(remainder, commitment_in, kMPT_PEDERSEN_COMMIT_SIZE);
+        return 0;
+    }
 
     // Convert amount to 32-byte big-endian scalar
     uint8_t scalar[32] = {0};
@@ -943,6 +958,9 @@ mpt_verify_aggregated_bulletproof(
     std::vector<secp256k1_pubkey> commitments(m);
     for (size_t i = 0; i < m; ++i)
     {
+        if (!compressed_commitments[i])
+            return -1;
+
         if (secp256k1_ec_pubkey_parse(
                 ctx, &commitments[i], compressed_commitments[i], kMPT_PEDERSEN_COMMIT_SIZE) != 1)
             return -1;
