@@ -388,6 +388,120 @@ test_mpt_clawback_integrate()
  * ============================================================================ */
 
 void
+test_mpt_keypair_validation()
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+    EXPECT(mpt_generate_keypair(nullptr, pub) != 0);
+    EXPECT(mpt_generate_keypair(priv, nullptr) != 0);
+}
+
+void
+test_mpt_make_ec_pair_validation()
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
+    secp256k1_pubkey c1, c2;
+
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+    EXPECT(mpt_generate_blinding_factor(bf) == 0);
+    EXPECT(mpt_encrypt_amount(1, pub, bf, ciphertext) == 0);
+
+    EXPECT(mpt_make_ec_pair(ciphertext, &c1, &c2));
+    EXPECT(!mpt_make_ec_pair(nullptr, &c1, &c2));
+    EXPECT(!mpt_make_ec_pair(ciphertext, nullptr, &c2));
+    EXPECT(!mpt_make_ec_pair(ciphertext, &c1, nullptr));
+}
+
+void
+test_mpt_context_hash_validation()
+{
+    account_id acc = create_mock_id<account_id>(0x11);
+    account_id other = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xBB);
+    uint8_t out_hash[kMPT_HALF_SHA_SIZE];
+
+    EXPECT(mpt_get_convert_context_hash(acc, issuance, 1, out_hash) == 0);
+    EXPECT(mpt_get_convert_back_context_hash(acc, issuance, 1, 2, out_hash) == 0);
+    EXPECT(mpt_get_send_context_hash(acc, issuance, 1, other, 2, out_hash) == 0);
+    EXPECT(mpt_get_clawback_context_hash(acc, issuance, 1, other, out_hash) == 0);
+
+    EXPECT(mpt_get_convert_context_hash(acc, issuance, 1, nullptr) != 0);
+    EXPECT(mpt_get_convert_back_context_hash(acc, issuance, 1, 2, nullptr) != 0);
+    EXPECT(mpt_get_send_context_hash(acc, issuance, 1, other, 2, nullptr) != 0);
+    EXPECT(mpt_get_clawback_context_hash(acc, issuance, 1, other, nullptr) != 0);
+}
+
+void
+test_mpt_compute_convert_back_remainder_validation()
+{
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t commitment[kMPT_PEDERSEN_COMMIT_SIZE];
+    uint8_t remainder[kMPT_PEDERSEN_COMMIT_SIZE];
+
+    EXPECT(mpt_generate_blinding_factor(bf) == 0);
+    EXPECT(mpt_get_pedersen_commitment(100, bf, commitment) == 0);
+
+    EXPECT(mpt_compute_convert_back_remainder(commitment, 0, remainder) == 0);
+    EXPECT(std::memcmp(remainder, commitment, kMPT_PEDERSEN_COMMIT_SIZE) == 0);
+    EXPECT(mpt_compute_convert_back_remainder(commitment, 1, remainder) == 0);
+
+    uint8_t invalid_commitment[kMPT_PEDERSEN_COMMIT_SIZE] = {0};
+    EXPECT(mpt_compute_convert_back_remainder(invalid_commitment, 0, remainder) != 0);
+    EXPECT(mpt_compute_convert_back_remainder(nullptr, 0, remainder) != 0);
+    EXPECT(mpt_compute_convert_back_remainder(commitment, 0, nullptr) != 0);
+}
+
+void
+test_mpt_verify_aggregated_bulletproof_validation()
+{
+    account_id acc = create_mock_id<account_id>(0x55);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xEE);
+    uint8_t priv[kMPT_PRIVKEY_SIZE], pub[kMPT_PUBKEY_SIZE];
+    uint8_t balance_bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t balance_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t commitment_bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t commitment[kMPT_PEDERSEN_COMMIT_SIZE];
+    uint8_t context_hash[kMPT_HALF_SHA_SIZE];
+    uint8_t remainder[kMPT_PEDERSEN_COMMIT_SIZE];
+    uint8_t proof[SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE + kMPT_SINGLE_BULLETPROOF_SIZE];
+
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+    EXPECT(mpt_generate_blinding_factor(balance_bf) == 0);
+    EXPECT(mpt_encrypt_amount(5000, pub, balance_bf, balance_ct) == 0);
+    EXPECT(mpt_generate_blinding_factor(commitment_bf) == 0);
+    EXPECT(mpt_get_pedersen_commitment(5000, commitment_bf, commitment) == 0);
+    EXPECT(mpt_get_convert_back_context_hash(acc, issuance, 1, 1, context_hash) == 0);
+
+    mpt_pedersen_proof_params params;
+    params.amount = 5000;
+    std::memcpy(params.blinding_factor, commitment_bf, kMPT_BLINDING_FACTOR_SIZE);
+    std::memcpy(params.pedersen_commitment, commitment, kMPT_PEDERSEN_COMMIT_SIZE);
+    std::memcpy(params.ciphertext, balance_ct, kMPT_ELGAMAL_TOTAL_SIZE);
+
+    EXPECT(mpt_get_convert_back_proof(priv, pub, context_hash, 1000, &params, proof) == 0);
+    EXPECT(mpt_compute_convert_back_remainder(commitment, 1000, remainder) == 0);
+
+    uint8_t const* bp_proof = proof + SECP256K1_COMPACT_CONVERTBACK_PROOF_SIZE;
+    uint8_t const* commitments[1] = {remainder};
+    uint8_t const* null_commitments[1] = {nullptr};
+
+    EXPECT(
+        mpt_verify_aggregated_bulletproof(
+            bp_proof, kMPT_SINGLE_BULLETPROOF_SIZE, commitments, 1, context_hash) == 0);
+    EXPECT(
+        mpt_verify_aggregated_bulletproof(
+            bp_proof, kMPT_SINGLE_BULLETPROOF_SIZE, nullptr, 1, context_hash) != 0);
+    EXPECT(
+        mpt_verify_aggregated_bulletproof(
+            bp_proof, kMPT_SINGLE_BULLETPROOF_SIZE, null_commitments, 1, context_hash) != 0);
+}
+
+void
 test_mpt_confidential_convert()
 {
     // valid: prove and verify convert
@@ -880,6 +994,11 @@ run_integration_tests()
 void
 run_unit_tests()
 {
+    test_mpt_keypair_validation();
+    test_mpt_make_ec_pair_validation();
+    test_mpt_context_hash_validation();
+    test_mpt_compute_convert_back_remainder_validation();
+    test_mpt_verify_aggregated_bulletproof_validation();
     test_mpt_confidential_convert();
     test_mpt_confidential_send();
     test_mpt_convert_back();
