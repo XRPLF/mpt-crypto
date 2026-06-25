@@ -2,8 +2,8 @@
 #define BSGS_DLP_H
 
 #include <secp256k1.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +34,14 @@ extern "C" {
  * binary file on disk. On a cache hit the init call returns in milliseconds.
  * Pass NULL to disable caching (table rebuilt on every process start).
  *
+ * @warning Always pass a non-NULL cache_path in any long-running or
+ * repeatedly-started application. At default parameters (l1=22) the baby
+ * table takes several seconds to build and ~22 MB of memory. Without a
+ * cache file it is rebuilt from scratch on every process start, which is
+ * unacceptable for interactive applications. The caller is responsible for
+ * choosing an appropriate path (e.g. ~/.cache/myapp/bsgs_baby.bin) and
+ * ensuring the directory exists.
+ *
  * **Range parameters:**
  * bits_total controls the maximum recoverable plaintext: m < 2^bits_total.
  * l1 controls the baby-step count (baby table stores 2^(l1-1) entries).
@@ -41,13 +49,18 @@ extern "C" {
  * there is a specific reason to deviate.
  *
  * Memory at default parameters (bits_total=40, l1=22):
- *   Baby table: 2^21 entries × 8 bytes ≈ 16 MB
+ *   Baby table: 2^21 entries × 8 bytes ≈ 16 MB (stored entries);
+ *   ~22 MB allocated due to cuckoo hash overhead (~1.3× load factor).
  *
  * **Timing:**
- * Unlike secp256k1_elgamal_decrypt (fixed-iteration, timing-resistant),
- * this solver exits immediately on finding the answer. It is not
- * constant-time and must not be used in contexts where decryption latency
- * is observable by an untrusted party.
+ * This solver is NOT constant-time. The giant-step loop exits as soon as
+ * a match is found, so decryption time leaks information about the
+ * plaintext m (smaller values decrypt faster). It must only be used in
+ * an environment where the caller has full control over the execution
+ * context — such as a local tool or wallet running on the key owner's
+ * own machine. It must not be used in server-side or shared
+ * infrastructure where a third party could measure response times and
+ * infer the plaintext.
  *
  * @see secp256k1_elgamal_decrypt for the fixed-range, timing-resistant solver.
  */
@@ -55,21 +68,20 @@ extern "C" {
 /**
  * Default range parameters.
  *
- * bits_total=40, l1=22: baby table ≈ 22 MB, giant steps = 2^18.
- * Covers amounts up to ~1 trillion drops (2^40 ≈ 1.1e12). Chosen as a
- * lightweight starting point for familiarization and benchmarking.
- * Raise both values for production use covering the full XRP supply:
- *   bits_total=54, l1=27 → baby table ≈ 512 MB, covers 2^54 drops.
+ * bits_total=40, l1=22: baby table ≈ 22 MB allocated (16 MB entries + cuckoo overhead), giant steps
+ * = 2^18. Covers amounts up to ~1 trillion drops (2^40 ≈ 1.1e12). Suitable for most use cases.
+ * Raise both values if the application needs to cover a larger supply, e.g., bits_total=54, l1=27 →
+ * baby table ≈ 512 MB, covers 2^54 values.
  */
 #define MPT_BSGS_DEFAULT_BITS_TOTAL 40
-#define MPT_BSGS_DEFAULT_L1         22
+#define MPT_BSGS_DEFAULT_L1 22
 
 /**
  * Default window size for the windowed TreeMon batch inversion in the
  * giant-step loop. Must be a power of 2. Larger values amortize field
  * inversions more aggressively at the cost of more stack allocation.
  */
-#define MPT_BSGS_DEFAULT_WINDOW     128
+#define MPT_BSGS_DEFAULT_WINDOW 128
 
 /** Opaque BSGS context. Allocated by secp256k1_elgamal_bsgs_ctx_create(). */
 typedef struct secp256k1_elgamal_bsgs_ctx secp256k1_elgamal_bsgs_ctx;
@@ -95,12 +107,12 @@ typedef struct secp256k1_elgamal_bsgs_ctx secp256k1_elgamal_bsgs_ctx;
  * @return Pointer to an initialized context, or NULL on failure (OOM,
  *         invalid parameters, or cache I/O error with no fallback).
  */
-secp256k1_elgamal_bsgs_ctx *
+secp256k1_elgamal_bsgs_ctx*
 secp256k1_elgamal_bsgs_ctx_create(
-        secp256k1_context const* ctx,
-        int                      bits_total,
-        int                      l1,
-        char const*              cache_path);
+    secp256k1_context const* ctx,
+    int bits_total,
+    int l1,
+    char const* cache_path);
 
 /**
  * @brief Frees a BSGS context.
@@ -137,17 +149,16 @@ secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx* bsgs_ctx);
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt_bsgs(
-        secp256k1_context const*              ctx,
-        secp256k1_elgamal_bsgs_ctx const*     bsgs_ctx,
-        uint64_t*                             amount,
-        secp256k1_pubkey const*               c1,
-        secp256k1_pubkey const*               c2,
-        unsigned char const*                  privkey,
-        int                                   window);
+    secp256k1_context const* ctx,
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx,
+    uint64_t* amount,
+    secp256k1_pubkey const* c1,
+    secp256k1_pubkey const* c2,
+    unsigned char const* privkey,
+    int window);
 
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* BSGS_DLP_H */
-
