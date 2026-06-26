@@ -35,9 +35,9 @@
  *
  * @see [Spec (ConfidentialMPT_20260201.pdf) Section 3.2.2] ElGamal Encryption
  */
+#include "bsgs_dlp.h"
 #include "mpt_internal.h"
 #include "secp256k1_mpt.h"
-#include "bsgs_dlp.h"
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <string.h>

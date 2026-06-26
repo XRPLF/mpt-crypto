@@ -1,6 +1,7 @@
 /**
  * @file test_bsgs_dlp.c
- * @brief Tests for secp256k1_elgamal_decrypt_bsgs and the BSGS context lifecycle.
+ * @brief Tests for secp256k1_elgamal_decrypt_bsgs and the BSGS context
+ * lifecycle.
  *
  * Test coverage:
  *   1. Context creation and destruction (no cache)
@@ -25,8 +26,8 @@
 /* Use small parameters so the test suite runs quickly.
  * bits_total=28, l1=15: baby table = 2^14 = 16384 entries (~128 KB),
  * giant steps = 2^13 = 8192. Covers amounts up to 2^28 = 268,435,456. */
-#define TEST_BITS  28
-#define TEST_L1    15
+#define TEST_BITS 28
+#define TEST_L1 15
 #define TEST_WINDOW MPT_BSGS_DEFAULT_WINDOW
 
 /* Temporary cache path for the cache round-trip test. */
@@ -54,324 +55,305 @@ static void test_null_rejection(const secp256k1_context *ctx,
 
 /* --- helpers --- */
 
-static void
-encrypt_amount(const secp256k1_context *ctx, uint64_t amount,
-               const secp256k1_pubkey *pubkey,
-               secp256k1_pubkey *c1, secp256k1_pubkey *c2)
+static void encrypt_amount(const secp256k1_context *ctx, uint64_t amount,
+                           const secp256k1_pubkey *pubkey, secp256k1_pubkey *c1,
+                           secp256k1_pubkey *c2)
 {
-    unsigned char r[32];
-    random_scalar(ctx, r);
-    EXPECT(secp256k1_elgamal_encrypt(ctx, c1, c2, pubkey, amount, r) == 1);
+  unsigned char r[32];
+  random_scalar(ctx, r);
+  EXPECT(secp256k1_elgamal_encrypt(ctx, c1, c2, pubkey, amount, r) == 1);
 }
 
 /* --- main --- */
 
 int main(void)
 {
-    secp256k1_context *ctx =
-            secp256k1_context_create(SECP256K1_CONTEXT_SIGN | SECP256K1_CONTEXT_VERIFY);
-    EXPECT(ctx != NULL);
+  secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_SIGN |
+                                                    SECP256K1_CONTEXT_VERIFY);
+  EXPECT(ctx != NULL);
 
-    unsigned char seed[32];
-    random_bytes(seed);
-    EXPECT(secp256k1_context_randomize(ctx, seed) == 1);
+  unsigned char seed[32];
+  random_bytes(seed);
+  EXPECT(secp256k1_context_randomize(ctx, seed) == 1);
 
-    /* Tests that don't need a shared bsgs_ctx */
-    test_ctx_create_destroy(ctx);
-    test_cache_roundtrip(ctx);
+  /* Tests that don't need a shared bsgs_ctx */
+  test_ctx_create_destroy(ctx);
+  test_cache_roundtrip(ctx);
 
-    /* Build one shared context for the remaining tests — amortizes the
-     * baby table build cost across all decrypt tests. */
-    printf("Building BSGS context (bits=%d, l1=%d)...\n", TEST_BITS, TEST_L1);
-    secp256k1_elgamal_bsgs_ctx *bsgs =
-            secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, NULL);
-    EXPECT(bsgs != NULL);
-    printf("BSGS context ready.\n");
+  /* Build one shared context for the remaining tests — amortizes the
+   * baby table build cost across all decrypt tests. */
+  printf("Building BSGS context (bits=%d, l1=%d)...\n", TEST_BITS, TEST_L1);
+  secp256k1_elgamal_bsgs_ctx *bsgs =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, NULL);
+  EXPECT(bsgs != NULL);
+  printf("BSGS context ready.\n");
 
-    test_null_rejection(ctx, bsgs);
-    test_decrypt_zero(ctx, bsgs);
-    test_decrypt_one(ctx, bsgs);
-    test_decrypt_small(ctx, bsgs);
-    test_decrypt_giant_step(ctx, bsgs);
-    test_decrypt_boundary(ctx, bsgs);
-    test_decrypt_out_of_range(ctx, bsgs);
-    test_roundtrip(ctx, bsgs);
+  test_null_rejection(ctx, bsgs);
+  test_decrypt_zero(ctx, bsgs);
+  test_decrypt_one(ctx, bsgs);
+  test_decrypt_small(ctx, bsgs);
+  test_decrypt_giant_step(ctx, bsgs);
+  test_decrypt_boundary(ctx, bsgs);
+  test_decrypt_out_of_range(ctx, bsgs);
+  test_roundtrip(ctx, bsgs);
 
-    secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
-    secp256k1_context_destroy(ctx);
+  secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
+  secp256k1_context_destroy(ctx);
 
-    printf("ALL TESTS PASSED\n");
-    return 0;
+  printf("ALL TESTS PASSED\n");
+  return 0;
 }
 
 /* --- test implementations --- */
 
-static void
-test_ctx_create_destroy(const secp256k1_context *ctx)
+static void test_ctx_create_destroy(const secp256k1_context *ctx)
 {
-    printf("Running test: context create/destroy...\n");
+  printf("Running test: context create/destroy...\n");
 
-    /* Valid parameters */
-    secp256k1_elgamal_bsgs_ctx *b =
-            secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, NULL);
-    EXPECT(b != NULL);
-    secp256k1_elgamal_bsgs_ctx_destroy(b);
+  /* Valid parameters */
+  secp256k1_elgamal_bsgs_ctx *b =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, NULL);
+  EXPECT(b != NULL);
+  secp256k1_elgamal_bsgs_ctx_destroy(b);
 
-    /* NULL destroy is safe */
-    secp256k1_elgamal_bsgs_ctx_destroy(NULL);
+  /* NULL destroy is safe */
+  secp256k1_elgamal_bsgs_ctx_destroy(NULL);
 
-    /* Invalid parameters must return NULL */
-    EXPECT(secp256k1_elgamal_bsgs_ctx_create(NULL,  TEST_BITS, TEST_L1, NULL) == NULL);
-    EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx,   0,         TEST_L1, NULL) == NULL);
-    EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx,   64,        TEST_L1, NULL) == NULL);
-    EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx,   TEST_BITS, 0,       NULL) == NULL);
-    EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx,   TEST_BITS, TEST_BITS, NULL) == NULL);
+  /* Invalid parameters must return NULL */
+  EXPECT(secp256k1_elgamal_bsgs_ctx_create(NULL, TEST_BITS, TEST_L1, NULL) ==
+         NULL);
+  EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx, 0, TEST_L1, NULL) == NULL);
+  EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx, 64, TEST_L1, NULL) == NULL);
+  EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, 0, NULL) == NULL);
+  EXPECT(secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_BITS, NULL) ==
+         NULL);
 
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_zero(const secp256k1_context *ctx,
-                  secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_decrypt_zero(const secp256k1_context *ctx,
+                              secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: decrypt m=0 (early-exit path)...\n");
+  printf("Running test: decrypt m=0 (early-exit path)...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-    encrypt_amount(ctx, 0, &pubkey, &c1, &c2);
+  encrypt_amount(ctx, 0, &pubkey, &c1, &c2);
 
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW) == 1);
+  EXPECT(recovered == 0);
+
+  printf("Test passed!\n");
+}
+
+static void test_decrypt_one(const secp256k1_context *ctx,
+                             secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: decrypt m=1 (first baby step)...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
+
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW) == 1);
+  EXPECT(recovered == 1);
+
+  printf("Test passed!\n");
+}
+
+static void test_decrypt_small(const secp256k1_context *ctx,
+                               secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: decrypt small values (j=0 giant step)...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  /* Several values within the first giant step (< M = 2^l1) */
+  uint64_t amounts[] = {2, 100, 1000, 10000, 100000};
+  for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
+  {
+    encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
     uint64_t recovered = 0xDEADBEEFu;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 1);
-    EXPECT(recovered == 0);
+    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                          privkey, TEST_WINDOW) == 1);
+    EXPECT(recovered == amounts[i]);
+  }
 
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_one(const secp256k1_context *ctx,
-                 secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_decrypt_giant_step(const secp256k1_context *ctx,
+                                    secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: decrypt m=1 (first baby step)...\n");
+  printf("Running test: decrypt values requiring giant steps (j > 0)...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-    encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
+  /* Values well above M = 2^TEST_L1 = 32768 — must exercise j > 0 path */
+  uint64_t amounts[] = {
+      (1ULL << TEST_L1) + 1,         /* j=1, i=1   */
+      (1ULL << TEST_L1) * 3 + 7,     /* j=3, i=7   */
+      (1ULL << TEST_L1) * 100 + 999, /* j=100      */
+      (1ULL << (TEST_BITS - 2)),     /* mid-range  */
+  };
 
+  for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
+  {
+    encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
     uint64_t recovered = 0xDEADBEEFu;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 1);
-    EXPECT(recovered == 1);
+    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                          privkey, TEST_WINDOW) == 1);
+    EXPECT(recovered == amounts[i]);
+  }
 
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_small(const secp256k1_context *ctx,
-                   secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_decrypt_boundary(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: decrypt small values (j=0 giant step)...\n");
+  printf("Running test: decrypt at maximum range boundary (2^%d - 1)...\n",
+         TEST_BITS);
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-    /* Several values within the first giant step (< M = 2^l1) */
-    uint64_t amounts[] = {2, 100, 1000, 10000, 100000};
-    for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
-    {
-        encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
-        uint64_t recovered = 0xDEADBEEFu;
-        EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                              &c1, &c2, privkey,
-                                              TEST_WINDOW) == 1);
-        EXPECT(recovered == amounts[i]);
-    }
+  uint64_t max_amount = (1ULL << TEST_BITS) - 1;
+  encrypt_amount(ctx, max_amount, &pubkey, &c1, &c2);
 
-    printf("Test passed!\n");
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW) == 1);
+  EXPECT(recovered == max_amount);
+
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_giant_step(const secp256k1_context *ctx,
-                        secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_decrypt_out_of_range(const secp256k1_context *ctx,
+                                      secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: decrypt values requiring giant steps (j > 0)...\n");
+  printf("Running test: decrypt out-of-range value fails gracefully...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-    /* Values well above M = 2^TEST_L1 = 32768 — must exercise j > 0 path */
-    uint64_t amounts[] = {
-            (1ULL << TEST_L1) + 1,          /* j=1, i=1   */
-            (1ULL << TEST_L1) * 3 + 7,      /* j=3, i=7   */
-            (1ULL << TEST_L1) * 100 + 999,  /* j=100      */
-            (1ULL << (TEST_BITS - 2)),       /* mid-range  */
-    };
+  /* Encrypt a value just outside bits_total range */
+  uint64_t out_of_range = (1ULL << TEST_BITS) + 1;
+  encrypt_amount(ctx, out_of_range, &pubkey, &c1, &c2);
 
-    for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
-    {
-        encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
-        uint64_t recovered = 0xDEADBEEFu;
-        EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                              &c1, &c2, privkey,
-                                              TEST_WINDOW) == 1);
-        EXPECT(recovered == amounts[i]);
-    }
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW) == 0);
 
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_boundary(const secp256k1_context *ctx,
-                      secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_roundtrip(const secp256k1_context *ctx,
+                           secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: decrypt at maximum range boundary (2^%d - 1)...\n",
-           TEST_BITS);
+  printf("Running test: encrypt/decrypt_bsgs round-trip (random amounts)...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
-    uint64_t max_amount = (1ULL << TEST_BITS) - 1;
-    encrypt_amount(ctx, max_amount, &pubkey, &c1, &c2);
+  /* A spread of random-ish values across the range */
+  uint64_t amounts[] = {
+      1, 42, 1337, 999999, (1ULL << 20) + 13, (1ULL << 24) - 1,
+  };
 
+  for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
+  {
+    encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
     uint64_t recovered = 0xDEADBEEFu;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 1);
-    EXPECT(recovered == max_amount);
+    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                          privkey, TEST_WINDOW) == 1);
+    EXPECT(recovered == amounts[i]);
+  }
 
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
 
-static void
-test_decrypt_out_of_range(const secp256k1_context *ctx,
-                          secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_cache_roundtrip(const secp256k1_context *ctx)
 {
-    printf("Running test: decrypt out-of-range value fails gracefully...\n");
+  printf("Running test: baby table cache save/load round-trip...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  /* Remove any stale cache file */
+  remove(TEST_CACHE_PATH);
 
-    /* Encrypt a value just outside bits_total range */
-    uint64_t out_of_range = (1ULL << TEST_BITS) + 1;
-    encrypt_amount(ctx, out_of_range, &pubkey, &c1, &c2);
+  /* Build and save */
+  secp256k1_elgamal_bsgs_ctx *b1 = secp256k1_elgamal_bsgs_ctx_create(
+      ctx, TEST_BITS, TEST_L1, TEST_CACHE_PATH);
+  EXPECT(b1 != NULL);
 
-    uint64_t recovered = 0xDEADBEEFu;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 0);
+  /* Encrypt and decrypt with the freshly built context */
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  uint64_t amount = 12345;
+  encrypt_amount(ctx, amount, &pubkey, &c1, &c2);
+  uint64_t recovered = 0;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, b1, &recovered, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 1);
+  EXPECT(recovered == amount);
+  secp256k1_elgamal_bsgs_ctx_destroy(b1);
 
-    printf("Test passed!\n");
+  /* Load from cache */
+  secp256k1_elgamal_bsgs_ctx *b2 = secp256k1_elgamal_bsgs_ctx_create(
+      ctx, TEST_BITS, TEST_L1, TEST_CACHE_PATH);
+  EXPECT(b2 != NULL);
+
+  /* Decrypt the same ciphertext with the loaded context */
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, b2, &recovered, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 1);
+  EXPECT(recovered == amount);
+  secp256k1_elgamal_bsgs_ctx_destroy(b2);
+
+  /* Clean up cache file */
+  remove(TEST_CACHE_PATH);
+
+  printf("Test passed!\n");
 }
 
-static void
-test_roundtrip(const secp256k1_context *ctx,
-               secp256k1_elgamal_bsgs_ctx *bsgs)
+static void test_null_rejection(const secp256k1_context *ctx,
+                                secp256k1_elgamal_bsgs_ctx *bsgs)
 {
-    printf("Running test: encrypt/decrypt_bsgs round-trip (random amounts)...\n");
+  printf("Running test: NULL argument rejection...\n");
 
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
 
-    /* A spread of random-ish values across the range */
-    uint64_t amounts[] = {
-            1,
-            42,
-            1337,
-            999999,
-            (1ULL << 20) + 13,
-            (1ULL << 24) - 1,
-    };
+  uint64_t out = 0;
 
-    for (size_t i = 0; i < sizeof(amounts) / sizeof(amounts[0]); i++)
-    {
-        encrypt_amount(ctx, amounts[i], &pubkey, &c1, &c2);
-        uint64_t recovered = 0xDEADBEEFu;
-        EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered,
-                                              &c1, &c2, privkey,
-                                              TEST_WINDOW) == 1);
-        EXPECT(recovered == amounts[i]);
-    }
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(NULL, bsgs, &out, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, NULL, &out, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, NULL, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, NULL, &c2, privkey,
+                                        TEST_WINDOW) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, NULL, privkey,
+                                        TEST_WINDOW) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, NULL,
+                                        TEST_WINDOW) == 0);
 
-    printf("Test passed!\n");
-}
-
-static void
-test_cache_roundtrip(const secp256k1_context *ctx)
-{
-    printf("Running test: baby table cache save/load round-trip...\n");
-
-    /* Remove any stale cache file */
-    remove(TEST_CACHE_PATH);
-
-    /* Build and save */
-    secp256k1_elgamal_bsgs_ctx *b1 =
-            secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1,
-                                              TEST_CACHE_PATH);
-    EXPECT(b1 != NULL);
-
-    /* Encrypt and decrypt with the freshly built context */
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
-    uint64_t amount = 12345;
-    encrypt_amount(ctx, amount, &pubkey, &c1, &c2);
-    uint64_t recovered = 0;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, b1, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 1);
-    EXPECT(recovered == amount);
-    secp256k1_elgamal_bsgs_ctx_destroy(b1);
-
-    /* Load from cache */
-    secp256k1_elgamal_bsgs_ctx *b2 =
-            secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1,
-                                              TEST_CACHE_PATH);
-    EXPECT(b2 != NULL);
-
-    /* Decrypt the same ciphertext with the loaded context */
-    recovered = 0xDEADBEEFu;
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, b2, &recovered,
-                                          &c1, &c2, privkey,
-                                          TEST_WINDOW) == 1);
-    EXPECT(recovered == amount);
-    secp256k1_elgamal_bsgs_ctx_destroy(b2);
-
-    /* Clean up cache file */
-    remove(TEST_CACHE_PATH);
-
-    printf("Test passed!\n");
-}
-
-static void
-test_null_rejection(const secp256k1_context *ctx,
-                    secp256k1_elgamal_bsgs_ctx *bsgs)
-{
-    printf("Running test: NULL argument rejection...\n");
-
-    unsigned char privkey[32];
-    secp256k1_pubkey pubkey, c1, c2;
-    EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
-    encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
-
-    uint64_t out = 0;
-
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(NULL, bsgs,  &out, &c1, &c2, privkey, TEST_WINDOW) == 0);
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx,  NULL,  &out, &c1, &c2, privkey, TEST_WINDOW) == 0);
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx,  bsgs,  NULL, &c1, &c2, privkey, TEST_WINDOW) == 0);
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx,  bsgs,  &out, NULL, &c2, privkey, TEST_WINDOW) == 0);
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx,  bsgs,  &out, &c1, NULL, privkey, TEST_WINDOW) == 0);
-    EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx,  bsgs,  &out, &c1, &c2, NULL,    TEST_WINDOW) == 0);
-
-    printf("Test passed!\n");
+  printf("Test passed!\n");
 }
