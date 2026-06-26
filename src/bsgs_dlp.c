@@ -6,11 +6,12 @@
  * Implements secp256k1_elgamal_decrypt_bsgs() and the associated context
  * lifecycle. The algorithm is a standard BSGS with:
  *   - A cuckoo hash (k=3 sections) baby table for O(1) lookups, following
- *     the windowed design of Tang et al. (ePrint 2022/1573,
- *     https://eprint.iacr.org/2022/1573).
- *   - Windowed TreeMon batch inversion in the giant-step loop to reduce
- *     field inversions from 1/step to 1/W steps (our addition).
- *   - Jacobian arithmetic throughout the loop body to avoid per-step
+ *     Tang et al. (ePrint 2022/1573, https://eprint.iacr.org/2022/1573),
+ *     who use a cuckoo hash (k=3) with Montgomery batch inversion.
+ *   - A windowed variant of Montgomery batch inversion (TreeMon) to
+ *     amortize field inversions across W giant steps, reducing cost from
+ *     1 inversion/step to 1/W (our addition).
+ *   - Jacobian arithmetic throughout the giant-step loop to avoid per-step
  *     affine normalization (our addition).
  *
  * Internal secp256k1 headers are included following the pattern established
