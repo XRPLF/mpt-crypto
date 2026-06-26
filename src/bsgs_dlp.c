@@ -30,11 +30,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* sys/stat.h + fcntl.h + unistd.h for file I/O (baby table cache) */
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 /* =========================================================================
  * Internal secp256k1 headers
@@ -54,59 +49,6 @@
 #include <private/group_impl.h>
 #pragma clang diagnostic pop
 
-/* =========================================================================
- * Chunked I/O helpers
- *
- * macOS imposes a 2 GB limit on a single read()/write() call. These helpers
- * loop in 1 GB chunks so large baby tables (l1 >= 30) save/load correctly
- * on both macOS and Linux.
- * ========================================================================= */
-
-static int write_all(int fd, const void *buf, size_t len)
-{
-  const unsigned char *p = (const unsigned char *)buf;
-  while (len > 0)
-  {
-    size_t chunk = len < (1ULL << 30) ? len : (1ULL << 30);
-    ssize_t n = write(fd, p, chunk);
-    if (n < 0)
-    {
-      if (errno == EINTR)
-        continue;
-      return 0;
-    }
-    p += (size_t)n;
-    len -= (size_t)n;
-  }
-  return 1;
-}
-
-static int read_all(int fd, void *buf, size_t len)
-{
-  unsigned char *p = (unsigned char *)buf;
-  while (len > 0)
-  {
-    size_t chunk = len < (1ULL << 30) ? len : (1ULL << 30);
-    ssize_t n = read(fd, p, chunk);
-    if (n < 0)
-    {
-      if (errno == EINTR)
-        continue;
-      return 0;
-    }
-    if (n == 0)
-      return 0; /* unexpected EOF */
-    p += (size_t)n;
-    len -= (size_t)n;
-  }
-  return 1;
-}
-
-static int file_exists(const char *path)
-{
-  struct stat st;
-  return stat(path, &st) == 0;
-}
 
 /* =========================================================================
  * Jacobian / affine helpers
@@ -422,8 +364,8 @@ typedef struct
 
 static int baby_save(const char *path, int l1, const cuckoo_map *baby)
 {
-  int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd < 0)
+  FILE *f = fopen(path, "wb");
+  if (!f)
     return 0;
 
   baby_hdr hdr;
@@ -435,32 +377,34 @@ static int baby_save(const char *path, int l1, const cuckoo_map *baby)
   hdr.used_count = (uint64_t)baby->size;
   hdr.stash_count = (int32_t)baby->stash_count;
 
-  int ok = write_all(fd, &hdr, sizeof(hdr));
-  ok &= write_all(fd, baby->stash_xb, sizeof(baby->stash_xb));
-  ok &= write_all(fd, baby->stash_val, sizeof(baby->stash_val));
-  ok &= write_all(fd, baby->tab, baby->total_bins * sizeof(entry_packed));
+  int ok = (fwrite(&hdr, sizeof(hdr), 1, f) == 1);
+  ok &= (fwrite(baby->stash_xb, sizeof(baby->stash_xb), 1, f) == 1);
+  ok &= (fwrite(baby->stash_val, sizeof(baby->stash_val), 1, f) == 1);
+  ok &=
+      (fwrite(baby->tab, sizeof(entry_packed), baby->total_bins, f) ==
+       baby->total_bins);
 
-  close(fd);
+  fclose(f);
   return ok;
 }
 
 static int baby_load(const char *path, int expected_l1, cuckoo_map *baby_out)
 {
-  int fd = open(path, O_RDONLY);
-  if (fd < 0)
+  FILE *f = fopen(path, "rb");
+  if (!f)
     return 0;
 
   baby_hdr hdr;
-  if (!read_all(fd, &hdr, sizeof(hdr)))
+  if (fread(&hdr, sizeof(hdr), 1, f) != 1)
   {
-    close(fd);
+    fclose(f);
     return 0;
   }
 
   if (hdr.magic != BABY_MAGIC || hdr.version != BABY_VERSION ||
       (int)hdr.l1 != expected_l1 || hdr.section_size == 0)
   {
-    close(fd);
+    fclose(f);
     return 0;
   }
 
@@ -470,10 +414,10 @@ static int baby_load(const char *path, int expected_l1, cuckoo_map *baby_out)
   baby_out->size = (size_t)hdr.used_count;
   baby_out->stash_count = (int)hdr.stash_count;
 
-  if (!read_all(fd, baby_out->stash_xb, sizeof(baby_out->stash_xb)) ||
-      !read_all(fd, baby_out->stash_val, sizeof(baby_out->stash_val)))
+  if (fread(baby_out->stash_xb, sizeof(baby_out->stash_xb), 1, f) != 1 ||
+      fread(baby_out->stash_val, sizeof(baby_out->stash_val), 1, f) != 1)
   {
-    close(fd);
+    fclose(f);
     return 0;
   }
 
@@ -481,19 +425,20 @@ static int baby_load(const char *path, int expected_l1, cuckoo_map *baby_out)
       (entry_packed *)calloc(baby_out->total_bins, sizeof(entry_packed));
   if (!baby_out->tab)
   {
-    close(fd);
+    fclose(f);
     return 0;
   }
 
-  if (!read_all(fd, baby_out->tab, baby_out->total_bins * sizeof(entry_packed)))
+  if (fread(baby_out->tab, sizeof(entry_packed), baby_out->total_bins, f) !=
+      baby_out->total_bins)
   {
     free(baby_out->tab);
     baby_out->tab = NULL;
-    close(fd);
+    fclose(f);
     return 0;
   }
 
-  close(fd);
+  fclose(f);
   return 1;
 }
 
@@ -599,12 +544,8 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
   ge_negate(&b->neg_MG_ge, &b->MG_ge);
 
   /* Try loading baby table from cache */
-  if (cache_path && file_exists(cache_path))
-  {
-    if (baby_load(cache_path, l1, &b->baby))
-      return b;
-    /* Cache exists but is stale/corrupt — fall through to rebuild */
-  }
+  if (cache_path && baby_load(cache_path, l1, &b->baby))
+    return b;
 
   /* Build baby table — two-pass cuckoo construction.
    *
