@@ -40,13 +40,17 @@
 #include <private/int128.h>
 #include <private/int128_impl.h>
 #include <private/util.h>
+#if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
+#endif
 #include <private/field.h>
 #include <private/field_impl.h>
 #include <private/group.h>
 #include <private/group_impl.h>
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
 
 /* =========================================================================
  * Jacobian / affine helpers
@@ -228,7 +232,14 @@ static inline uint32_t u32be(const unsigned char *b)
 static inline size_t cpos(int sec, const unsigned char xb[32], size_t s)
 {
   uint32_t h = u32be(xb + sec * 8);
+#if defined(__SIZEOF_INT128__)
   return (size_t)((__uint128_t)h * (__uint128_t)s >> 32) + (size_t)sec * s;
+#else
+  /* Portable 32x64 multiply: floor(h * s / 2^32) without __uint128_t. */
+  uint64_t lo = (uint64_t)h * (uint64_t)(uint32_t)s;
+  uint64_t hi = (uint64_t)h * (uint64_t)(uint32_t)(s >> 32);
+  return (size_t)((lo >> 32) + hi) + (size_t)sec * s;
+#endif
 }
 
 /* Per-section fingerprint key. */
