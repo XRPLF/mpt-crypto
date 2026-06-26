@@ -30,7 +30,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 /* =========================================================================
  * Internal secp256k1 headers
  *
@@ -48,7 +47,6 @@
 #include <private/group.h>
 #include <private/group_impl.h>
 #pragma clang diagnostic pop
-
 
 /* =========================================================================
  * Jacobian / affine helpers
@@ -380,9 +378,8 @@ static int baby_save(const char *path, int l1, const cuckoo_map *baby)
   int ok = (fwrite(&hdr, sizeof(hdr), 1, f) == 1);
   ok &= (fwrite(baby->stash_xb, sizeof(baby->stash_xb), 1, f) == 1);
   ok &= (fwrite(baby->stash_val, sizeof(baby->stash_val), 1, f) == 1);
-  ok &=
-      (fwrite(baby->tab, sizeof(entry_packed), baby->total_bins, f) ==
-       baby->total_bins);
+  ok &= (fwrite(baby->tab, sizeof(entry_packed), baby->total_bins, f) ==
+         baby->total_bins);
 
   fclose(f);
   return ok;
