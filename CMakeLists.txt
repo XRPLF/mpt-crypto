@@ -25,6 +25,7 @@ add_library(
     src/bulletproof_aggregated.c
     src/commitments.c
     src/elgamal.c
+    src/bsgs_dlp.c
     src/mpt_scalar.c
     src/proof_pok_sk.c
     src/proof_compact_standard.c
