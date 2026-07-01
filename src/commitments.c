@@ -220,7 +220,7 @@ int secp256k1_mpt_pedersen_commit(const secp256k1_context *ctx,
     return 0;
 
   rH = H;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &rH, rho))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &rH, rho))
     return 0;
 
   /* 2. Handle Zero Amount Case */

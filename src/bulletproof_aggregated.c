@@ -203,7 +203,7 @@ int secp256k1_bulletproof_ipa_msm(const secp256k1_context *ctx,
     }
 
     secp256k1_pubkey term = points[i];
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, s_tmp))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &term, s_tmp))
       return 0;
 
     if (!add_term(ctx, &acc, &initialized, &term))
@@ -535,7 +535,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
   if (!scalar_is_zero(cLux))
   {
     term = *U;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cLux))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &term, cLux))
       goto cleanup;
     if (!add_term(ctx, &acc, &acc_inited, &term))
       goto cleanup;
@@ -562,7 +562,7 @@ int secp256k1_bulletproof_ipa_compute_LR(
   if (!scalar_is_zero(cRux))
   {
     term = *U;
-    if (!secp256k1_ec_pubkey_tweak_mul(ctx, &term, cRux))
+    if (!mpt_ct_pubkey_tweak_mul(ctx, &term, cRux))
       goto cleanup;
     if (!add_term(ctx, &acc, &acc_inited, &term))
       goto cleanup;
@@ -2573,7 +2573,7 @@ fs_fail:
     if (memcmp(tau_x, zero32, kMPT_SCALAR_SIZE) != 0)
     {
       tauH = *h_generator;
-      if (!secp256k1_ec_pubkey_tweak_mul(ctx, &tauH, tau_x))
+      if (!mpt_ct_pubkey_tweak_mul(ctx, &tauH, tau_x))
       {
         goto fail;
       }
