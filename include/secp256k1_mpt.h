@@ -248,7 +248,11 @@ void
 secp256k1_mpt_scalar_add(unsigned char* res, unsigned char const* a, unsigned char const* b);
 void
 secp256k1_mpt_scalar_mul(unsigned char* res, unsigned char const* a, unsigned char const* b);
-void
+/* Computes the modular inverse of a scalar. Returns 1 on success,
+ * 0 if the input is zero (inverse undefined). Callers must check
+ * the return value. */
+
+int
 secp256k1_mpt_scalar_inverse(unsigned char* res, unsigned char const* in);
 void
 secp256k1_mpt_scalar_negate(unsigned char* res, unsigned char const* in);

@@ -91,7 +91,7 @@ void secp256k1_mpt_scalar_mul(unsigned char *res, const unsigned char *a,
   OPENSSL_cleanse(&s_res, sizeof(s_res));
 }
 
-void secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in)
+int secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in)
 {
   secp256k1_scalar s;
   /* Overflow output discarded; see file-level @note. */
@@ -103,13 +103,14 @@ void secp256k1_mpt_scalar_inverse(unsigned char *res, const unsigned char *in)
   {
     memset(res, 0, 32);
     OPENSSL_cleanse(&s, sizeof(s));
-    return;
+    return 0;
   }
   secp256k1_scalar_inverse(&s, &s);
   secp256k1_scalar_get_b32(res, &s);
 
   /* SECURE CLEANUP */
   OPENSSL_cleanse(&s, sizeof(s));
+  return 1;
 }
 
 void secp256k1_mpt_scalar_negate(unsigned char *res, const unsigned char *in)

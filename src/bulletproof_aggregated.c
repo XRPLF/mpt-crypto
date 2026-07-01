@@ -931,7 +931,8 @@ int secp256k1_bulletproof_run_ipa_prover(
       goto cleanup;
 
     /* 4) u_r^{-1} */
-    secp256k1_mpt_scalar_inverse(u_inv, u_scalar);
+    if (!secp256k1_mpt_scalar_inverse(u_inv, u_scalar))
+      goto cleanup;
     if (!secp256k1_ec_seckey_verify(ctx, u_inv))
       goto cleanup;
 
@@ -1028,7 +1029,8 @@ static int ipa_verify_explicit(
     if (!derive_ipa_round_challenge(ctx, ui, last, &L_vec[i], &R_vec[i]))
       goto cleanup;
 
-    secp256k1_mpt_scalar_inverse(uiinv, ui);
+    if (!secp256k1_mpt_scalar_inverse(uiinv, ui))
+      goto cleanup;
     if (!secp256k1_ec_seckey_verify(ctx, uiinv))
       goto cleanup;
 
@@ -1996,7 +1998,8 @@ int secp256k1_bulletproof_prove_agg(
     if (memcmp(y, zero, kMPT_SCALAR_SIZE) == 0)
       goto cleanup;
 
-    secp256k1_mpt_scalar_inverse(y_inv, y);
+    if (!secp256k1_mpt_scalar_inverse(y_inv, y))
+      goto cleanup;
     memcpy(y_inv_pow, one, kMPT_SCALAR_SIZE);
 
     for (size_t k = 0; k < n; k++)
