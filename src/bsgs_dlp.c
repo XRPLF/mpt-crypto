@@ -557,13 +557,19 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
 
   /* Build baby table — two-pass cuckoo construction.
    *
-   * Pass 1: walk i*G for i in [1, Mhalf), insert (positions, val=i)
+   * Pass 1: walk i*G for i in [1, Mhalf], insert (positions, val=i)
    *         into the 12-byte build table. Keys not stored yet.
    * Compact: allocate 8-byte packed table, copy vals only.
    * Pass 2: re-walk i*G, fill per-section fingerprint keys and stash xb[].
+   *
+   * The range is inclusive of Mhalf. With giant stride M = 2*Mhalf and the
+   * negation shortcut, giant step j covers [j*M - i, j*M + i] for baby i.
+   * Stopping at i = Mhalf-1 leaves each window one short of the midpoint
+   * j*M + Mhalf, so every odd multiple of Mhalf would be unrecoverable.
+   * Including i = Mhalf makes adjacent windows meet at those midpoints.
    */
   {
-    size_t n = (size_t)(b->Mhalf - 1);
+    size_t n = (size_t)b->Mhalf;
     build_entry *btab = cuckoo_alloc_build(&b->baby, n);
     if (!btab)
       goto fail;
@@ -574,7 +580,7 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
     size_t ser_len;
 
     /* Pass 1 */
-    for (uint64_t i = 1; i < b->Mhalf; i++)
+    for (uint64_t i = 1; i <= b->Mhalf; i++)
     {
       ser_len = 33;
       if (!secp256k1_ec_pubkey_serialize(ctx, ser, &ser_len, &cur,
@@ -594,7 +600,7 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
         goto fail;
       }
 
-      if (i + 1 < b->Mhalf)
+      if (i + 1 <= b->Mhalf)
       {
         const secp256k1_pubkey *pts[2] = {&cur, &b->G};
         secp256k1_pubkey nxt;
@@ -613,7 +619,7 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
 
     /* Pass 2 */
     cur = b->G;
-    for (uint64_t i = 1; i < b->Mhalf; i++)
+    for (uint64_t i = 1; i <= b->Mhalf; i++)
     {
       ser_len = 33;
       if (!secp256k1_ec_pubkey_serialize(ctx, ser, &ser_len, &cur,
@@ -636,7 +642,7 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
           memcpy(b->baby.stash_xb[si], xb, 32);
       }
 
-      if (i + 1 < b->Mhalf)
+      if (i + 1 <= b->Mhalf)
       {
         const secp256k1_pubkey *pts[2] = {&cur, &b->G};
         secp256k1_pubkey nxt;

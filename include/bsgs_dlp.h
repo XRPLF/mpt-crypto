@@ -44,7 +44,7 @@ extern "C" {
  *
  * **Range parameters:**
  * bits_total controls the maximum recoverable plaintext: m < 2^bits_total.
- * l1 controls the baby-step count (baby table stores 2^(l1-1) entries).
+ * l1 controls the baby-step count (baby table stores 2^(l1-1)+1 entries).
  * Use the defaults MPT_BSGS_DEFAULT_BITS_TOTAL / MPT_BSGS_DEFAULT_L1 unless
  * there is a specific reason to deviate.
  *
@@ -97,7 +97,7 @@ typedef struct secp256k1_elgamal_bsgs_ctx secp256k1_elgamal_bsgs_ctx;
  *                        valid for the lifetime of the returned bsgs_ctx.
  * @param[in] bits_total  Search range: m in [0, 2^bits_total). Use
  *                        MPT_BSGS_DEFAULT_BITS_TOTAL.
- * @param[in] l1          Baby-step bit width. Baby table stores 2^(l1-1)
+ * @param[in] l1          Baby-step bit width. Baby table stores 2^(l1-1)+1
  *                        entries. Use MPT_BSGS_DEFAULT_L1.
  * @param[in] cache_path  Path for the binary baby table cache file, or NULL
  *                        to skip disk caching. If the file exists and is

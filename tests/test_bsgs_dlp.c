@@ -14,6 +14,8 @@
  *   8. Round-trip: encrypt then decrypt_bsgs, verify recovered == original
  *   9. Cache save and load round-trip (baby table persists across contexts)
  *  10. NULL argument rejection
+ *  11. Exhaustive coverage sweep over a small range (regression guard for
+ *      baby-step index off-by-ones that drop odd multiples of 2^(l1-1))
  */
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
@@ -52,6 +54,7 @@ static void test_roundtrip(const secp256k1_context *ctx,
 static void test_cache_roundtrip(const secp256k1_context *ctx);
 static void test_null_rejection(const secp256k1_context *ctx,
                                 secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_decrypt_full_coverage(const secp256k1_context *ctx);
 
 /* --- helpers --- */
 
@@ -96,6 +99,7 @@ int main(void)
   test_decrypt_boundary(ctx, bsgs);
   test_decrypt_out_of_range(ctx, bsgs);
   test_roundtrip(ctx, bsgs);
+  test_decrypt_full_coverage(ctx);
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
   secp256k1_context_destroy(ctx);
@@ -327,6 +331,45 @@ static void test_cache_roundtrip(const secp256k1_context *ctx)
   /* Clean up cache file */
   remove(TEST_CACHE_PATH);
 
+  printf("Test passed!\n");
+}
+
+/* Exhaustively decrypt every m in [0, 2^SWEEP_BITS) with a small dedicated
+ * context. Guards against coverage gaps in the baby-step/giant-step index
+ * scheme. A prior off-by-one (baby range [1, Mhalf) instead of [1, Mhalf])
+ * left every odd multiple of Mhalf = 2^(l1-1) unrecoverable; a hand-picked
+ * value list missed it, but a full sweep cannot. */
+/* Mhalf = 2^(SWEEP_L1-1) = 32, so odd multiples 32, 96, ... fall in range. */
+#define SWEEP_BITS 12
+#define SWEEP_L1 6
+static void test_decrypt_full_coverage(const secp256k1_context *ctx)
+{
+  printf("Running test: exhaustive coverage sweep [0, 2^%d)...\n", SWEEP_BITS);
+
+  secp256k1_elgamal_bsgs_ctx *b =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, SWEEP_BITS, SWEEP_L1, NULL);
+  EXPECT(b != NULL);
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  uint64_t limit = 1ULL << SWEEP_BITS;
+  for (uint64_t m = 0; m < limit; m++)
+  {
+    encrypt_amount(ctx, m, &pubkey, &c1, &c2);
+    uint64_t recovered = 0xDEADBEEFu;
+    int ok = secp256k1_elgamal_decrypt_bsgs(ctx, b, &recovered, &c1, &c2,
+                                            privkey, TEST_WINDOW);
+    if (ok != 1 || recovered != m)
+    {
+      printf("  FAILED at m=%llu: ok=%d recovered=%llu\n",
+             (unsigned long long)m, ok, (unsigned long long)recovered);
+      EXPECT(0);
+    }
+  }
+
+  secp256k1_elgamal_bsgs_ctx_destroy(b);
   printf("Test passed!\n");
 }
 
