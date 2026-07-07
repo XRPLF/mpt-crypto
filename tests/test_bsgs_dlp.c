@@ -346,8 +346,17 @@ static void test_cache_roundtrip(const secp256k1_context *ctx)
  * context. Guards against coverage gaps in the baby-step/giant-step index
  * scheme. A prior off-by-one (baby range [1, Mhalf) instead of [1, Mhalf])
  * left every odd multiple of Mhalf = 2^(l1-1) unrecoverable; a hand-picked
- * value list missed it, but a full sweep cannot. */
-/* Mhalf = 2^(SWEEP_L1-1) = 32, so odd multiples 32, 96, ... fall in range. */
+ * value list missed it, but a full sweep cannot.
+ *
+ * Mhalf = 2^(SWEEP_L1-1) = 32, so odd multiples 32, 96, ... fall in range;
+ * J = 2^(SWEEP_BITS-SWEEP_L1) = 64 giant steps.
+ *
+ * The sweep is repeated across several window sizes. This matters because
+ * the solver takes different code paths depending on W vs J:
+ *   - W >= J  (e.g. the default 128): windowed loop never fires, tail only.
+ *   - W <  J  (e.g. 8): full windowed batches exercise fe_batch_invert_tree.
+ *   - W == 1: single-element batch-inversion tree (degenerate edge case).
+ * Without the small-window passes the windowed TreeMon path is untested. */
 #define SWEEP_BITS 12
 #define SWEEP_L1 6
 static void test_decrypt_full_coverage(const secp256k1_context *ctx)
@@ -362,18 +371,28 @@ static void test_decrypt_full_coverage(const secp256k1_context *ctx)
   secp256k1_pubkey pubkey, c1, c2;
   EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
 
+  /* J = 2^(SWEEP_BITS-SWEEP_L1) = 64; windows below/at/above J cover all
+   * paths (tail-only, windowed, and the W=1 single-element tree). */
+  int windows[] = {MPT_BSGS_DEFAULT_WINDOW, 8, 1};
   uint64_t limit = 1ULL << SWEEP_BITS;
-  for (uint64_t m = 0; m < limit; m++)
+
+  for (size_t wi = 0; wi < sizeof(windows) / sizeof(windows[0]); wi++)
   {
-    encrypt_amount(ctx, m, &pubkey, &c1, &c2);
-    uint64_t recovered = 0xDEADBEEFu;
-    int ok = secp256k1_elgamal_decrypt_bsgs(ctx, b, &recovered, &c1, &c2,
-                                            privkey, TEST_WINDOW);
-    if (ok != 1 || recovered != m)
+    int window = windows[wi];
+    printf("  window=%d...\n", window);
+    for (uint64_t m = 0; m < limit; m++)
     {
-      printf("  FAILED at m=%llu: ok=%d recovered=%llu\n",
-             (unsigned long long)m, ok, (unsigned long long)recovered);
-      EXPECT(0);
+      encrypt_amount(ctx, m, &pubkey, &c1, &c2);
+      uint64_t recovered = 0xDEADBEEFu;
+      int ok = secp256k1_elgamal_decrypt_bsgs(ctx, b, &recovered, &c1, &c2,
+                                              privkey, window);
+      if (ok != 1 || recovered != m)
+      {
+        printf("  FAILED at m=%llu (window=%d): ok=%d recovered=%llu\n",
+               (unsigned long long)m, window, ok,
+               (unsigned long long)recovered);
+        EXPECT(0);
+      }
     }
   }
 
