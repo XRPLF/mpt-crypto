@@ -263,6 +263,14 @@ static void test_decrypt_out_of_range(const secp256k1_context *ctx,
   EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
                                         privkey, TEST_WINDOW) == 0);
 
+  /* m = 2^bits_total = J*M lands exactly on the i=0 direct-hit path at j=J;
+   * it is one past the range and must be rejected, not reported as found. */
+  uint64_t direct_oor = (1ULL << TEST_BITS);
+  encrypt_amount(ctx, direct_oor, &pubkey, &c1, &c2);
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW) == 0);
+
   printf("Test passed!\n");
 }
 

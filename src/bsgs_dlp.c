@@ -55,9 +55,9 @@
 /* =========================================================================
  * Jacobian / affine helpers
  *
- * These mirror the internal helpers in bsgs_dlp_benchmark_cached.c exactly.
- * They are static — not exported — so there is no symbol conflict with any
- * other translation unit.
+ * Thin wrappers over libsecp256k1's internal field/group primitives. They
+ * are static — not exported — so there is no symbol conflict with any other
+ * translation unit.
  * ========================================================================= */
 
 /* Load a secp256k1_pubkey into an affine secp256k1_ge.
@@ -519,6 +519,12 @@ secp256k1_elgamal_bsgs_ctx_create(const secp256k1_context *ctx, int bits_total,
     return NULL;
   if (l1 <= 0 || l1 >= bits_total)
     return NULL;
+  /* Baby values i in [1, 2^(l1-1)] are stored in a uint32_t; l1 > 32 would
+   * overflow that field (2^32 wraps to 0, the empty-slot sentinel). Such a
+   * table would also require >32 GB, but reject explicitly rather than rely
+   * on the allocation failing. */
+  if (l1 > 32)
+    return NULL;
 
   secp256k1_elgamal_bsgs_ctx *b =
       (secp256k1_elgamal_bsgs_ctx *)calloc(1, sizeof(*b));
@@ -763,24 +769,32 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   /* Windowed main loop — full W-sized batches. */
   while (j + (uint64_t)W <= b->J + 1 && !result)
   {
-    int early = 0;
     for (size_t w = 0; w < W; w++)
     {
-      /* Direct check: j*MG == target → m = j*M (baby i = 0). */
+      /* Direct check: j*MG == target → m = j*M (baby i = 0). A direct hit
+       * uniquely determines m; Qj is the point at infinity here and must not
+       * reach batch inversion, so resolve the range check and return now.
+       * m = j*M out of range (only possible at j = J, m = 2^bits_total)
+       * means the plaintext is out of range: report not-found. */
       if (gej_eq_ge(&jMGj, &target_ge))
       {
-        *out_m = (j + (uint64_t)w) * b->M;
-        result = 1;
-        early = 1;
-        break;
+        uint64_t cand = (j + (uint64_t)w) * b->M;
+        if (cand <= max_m)
+        {
+          *out_m = cand;
+          result = 1;
+        }
+        free(Q_win);
+        free(j_win);
+        free(bt1);
+        free(bt2);
+        return result;
       }
       Q_win[w] = Qj;
       j_win[w] = j + (uint64_t)w;
       secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
       secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
     }
-    if (early)
-      break;
     j += (uint64_t)W;
 
     /* Batch invert W Z-coordinates. */
@@ -822,8 +836,12 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   {
     if (gej_eq_ge(&jMGj, &target_ge))
     {
-      *out_m = j * b->M;
-      result = 1;
+      uint64_t cand = j * b->M;
+      if (cand <= max_m)
+      {
+        *out_m = cand;
+        result = 1;
+      }
       break;
     }
 
