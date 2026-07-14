@@ -83,6 +83,14 @@ extern "C" {
  */
 #define MPT_BSGS_DEFAULT_WINDOW 128
 
+/**
+ * Maximum accepted window. secp256k1_elgamal_decrypt_bsgs() rejects any window
+ * outside [1, MPT_BSGS_MAX_WINDOW]: the solver allocates O(window) points and
+ * field elements, so an unbounded value risks overflow in the allocation-size
+ * computation. This cap is far above any useful window (default is 128).
+ */
+#define MPT_BSGS_MAX_WINDOW 65536
+
 /** Opaque BSGS context. Allocated by secp256k1_elgamal_bsgs_ctx_create(). */
 typedef struct secp256k1_elgamal_bsgs_ctx secp256k1_elgamal_bsgs_ctx;
 
@@ -141,11 +149,14 @@ secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx* bsgs_ctx);
  * @param[in]  c1        First ciphertext component.
  * @param[in]  c2        Second ciphertext component.
  * @param[in]  privkey   32-byte private key scalar.
- * @param[in]  window    Window size for batch inversion (must be power of 2).
+ * @param[in]  window    Window size for batch inversion. Must be in
+ *                       [1, MPT_BSGS_MAX_WINDOW]; values outside that range
+ *                       return 0. Internally rounded up to a power of 2.
  *                       Use MPT_BSGS_DEFAULT_WINDOW.
  *
  * @return 1 if the amount was successfully recovered and *amount is set;
- *         0 if the plaintext is out of range or an internal error occurred.
+ *         0 if the window is out of range, the plaintext is out of range, or
+ *         an internal error occurred.
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt_bsgs(

@@ -16,11 +16,14 @@
  *  10. NULL argument rejection
  *  11. Exhaustive coverage sweep over a small range (regression guard for
  *      baby-step index off-by-ones that drop odd multiples of 2^(l1-1))
+ *  12. window parameter validation (reject out-of-range windows)
+ *  13. Corrupt cache stash_count rejected (no out-of-bounds read on load)
  */
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
 #include "test_utils.h"
 #include <secp256k1.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +58,9 @@ static void test_cache_roundtrip(const secp256k1_context *ctx);
 static void test_null_rejection(const secp256k1_context *ctx,
                                 secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_decrypt_full_coverage(const secp256k1_context *ctx);
+static void test_window_validation(const secp256k1_context *ctx,
+                                   secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_cache_corrupt_stash(const secp256k1_context *ctx);
 
 /* --- helpers --- */
 
@@ -82,6 +88,7 @@ int main(void)
   /* Tests that don't need a shared bsgs_ctx */
   test_ctx_create_destroy(ctx);
   test_cache_roundtrip(ctx);
+  test_cache_corrupt_stash(ctx);
 
   /* Build one shared context for the remaining tests — amortizes the
    * baby table build cost across all decrypt tests. */
@@ -99,6 +106,7 @@ int main(void)
   test_decrypt_boundary(ctx, bsgs);
   test_decrypt_out_of_range(ctx, bsgs);
   test_roundtrip(ctx, bsgs);
+  test_window_validation(ctx, bsgs);
   test_decrypt_full_coverage(ctx);
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
@@ -397,6 +405,80 @@ static void test_decrypt_full_coverage(const secp256k1_context *ctx)
   }
 
   secp256k1_elgamal_bsgs_ctx_destroy(b);
+  printf("Test passed!\n");
+}
+
+static void test_window_validation(const secp256k1_context *ctx,
+                                   secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: window parameter validation...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  encrypt_amount(ctx, 42, &pubkey, &c1, &c2);
+
+  uint64_t out = 0;
+  /* Out-of-range windows are rejected (previously 0/negative were silently
+   * clamped to 1, and a huge value risked overflow in the alloc size). */
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, privkey,
+                                        0) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, privkey,
+                                        -1) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, privkey,
+                                        MPT_BSGS_MAX_WINDOW + 1) == 0);
+
+  /* A valid in-range window still decrypts correctly. */
+  out = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, privkey,
+                                        1) == 1);
+  EXPECT(out == 42);
+
+  printf("Test passed!\n");
+}
+
+/* A cache file's stash_count is read from disk and used as a loop bound over
+ * the fixed-size stash arrays. Corrupt it past CUCKOO_STASH_SZ and confirm the
+ * loader rejects the file and rebuilds — no out-of-bounds read (ASAN CI
+ * catches that) — leaving a usable context. */
+static void test_cache_corrupt_stash(const secp256k1_context *ctx)
+{
+  printf("Running test: corrupt cache stash_count is rejected...\n");
+
+  const char *path = "/tmp/test_bsgs_corrupt_cache.bin";
+  remove(path);
+
+  secp256k1_elgamal_bsgs_ctx *b1 =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, path);
+  EXPECT(b1 != NULL);
+  secp256k1_elgamal_bsgs_ctx_destroy(b1);
+
+  /* stash_count is an int32 at byte offset 32 of the header:
+   *   magic(8) version(4) l1(4) section_size(8) used_count(8) stash_count(4).
+   */
+  FILE *f = fopen(path, "r+b");
+  EXPECT(f != NULL);
+  EXPECT(fseek(f, 32, SEEK_SET) == 0);
+  int32_t bad = 100000;
+  EXPECT(fwrite(&bad, sizeof(bad), 1, f) == 1);
+  fclose(f);
+
+  /* Load must reject the corrupt cache and rebuild; the context still works. */
+  secp256k1_elgamal_bsgs_ctx *b2 =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, TEST_BITS, TEST_L1, path);
+  EXPECT(b2 != NULL);
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  encrypt_amount(ctx, 777, &pubkey, &c1, &c2);
+  uint64_t out = 0;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, b2, &out, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 1);
+  EXPECT(out == 777);
+  secp256k1_elgamal_bsgs_ctx_destroy(b2);
+
+  remove(path);
   printf("Test passed!\n");
 }
 

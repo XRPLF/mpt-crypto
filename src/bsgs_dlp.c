@@ -409,8 +409,13 @@ static int baby_load(const char *path, int expected_l1, cuckoo_map *baby_out)
     return 0;
   }
 
+  /* Reject a header whose stash_count is out of range: it is read from an
+   * untrusted file and later used as the bound of a loop over the fixed-size
+   * stash_xb[CUCKOO_STASH_SZ] / stash_val[CUCKOO_STASH_SZ] arrays, so a value
+   * above CUCKOO_STASH_SZ (or negative) would cause an out-of-bounds read. */
   if (hdr.magic != BABY_MAGIC || hdr.version != BABY_VERSION ||
-      (int)hdr.l1 != expected_l1 || hdr.section_size == 0)
+      (int)hdr.l1 != expected_l1 || hdr.section_size == 0 ||
+      hdr.stash_count < 0 || hdr.stash_count > CUCKOO_STASH_SZ)
   {
     fclose(f);
     return 0;
@@ -899,6 +904,13 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
   MPT_ARG_CHECK(c1 != NULL);
   MPT_ARG_CHECK(c2 != NULL);
   MPT_ARG_CHECK(privkey != NULL);
+
+  /* Validate window before the solver allocates O(window) points/field
+   * elements. Reject non-positive values (previously silently clamped to 1)
+   * and values above MPT_BSGS_MAX_WINDOW (which would risk overflow in the
+   * allocation-size computation). */
+  if (window < 1 || window > MPT_BSGS_MAX_WINDOW)
+    return 0;
 
   if (!secp256k1_ec_seckey_verify(ctx, privkey))
     return 0;
