@@ -272,13 +272,20 @@ static void test_decryption_boundaries(const secp256k1_context *ctx)
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
                                    500, 1500) == 0);
 
-  /* --- Invalid range test --- */
+  /* --- Invalid range tests --- */
 
   /* range_low > range_high: must fail immediately. */
   EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 100,
                                    blinding_factor) == 1);
   EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey,
                                    1000, 500) == 0);
+
+  /* range_high == UINT64_MAX: must fail immediately (would be ~2^64 iterations
+   * and cause unsigned wraparound in the loop counter). */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1, &c2, &pubkey, 100,
+                                   blinding_factor) == 1);
+  EXPECT(secp256k1_elgamal_decrypt(ctx, &decrypted_amount, &c1, &c2, privkey, 0,
+                                   UINT64_MAX) == 0);
 
   /* --- Zero exclusion test --- */
 

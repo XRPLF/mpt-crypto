@@ -185,7 +185,12 @@ static int secp256k1_solve_dlp_small_range_fixed(
   uint64_t is_found = 0;
   unsigned char global_ser_error = 0;
 
-  for (uint64_t i = effective_low; i <= range_high; ++i)
+  /* Use a break-at-end loop so that range_high = UINT64_MAX does not cause
+   * unsigned wraparound (i++ from UINT64_MAX → 0, then 0 <= UINT64_MAX
+   * is always true → infinite loop).  Exactly range_high - effective_low + 1
+   * iterations are executed in all cases. */
+  uint64_t i = effective_low;
+  for (;;)
   {
     /* Serialize current_M.  Use a fallback buffer so a libsecp failure
      * cannot leak data through the comparison below. */
@@ -235,6 +240,10 @@ static int secp256k1_solve_dlp_small_range_fixed(
           (curr_ptr[b] & ~combine_mask) | (next_ptr[b] & combine_mask);
 
     global_ser_error |= (unsigned char)(combine_ok ^ 1);
+
+    if (i == range_high)
+      break;
+    ++i;
   }
 
   OPENSSL_cleanse(current_M_ser, 33);
@@ -264,8 +273,11 @@ int secp256k1_elgamal_decrypt(const secp256k1_context *ctx, uint64_t *amount,
   MPT_ARG_CHECK(c2 != NULL);
   MPT_ARG_CHECK(privkey != NULL);
 
-  /* Validate range */
-  if (range_low > range_high)
+  /* Validate range.  UINT64_MAX is rejected because the loop iterates
+   * range_high - effective_low + 1 times; a range_high of UINT64_MAX with
+   * effective_low >= 1 would require up to 2^64 - 1 iterations — effectively
+   * infinite.  Callers needing very large ranges should use BSGS. */
+  if (range_low > range_high || range_high == UINT64_MAX)
     return 0;
 
   secp256k1_pubkey S, M_target_sum, neg_S;

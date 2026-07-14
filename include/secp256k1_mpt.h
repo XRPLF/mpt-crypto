@@ -64,7 +64,13 @@ secp256k1_elgamal_encrypt(
  * @param[in]  privkey    The 32-byte ElGamal private key.
  * @param[in]  range_low  Lower bound of the search range (inclusive).
  * @param[in]  range_high Upper bound of the search range (inclusive).
- *                        Must be >= range_low; returns 0 otherwise.
+ *                        Must be >= range_low and must not be UINT64_MAX;
+ *                        either condition returns 0 immediately.  UINT64_MAX
+ *                        is rejected because the loop runs
+ *                        range_high - max(1, range_low) + 1 iterations — a
+ *                        UINT64_MAX upper bound would require up to 2^64 - 1
+ *                        iterations (effectively infinite).  Use
+ *                        secp256k1_elgamal_decrypt_bsgs for larger ranges.
  *                        Recommended default: range_low=0, range_high=1000000.
  *
  * @return 1 if the ciphertext decrypts to an amount in [range_low, range_high]
