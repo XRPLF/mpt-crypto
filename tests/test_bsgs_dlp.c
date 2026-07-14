@@ -36,7 +36,7 @@
 #define TEST_WINDOW MPT_BSGS_DEFAULT_WINDOW
 
 /* Temporary cache path for the cache round-trip test. */
-#define TEST_CACHE_PATH "/tmp/test_bsgs_baby_cache.bin"
+#define TEST_CACHE_PATH "test_bsgs_baby_cache.bin"
 
 /* Forward declarations */
 static void test_ctx_create_destroy(const secp256k1_context *ctx);
@@ -445,7 +445,7 @@ static void test_cache_corrupt_stash(const secp256k1_context *ctx)
 {
   printf("Running test: corrupt cache stash_count is rejected...\n");
 
-  const char *path = "/tmp/test_bsgs_corrupt_cache.bin";
+  const char *path = "test_bsgs_corrupt_cache.bin";
   remove(path);
 
   secp256k1_elgamal_bsgs_ctx *b1 =
