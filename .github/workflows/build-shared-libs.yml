@@ -21,6 +21,7 @@
 #   linux-x86-64/libmpt-crypto.so       (Linux x86_64)
 #   linux-s390x/libmpt-crypto.so        (Linux s390x, IBM Z — QEMU-built)
 #   win32-x86-64/mpt-crypto.dll         (Windows x86_64)
+#   win32-x86-64/mpt-crypto.lib         (Windows import library, for linking)
 #
 # Platforms without a native GitHub-hosted runner (s390x) are built inside a
 # --platform linux/<arch> Docker container via QEMU user-mode emulation.
@@ -137,6 +138,9 @@ jobs:
         run: |
           mkdir -p "output/${{ matrix.platform }}"
           cp "${LIB_DIR}/${{ matrix.lib_filename }}" "output/${{ matrix.platform }}/"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "${LIB_DIR}/mpt-crypto.lib" "output/${{ matrix.platform }}/"
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
