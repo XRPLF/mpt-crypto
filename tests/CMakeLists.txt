@@ -89,3 +89,8 @@ add_mpt_test(
     test_ct_tweak_mul.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1 OpenSSL::Crypto
 )
+add_mpt_test(
+    test_bsgs_dlp
+    test_bsgs_dlp.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
