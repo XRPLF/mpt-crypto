@@ -1,0 +1,65 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Build WASM Module
+#
+# Builds the mpt-crypto C library as a single portable WebAssembly module
+# (mpt_crypto.js glue + mpt_crypto.wasm) for JS/TS consumers (xrpl.js). Unlike
+# the native shared libraries there is NO OS x arch matrix: one wasm32 artifact
+# runs in every browser and in Node/Deno/Bun on any platform/endianness.
+#
+# The build also validates the artifact: .github/scripts/build-wasm.sh compiles
+# the C crypto test suite to wasm and runs it under Node (ctest), so the module
+# is exercised before it is bundled — the WASM analog of what build-shared-lib.sh
+# does with ctest for the native libraries.
+#
+# Invoked via `workflow_call` from build.yml — on every PR and push to main (so
+# the build+test path is exercised), and on tag push (so build.yml can attach the
+# bundle to the release, which JS consumers download).
+#
+# The `build` job uploads `mpt-crypto-wasm-bundle` (mpt_crypto.js + .wasm), which
+# the caller downloads and attaches to the GitHub release.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: Build WASM Module
+
+on:
+  workflow_call:
+
+jobs:
+  build:
+    name: Build + test WASM module
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Emscripten
+        uses: mymindstorm/setup-emsdk@6ab9eb1bda2574c4ddb79809fc9247783eaf9021 # v14
+        with:
+          # Pinned for reproducible wasm output. The emsdk version does not
+          # affect crypto results, only the binary's codegen/size.
+          version: 6.0.2
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "22"
+
+      - name: Build WASM module
+        run: ./.github/scripts/build-wasm.sh
+
+      - name: Test WASM module
+        run: ./.github/scripts/test-wasm.sh
+
+      - name: Stage WASM bundle
+        run: |
+          mkdir -p output
+          cp emcc_out/mpt_crypto.js emcc_out/mpt_crypto.wasm output/
+          tar -czf mpt-crypto-wasm.tar.gz -C output .
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mpt-crypto-wasm-bundle
+          path: mpt-crypto-wasm.tar.gz
+          if-no-files-found: error

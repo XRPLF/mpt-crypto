@@ -106,11 +106,19 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-shared-libs.yml
 
-  # On tag push only: publish a GitHub release and attach the native bundle.
+  # Build the portable WebAssembly module (mpt_crypto.js + .wasm) for JS/TS
+  # consumers (e.g. xrpl.js) by calling the reusable workflow.
+  wasm:
+    name: Build WASM module
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-wasm.yml
+
+  # On tag push only: publish a GitHub release and attach the native + wasm bundles.
   release:
     name: Publish release
     if: github.ref_type == 'tag'
-    needs: [build-and-test, native-binaries]
+    needs: [build-and-test, native-binaries, wasm]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,19 +128,27 @@ jobs:
         with:
           name: mpt-crypto-natives-bundle
 
+      - name: Download WASM bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mpt-crypto-wasm-bundle
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ARCHIVE="mpt-crypto-natives-${GITHUB_REF_NAME}.tar.gz"
-          mv mpt-crypto-natives.tar.gz "${ARCHIVE}"
+          NATIVES="mpt-crypto-natives-${GITHUB_REF_NAME}.tar.gz"
+          WASM="mpt-crypto-wasm-${GITHUB_REF_NAME}.tar.gz"
+          mv mpt-crypto-natives.tar.gz "${NATIVES}"
+          mv mpt-crypto-wasm.tar.gz "${WASM}"
 
           if [[ "${GITHUB_REF_NAME}" == *-* ]]; then
             PRERELEASE_FLAG="--prerelease"
           fi
 
           gh release create "${GITHUB_REF_NAME}" \
-            "${ARCHIVE}" \
+            "${NATIVES}" \
+            "${WASM}" \
             --repo "${GITHUB_REPOSITORY}" \
             --generate-notes \
             $PRERELEASE_FLAG

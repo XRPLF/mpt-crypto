@@ -4,3 +4,10 @@ cmake-build-*/
 .idea/
 .venv
 .vscode/
+
+# Emscripten build artifacts
+emcc_build/
+emcc_out/
+
+# Compiled WebAssembly
+*.wasm
