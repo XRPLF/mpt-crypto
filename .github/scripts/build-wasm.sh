@@ -48,6 +48,21 @@ if [[ "${SECP256K1_VERSION}" == "v" || -z "${OPENSSL_VERSION}" ]]; then
     exit 1
 fi
 
+# Integrity pins for the directly-fetched sources. This WASM path fetches deps
+# outside Conan (git tag / release tarball), so verify them the way Conan does
+# from conan.lock. Update these together with the versions above.
+SECP256K1_COMMIT="1a53f4961f337b4d166c25fce72ef0dc88806618"                       # tag v0.7.1
+OPENSSL_SHA256="aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f" # openssl-3.6.2.tar.gz
+
+# Portable sha256 (Linux coreutils sha256sum; macOS shasum).
+sha256_of() {
+    if command -v sha256sum &>/dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
 SECP256K1_SRC="${BUILD_DIR}/secp256k1"
 SECP256K1_BUILD="${BUILD_DIR}/secp256k1/build"
 OPENSSL_SRC="${BUILD_DIR}/openssl-${OPENSSL_VERSION}"
@@ -95,6 +110,14 @@ if [[ ! -f "${SECP256K1_BUILD}/lib/libsecp256k1.a" ]]; then
             https://github.com/bitcoin-core/secp256k1.git "${SECP256K1_SRC}"
     fi
 
+    # A git tag is mutable (can be force-pushed); the commit it resolves to is
+    # not. Verify the checked-out commit against the pin.
+    actual_sha="$(git -C "${SECP256K1_SRC}" rev-parse HEAD)"
+    if [[ "${actual_sha}" != "${SECP256K1_COMMIT}" ]]; then
+        echo "ERROR: secp256k1 ${SECP256K1_VERSION} is ${actual_sha}, expected ${SECP256K1_COMMIT}" >&2
+        exit 1
+    fi
+
     mkdir -p "${SECP256K1_BUILD}"
     cd "${SECP256K1_BUILD}"
 
@@ -131,8 +154,16 @@ if [[ ! -f "${OPENSSL_SRC}/libcrypto.a" ]]; then
 
     if [[ ! -d "${OPENSSL_SRC}" ]]; then
         cd "${BUILD_DIR}"
-        curl -sL "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/openssl-${OPENSSL_VERSION}.tar.gz" \
-            | tar xz
+        openssl_tarball="openssl-${OPENSSL_VERSION}.tar.gz"
+        curl -sL "https://github.com/openssl/openssl/releases/download/openssl-${OPENSSL_VERSION}/${openssl_tarball}" \
+            -o "${openssl_tarball}"
+        got="$(sha256_of "${openssl_tarball}")"
+        if [[ "${got}" != "${OPENSSL_SHA256}" ]]; then
+            echo "ERROR: ${openssl_tarball} sha256 ${got}, expected ${OPENSSL_SHA256}" >&2
+            exit 1
+        fi
+        tar xzf "${openssl_tarball}"
+        rm -f "${openssl_tarball}"
         cd "${ROOT_DIR}"
     fi
 
