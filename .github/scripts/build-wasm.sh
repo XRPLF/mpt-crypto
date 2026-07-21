@@ -90,9 +90,9 @@ log "Dependencies (from conan.lock): secp256k1 ${SECP256K1_VERSION}, openssl ${O
 if [[ ! -f "${SECP256K1_BUILD}/lib/libsecp256k1.a" ]]; then
     log "Building secp256k1 ${SECP256K1_VERSION}"
 
-    if [[ ! -d "${SECP256K1_SRC}/CMakeLists.txt" ]]; then
+    if [[ ! -f "${SECP256K1_SRC}/CMakeLists.txt" ]]; then
         git clone --depth 1 --branch "${SECP256K1_VERSION}" \
-            https://github.com/bitcoin-core/secp256k1.git "${SECP256K1_SRC}" 2>/dev/null || true
+            https://github.com/bitcoin-core/secp256k1.git "${SECP256K1_SRC}"
     fi
 
     mkdir -p "${SECP256K1_BUILD}"
@@ -101,6 +101,7 @@ if [[ ! -f "${SECP256K1_BUILD}/lib/libsecp256k1.a" ]]; then
     emcmake cmake .. \
         -DCMAKE_C_FLAGS="-DSECP256K1_WIDEMUL_INT64" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
         -DSECP256K1_BUILD_TESTS=OFF \
         -DSECP256K1_BUILD_BENCHMARK=OFF \
         -DSECP256K1_BUILD_CTIME_TESTS=OFF \
