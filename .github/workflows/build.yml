@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build-and-test:
     # The matrix depends on XRPLF's self-hosted runners (heavy, heavy-arm64,
-    # macos15), which aren't shared with forks. Skip on forks so workflow
+    # macos-26-apple-clang-21), which aren't shared with forks. Skip on forks so workflow
     # changes can be iterated on without stalling in the runner queue.
     if: github.repository_owner == 'XRPLF'
     permissions:
