@@ -35,10 +35,10 @@ jobs:
         include:
           - compiler: apple-clang
             build_type: Release
-            os: macos15
+            os: macos-26-apple-clang-21
           - compiler: apple-clang
             build_type: Debug
-            os: macos15
+            os: macos-26-apple-clang-21
 
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.container != '' && fromJson(matrix.container) || null }}
