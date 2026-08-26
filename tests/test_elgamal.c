@@ -1,5 +1,6 @@
 #include "secp256k1_mpt.h"
 #include "test_utils.h"
+#include <openssl/evp.h>
 #include <secp256k1.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,10 @@ static void test_zero_encryption(const secp256k1_context *ctx);
 static void test_canonical_zero(const secp256k1_context *ctx);
 static void test_verify_encryption(const secp256k1_context *ctx);
 static void test_decryption_boundaries(const secp256k1_context *ctx);
+static void
+test_homomorphic_add_point_at_infinity(const secp256k1_context *ctx);
+static void
+test_homomorphic_add_post_mergeinbox_attack(const secp256k1_context *ctx);
 
 // Main test runner
 int main(void)
@@ -34,6 +39,8 @@ int main(void)
   test_canonical_zero(ctx);
   test_verify_encryption(ctx);
   test_decryption_boundaries(ctx);
+  test_homomorphic_add_point_at_infinity(ctx);
+  test_homomorphic_add_post_mergeinbox_attack(ctx);
 
   secp256k1_context_destroy(ctx);
   printf("ALL TESTS PASSED\n");
@@ -296,4 +303,178 @@ static void test_decryption_boundaries(const secp256k1_context *ctx)
                                    2000) == 0);
 
   printf("Test passed!\n");
+}
+
+/*
+ * Domain tag used by generate_canonical_encrypted_zero (src/elgamal.c).
+ * Must stay in sync with that function's internal constant.
+ */
+#define CANONICAL_ZERO_DOMAIN "EncZero"
+
+/*
+ * Test: Homomorphic addition produces point at infinity
+ *
+ * This test verifies that secp256k1_elgamal_add correctly returns 0 (failure)
+ * when the resulting C1 component is the point at infinity. This occurs when
+ * two ciphertexts with equal and opposite randomness are added homomorphically:
+ * C1_result = r*G + (-r)*G = point at infinity.
+ *
+ * secp256k1_ec_pubkey_combine returns 0 for point at infinity, so
+ * secp256k1_elgamal_add must propagate this failure by also returning 0.
+ *
+ * This is the core library behavior that protects against TOB-RIPCTXR-5.
+ */
+static void test_homomorphic_add_point_at_infinity(const secp256k1_context *ctx)
+{
+  unsigned char privkey[32], r[32];
+  secp256k1_pubkey pubkey, temp_pubkey;
+  secp256k1_pubkey c1_a, c2_a; /* Enc(m; r)  */
+  secp256k1_pubkey c1_b, c2_b; /* Enc(x; -r) */
+  secp256k1_pubkey result_c1, result_c2;
+  unsigned char neg_r[32];
+  uint64_t amount_a = 1000, amount_b = 500;
+  int ret;
+
+  printf("Running test: homomorphic add produces point at infinity...\n");
+
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  /* Generate random scalar r */
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, r, &temp_pubkey) == 1);
+
+  /* Compute -r mod q */
+  memcpy(neg_r, r, 32);
+  EXPECT(secp256k1_ec_seckey_negate(ctx, neg_r) == 1);
+
+  /* Encrypt amount_a with randomness r: Enc(amount_a; r) */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1_a, &c2_a, &pubkey, amount_a, r) ==
+         1);
+
+  /* Encrypt amount_b with randomness -r: Enc(amount_b; -r) */
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &c1_b, &c2_b, &pubkey, amount_b,
+                                   neg_r) == 1);
+
+  /*
+   * Homomorphic addition:
+   * C1_result = r*G + (-r)*G = point at infinity
+   * secp256k1_elgamal_add must return 0 (failure) and must not partially
+   * modify the output buffers (regression for issue #115).
+   */
+  memset(&result_c1, 0, sizeof(result_c1));
+  memset(&result_c2, 0, sizeof(result_c2));
+  ret = secp256k1_elgamal_add(ctx, &result_c1, &result_c2, &c1_a, &c2_a, &c1_b,
+                              &c2_b);
+
+  EXPECT(ret == 0);
+  /* Output buffers must be unmodified on failure. */
+  {
+    secp256k1_pubkey zero;
+    memset(&zero, 0, sizeof(zero));
+    EXPECT(memcmp(&result_c1, &zero, sizeof(zero)) == 0);
+    EXPECT(memcmp(&result_c2, &zero, sizeof(zero)) == 0);
+  }
+
+  printf("Test passed! Point at infinity correctly rejected.\n");
+}
+
+/*
+ * Test: Post-MergeInbox inbox locking attack (TOB-RIPCTXR-5 variant)
+ *
+ * After MergeInbox, CB_IN resets to canonical zero Enc(0; r0_A) with
+ * publicly known randomness r0_A. A malicious sender can craft a Send
+ * with r_send = -r0_A so that:
+ *   CB_IN_new = Enc(0; r0_A) + Enc(m*; -r0_A) = Enc(m*; 0)
+ * where C1 = point at infinity.
+ *
+ * The homomorphic addition should FAIL (return 0), meaning the malicious
+ * Send is rejected and CB_IN is never updated with an invalid ciphertext.
+ *
+ * This test verifies that the library correctly rejects the malicious Send
+ * at the homomorphic addition level. Our fix (Enc(0; r_fresh) in first
+ * Convert and every Clawback) is sufficient when combined with correct
+ * return value checking (TOB-RIPCTXR-14).
+ *
+ * If this test FAILS (ret == 1), the library allowed the point at infinity
+ * and a stronger fix would be needed.
+ */
+static void
+test_homomorphic_add_post_mergeinbox_attack(const secp256k1_context *ctx)
+{
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey;
+  unsigned char account_id[20] = {1};
+  unsigned char issuance_id[24] = {2};
+  secp256k1_pubkey cb_in_c1, cb_in_c2; /* CB_IN = canonical zero Enc(0; r0_A) */
+  secp256k1_pubkey send_c1, send_c2;   /* Malicious Send: Enc(m*; -r0_A)      */
+  secp256k1_pubkey result_c1, result_c2; /* Result of homomorphic addition */
+  uint64_t malicious_amount = 999;
+  int ret;
+
+  /* Recompute r0_A as the library would — same deterministic scalar.
+   * CANONICAL_ZERO_DOMAIN must match generate_canonical_encrypted_zero
+   * in src/elgamal.c. */
+  unsigned char r0_A[32];
+  unsigned char hash_input[sizeof(CANONICAL_ZERO_DOMAIN) - 1 + 20 + 24];
+  unsigned int md_len = 32;
+  unsigned char neg_r0_A[32];
+
+  printf("Running test: post-MergeInbox inbox locking attack (TOB-RIPCTXR-5 "
+         "variant)...\n");
+
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  /*
+   * Step 1: Simulate CB_IN after MergeInbox = canonical zero Enc(0; r0_A)
+   * with publicly known r0_A.
+   */
+  EXPECT(generate_canonical_encrypted_zero(ctx, &cb_in_c1, &cb_in_c2, &pubkey,
+                                           account_id, issuance_id) == 1);
+
+  /*
+   * Step 2: Derive r0_A from public information
+   * (same computation as generate_canonical_encrypted_zero).
+   */
+  memcpy(hash_input, CANONICAL_ZERO_DOMAIN, sizeof(CANONICAL_ZERO_DOMAIN) - 1);
+  memcpy(hash_input + sizeof(CANONICAL_ZERO_DOMAIN) - 1, account_id, 20);
+  memcpy(hash_input + sizeof(CANONICAL_ZERO_DOMAIN) - 1 + 20, issuance_id, 24);
+  EXPECT(EVP_Digest(hash_input, sizeof(hash_input), r0_A, &md_len, EVP_sha256(),
+                    NULL) == 1);
+  EXPECT(secp256k1_ec_seckey_verify(ctx, r0_A) == 1);
+
+  /*
+   * Step 3: Compute -r0_A and craft Enc(m*; -r0_A).
+   * The malicious Send ciphertext itself is valid (C1 = -r0_A*G != infinity).
+   */
+  memcpy(neg_r0_A, r0_A, 32);
+  EXPECT(secp256k1_ec_seckey_negate(ctx, neg_r0_A) == 1);
+  EXPECT(secp256k1_elgamal_encrypt(ctx, &send_c1, &send_c2, &pubkey,
+                                   malicious_amount, neg_r0_A) == 1);
+  printf("  Malicious Send ciphertext is valid (C1 != infinity): OK\n");
+
+  /*
+   * Step 4: Ledger tries to update CB_IN by homomorphic addition:
+   * CB_IN_new = Enc(0; r0_A) + Enc(m*; -r0_A) = Enc(m*; 0)
+   * C1_new = r0_A*G + (-r0_A)*G = point at infinity
+   *
+   * secp256k1_elgamal_add must return 0 (failure) and must not partially
+   * modify the output buffers (regression for issue #115). If ret == 1
+   * the attack succeeds: CB_IN stores a ciphertext with C1 at infinity,
+   * and the next MergeInbox would fail with tecINTERNAL — funds are locked.
+   */
+  memset(&result_c1, 0, sizeof(result_c1));
+  memset(&result_c2, 0, sizeof(result_c2));
+  ret = secp256k1_elgamal_add(ctx, &result_c1, &result_c2, &cb_in_c1, &cb_in_c2,
+                              &send_c1, &send_c2);
+
+  EXPECT(ret == 0);
+  /* Output buffers must be unmodified on failure. */
+  {
+    secp256k1_pubkey zero;
+    memset(&zero, 0, sizeof(zero));
+    EXPECT(memcmp(&result_c1, &zero, sizeof(zero)) == 0);
+    EXPECT(memcmp(&result_c2, &zero, sizeof(zero)) == 0);
+  }
+
+  printf("Test passed! Malicious Send correctly rejected at library level.\n");
+  printf("  Our fix combined with TOB-RIPCTXR-14 is sufficient.\n");
 }
