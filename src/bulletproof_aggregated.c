@@ -683,7 +683,7 @@ cleanup:
  * ux is the fixed IPA binding scalar.
  *
  * It MUST be derived exactly once from:
- *     ux = H(commit_inp || <a,b>)
+ *     ux = H(domain || commit_inp || <a,b>)
  *
  * and reused consistently throughout the IPA:
  *   - L/R cross-term construction
@@ -712,6 +712,8 @@ int derive_ipa_binding_challenge(const secp256k1_context *ctx,
   /* 2. Hash */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_IPA", 19) != 1)
+    goto cleanup;
   if (EVP_DigestUpdate(mdctx, hash_input, 2 * kMPT_SCALAR_SIZE) != 1)
     goto cleanup;
   if (EVP_DigestFinal_ex(mdctx, hash_output, NULL) != 1)
@@ -732,7 +734,7 @@ cleanup:
 }
 
 /**
- * Derive u = H(last_challenge || L || R) reduced to a valid scalar.
+ * Derive u = H(domain || last_challenge || L || R) reduced to a valid scalar.
  * IMPORTANT: use the SAME exact logic in verifier.
  */
 
@@ -763,6 +765,8 @@ int derive_ipa_round_challenge(
     goto cleanup;
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto cleanup;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_IPA", 19) != 1)
     goto cleanup;
   if (EVP_DigestUpdate(mdctx, last_challenge, kMPT_SCALAR_SIZE) != 1)
     goto cleanup;
