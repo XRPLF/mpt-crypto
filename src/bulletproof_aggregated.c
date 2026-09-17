@@ -1785,7 +1785,7 @@ int secp256k1_bulletproof_prove_agg(
   }
 
   /* ---- 9. Challenge x ---- */
-  /* x = H(A || S || y || z || T1 || T2 || context_id) */
+  /* x = H(domain || A || S || y || z || T1 || T2 || context_id) */
   {
     unsigned char A_ser[kMPT_PUBKEY_SIZE], S_ser[kMPT_PUBKEY_SIZE],
         T1_ser[kMPT_PUBKEY_SIZE], T2_ser[kMPT_PUBKEY_SIZE];
@@ -1818,6 +1818,8 @@ int secp256k1_bulletproof_prove_agg(
       goto fs_x_cleanup;
 
     if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+      goto fs_x_cleanup;
+    if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
       goto fs_x_cleanup;
     if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
       goto fs_x_cleanup;
@@ -2471,9 +2473,11 @@ int secp256k1_bulletproof_verify_agg(
   scalar_vector_powers(ctx, (unsigned char (*)[kMPT_SCALAR_SIZE])y_inv_powers,
                        y_inv, n);
 
-  /* ---------------- x = H(A || S || y || z || T1 || T2 || context)
+  /* ---------------- x = H(domain || A || S || y || z || T1 || T2 || context)
    * ---------------- */
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
+    goto fs_fail;
+  if (EVP_DigestUpdate(mdctx, "MPT_BULLETPROOF_RANGE", 21) != 1)
     goto fs_fail;
   if (EVP_DigestUpdate(mdctx, A_ser, kMPT_PUBKEY_SIZE) != 1)
     goto fs_fail;
