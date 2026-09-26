@@ -128,3 +128,9 @@ add_mpt_test(
     test_bsgs_dlp.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
+
+add_mpt_test(
+    test_api_hardening
+    test_api_hardening.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)

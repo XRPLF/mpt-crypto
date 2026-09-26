@@ -67,7 +67,7 @@ secp256k1_elgamal_encrypt(
  *                        Must be >= range_low and must not be UINT64_MAX;
  *                        either condition returns 0 immediately.  UINT64_MAX
  *                        is rejected because the loop runs
- *                        range_high - max(1, range_low) + 1 iterations — a
+ *                        range_high - max(1, range_low) + 1 iterations -- a
  *                        UINT64_MAX upper bound would require up to 2^64 - 1
  *                        iterations (effectively infinite).  Use
  *                        secp256k1_elgamal_decrypt_bsgs for larger ranges.
@@ -89,6 +89,20 @@ secp256k1_elgamal_decrypt(
 
 /**
  * @brief Homomorphically adds two ElGamal ciphertexts.
+ *
+ * Computes (sum_c1, sum_c2) = (a_c1 + b_c1, a_c2 + b_c2).
+ *
+ * @warning This operation is *not* closed over valid ciphertexts. A
+ *          secp256k1_pubkey cannot represent the point at infinity, so if
+ *          either component pair sums to the identity -- i.e. b_c1 == -a_c1 or
+ *          b_c2 == -a_c2 -- the underlying secp256k1_ec_pubkey_combine fails
+ *          and this function returns 0 with the outputs left unmodified. A 0
+ *          return therefore means "result not representable *or* operation
+ *          failed"; the two are not distinguishable through this API.
+ *          Callers must not treat a 0 return as evidence that the inputs were
+ *          malformed.
+ *
+ * @return 1 on success, 0 on failure (including an identity result, see above).
  */
 SECP256K1_API int
 secp256k1_elgamal_add(
@@ -102,6 +116,26 @@ secp256k1_elgamal_add(
 
 /**
  * @brief Homomorphically subtracts two ElGamal ciphertexts.
+ *
+ * Computes (diff_c1, diff_c2) = (a_c1 - b_c1, a_c2 - b_c2).
+ *
+ * @warning As with secp256k1_elgamal_add, this operation is *not* closed over
+ *          valid ciphertexts: the identity is not representable as a
+ *          secp256k1_pubkey. Subtracting a ciphertext from itself always hits
+ *          this case, and so does any (a, b) with a_c1 == b_c1 or
+ *          a_c2 == b_c2. The function returns 0 with the outputs left
+ *          unmodified, indistinguishably from a genuine failure.
+ *
+ *          This is reachable from client-side balance prediction: chaining
+ *          several balance-mutating transactions for one (account, token)
+ *          means computing CB_S' = CB_S - the encrypted amount, and an amount
+ *          ciphertext that happens to share a component with the balance
+ *          ciphertext -- e.g. one built by reusing the balance's own
+ *          randomness -- will fail here rather than yield an encryption of
+ *          zero. Use generate_canonical_encrypted_zero() to represent a zero
+ *          balance; do not expect it to fall out of a self-subtraction.
+ *
+ * @return 1 on success, 0 on failure (including an identity result, see above).
  */
 SECP256K1_API int
 secp256k1_elgamal_subtract(
@@ -158,6 +192,9 @@ generate_canonical_encrypted_zero(
  *                              a key whose discrete log is known to any party
  *                              breaks binding and lets that party compute
  *                              alternate openings of the same commitment.
+ *
+ * All four pointer arguments are required; passing NULL for any of them
+ * returns 0 without dereferencing it.
  *
  * @return 1 on success, 0 on failure.
  */
@@ -265,6 +302,22 @@ secp256k1_mpt_scalar_negate(unsigned char* res, unsigned char const* in);
 void
 secp256k1_mpt_scalar_reduce32(unsigned char out32[32], unsigned char const in32[32]);
 
+/**
+ * @brief Produces an aggregated Bulletproof range proof over m values.
+ *
+ * `proof_len` is in/out and carries the buffer capacity in both directions:
+ *  - proof_out == NULL: size query. *proof_len is set to the required length
+ *    and 1 is returned; no proving work is done.
+ *  - *proof_len < required: *proof_len is set to the required length and 0 is
+ *    returned; proof_out is not written.
+ *  - otherwise: the proof is serialized and *proof_len is set to the number of
+ *    bytes written.
+ *
+ * ctx, values, blindings_flat and h_generator are required. context_id is
+ * optional; NULL omits the context binding from the Fiat-Shamir transcript.
+ *
+ * @return 1 on success, 0 on failure.
+ */
 int
 secp256k1_bulletproof_prove_agg(
     secp256k1_context const* ctx,
@@ -361,7 +414,7 @@ secp256k1_compact_standard_verify(
 /*
 ================================================================================
 |                                                                              |
-|            COMPACT SIGMA PROOF — CLAWBACK                                   |
+|            COMPACT SIGMA PROOF -- CLAWBACK                                   |
 |                                                                              |
 ================================================================================
  *
@@ -400,7 +453,7 @@ secp256k1_compact_clawback_verify(
 /*
 ================================================================================
 |                                                                              |
-|            COMPACT SIGMA PROOF — CONVERTBACK                                |
+|            COMPACT SIGMA PROOF -- CONVERTBACK                                |
 |                                                                              |
 ================================================================================
  *
