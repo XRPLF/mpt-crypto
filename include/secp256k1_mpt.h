@@ -205,7 +205,9 @@ secp256k1_elgamal_verify_encryption(
 
 /** Proof of Knowledge of Secret Key for Registration.
  *  Compact form: (e, s) in Z_q^2 = 64 bytes.
- *  Domain: "CMPT_POK_SK_REGISTER" */
+ *  Domain: "CMPT_POK_SK_REGISTER"
+ *  Note: takes (pk, sk), the reverse of the secp256k1_rotate_*_prove family,
+ *  which takes (sk, pk).  Kept as-is for ABI compatibility. */
 #define SECP256K1_POK_SK_PROOF_SIZE 64
 
 SECP256K1_API int
@@ -804,6 +806,8 @@ secp256k1_rotate_holder_rotate_verify(
  * migrated later by the issuer via secp256k1_rotate_recover_balance_*.
  * Same relation as secp256k1_mpt_pok_sk_*, separated only by domain tag, so a
  * registration proof cannot be replayed as a recovery-key proof or vice versa.
+ * Argument order is (sk, pk), consistent with the other secp256k1_rotate_*_prove
+ * functions, and the reverse of secp256k1_mpt_pok_sk_prove, which takes (pk, sk).
  */
 SECP256K1_API int
 secp256k1_rotate_recovery_key_prove(
