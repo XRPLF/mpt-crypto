@@ -1,20 +1,20 @@
 /**
  * @file proof_pok_sk.c
- * @brief Compact Schnorr Proof of Knowledge for secret key registration.
+ * @brief Compact Schnorr Proof of Knowledge of a discrete logarithm.
  *
  * Proves knowledge of sk such that pk = sk*G (Schnorr identification,
- * Fiat-Shamir transformed).
+ * Fiat-Shamir transformed).  The relation is parameterised by its domain
+ * separation tag only; see proof_pok_sk.h for the instantiations.
  *
  * Compact proof: (e, s) in Z_q^2 = 64 bytes.
- * Fiat-Shamir domain: "CMPT_POK_SK_REGISTER"
  *
  * Verification reconstructs T = s*G - e*pk, recomputes challenge, checks
  * e' == e.
  *
- * Used during ConfidentialMPTConvert key registration (spec Section 1.4).
+ * The public entry point here is key registration during
+ * ConfidentialMPTConvert (spec Section 1.4), domain "CMPT_POK_SK_REGISTER".
  */
-#include "mpt_internal.h"
-#include "secp256k1_mpt.h"
+#include "proof_pok_sk.h"
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 
@@ -22,7 +22,8 @@ static const char DOMAIN_POK_SK[] = "CMPT_POK_SK_REGISTER";
 
 static int build_pok_challenge(const secp256k1_context *ctx,
                                unsigned char *e_out, const secp256k1_pubkey *pk,
-                               const secp256k1_pubkey *T,
+                               const secp256k1_pubkey *T, const char *domain,
+                               size_t domain_len,
                                const unsigned char *context_id)
 {
   EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
@@ -36,7 +37,7 @@ static int build_pok_challenge(const secp256k1_context *ctx,
 
   if (EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL) != 1)
     goto cleanup;
-  if (EVP_DigestUpdate(mdctx, DOMAIN_POK_SK, strlen(DOMAIN_POK_SK)) != 1)
+  if (EVP_DigestUpdate(mdctx, domain, domain_len) != 1)
     goto cleanup;
 
 #define SER(pk_ptr)                                                            \
@@ -74,16 +75,17 @@ cleanup:
 
 /* --- Prover --- */
 
-int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
-                               unsigned char *proof_out,
-                               const secp256k1_pubkey *pk,
-                               const unsigned char *sk,
-                               const unsigned char *context_id)
+int mpt_pok_sk_prove_tagged(const secp256k1_context *ctx,
+                            unsigned char *proof_out,
+                            const secp256k1_pubkey *pk, const unsigned char *sk,
+                            const char *domain, size_t domain_len,
+                            const unsigned char *context_id)
 {
   MPT_ARG_CHECK(ctx != NULL);
   MPT_ARG_CHECK(proof_out != NULL);
   MPT_ARG_CHECK(pk != NULL);
   MPT_ARG_CHECK(sk != NULL);
+  MPT_ARG_CHECK(domain != NULL);
   /* context_id is optional */
 
   unsigned char k[kMPT_SCALAR_SIZE];
@@ -139,8 +141,7 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
 
     unsigned char nonces[kMPT_SCALAR_SIZE];
     if (!generate_deterministic_nonces(ctx, nonces, 1, sk, kMPT_SCALAR_SIZE,
-                                       stmt_hash, DOMAIN_POK_SK,
-                                       strlen(DOMAIN_POK_SK)))
+                                       stmt_hash, domain, domain_len))
       goto cleanup;
     memcpy(k, nonces, kMPT_SCALAR_SIZE);
     OPENSSL_cleanse(nonces, sizeof(nonces));
@@ -151,7 +152,7 @@ int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
     goto cleanup;
 
   /* 3. Challenge */
-  if (!build_pok_challenge(ctx, e, pk, &T, context_id))
+  if (!build_pok_challenge(ctx, e, pk, &T, domain, domain_len, context_id))
     goto cleanup;
 
   /* 4. Response: s = k + e*sk */
@@ -172,14 +173,15 @@ cleanup:
 
 /* --- Verifier --- */
 
-int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
-                                const unsigned char *proof,
-                                const secp256k1_pubkey *pk,
-                                const unsigned char *context_id)
+int mpt_pok_sk_verify_tagged(const secp256k1_context *ctx,
+                             const unsigned char *proof,
+                             const secp256k1_pubkey *pk, const char *domain,
+                             size_t domain_len, const unsigned char *context_id)
 {
   MPT_ARG_CHECK(ctx != NULL);
   MPT_ARG_CHECK(proof != NULL);
   MPT_ARG_CHECK(pk != NULL);
+  MPT_ARG_CHECK(domain != NULL);
   /* context_id is optional */
 
   unsigned char e[kMPT_SCALAR_SIZE], s[kMPT_SCALAR_SIZE];
@@ -211,9 +213,31 @@ int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
   }
 
   /* 3. Recompute challenge */
-  if (!build_pok_challenge(ctx, e_prime, pk, &T, context_id))
+  if (!build_pok_challenge(ctx, e_prime, pk, &T, domain, domain_len,
+                           context_id))
     return 0;
 
   /* 4. Accept iff e' == e */
   return CRYPTO_memcmp(e, e_prime, kMPT_SCALAR_SIZE) == 0;
+}
+
+/* --- Public entry point: key registration --- */
+
+int secp256k1_mpt_pok_sk_prove(const secp256k1_context *ctx,
+                               unsigned char *proof_out,
+                               const secp256k1_pubkey *pk,
+                               const unsigned char *sk,
+                               const unsigned char *context_id)
+{
+  return mpt_pok_sk_prove_tagged(ctx, proof_out, pk, sk, DOMAIN_POK_SK,
+                                 strlen(DOMAIN_POK_SK), context_id);
+}
+
+int secp256k1_mpt_pok_sk_verify(const secp256k1_context *ctx,
+                                const unsigned char *proof,
+                                const secp256k1_pubkey *pk,
+                                const unsigned char *context_id)
+{
+  return mpt_pok_sk_verify_tagged(ctx, proof, pk, DOMAIN_POK_SK,
+                                  strlen(DOMAIN_POK_SK), context_id);
 }

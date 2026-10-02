@@ -32,6 +32,17 @@ set(MPT_CRYPTO_SOURCES
     src/proof_compact_standard.c
     src/proof_compact_clawback.c
     src/proof_compact_convertback.c
+    src/proof_rotate_both_core.c
+    src/proof_rotate_core.c
+    src/proof_rotate_holder_rotate.c
+    src/proof_rotate_mirror_auditor.c
+    src/proof_rotate_mirror_both_holder.c
+    src/proof_rotate_mirror_both_issuer.c
+    src/proof_rotate_mirror_holder.c
+    src/proof_rotate_mirror_holder_auditor.c
+    src/proof_rotate_mirror_issuer.c
+    src/proof_rotate_recover_balance.c
+    src/proof_rotate_recovery_key.c
     src/utility/mpt_utility.cpp
 )
 add_library(mpt-crypto ${MPT_CRYPTO_SOURCES})
