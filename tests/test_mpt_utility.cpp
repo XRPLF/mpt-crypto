@@ -293,7 +293,8 @@ make_recover_balance_fixture(uint64_t balance)
     return f;
 }
 
-// The prover and verifier of one mirror update mode.
+// The prover and verifier of one mirror update mode, so a test can loop over both modes and check
+// one mode's proof against the other mode's verifier.
 struct MirrorUpdateMode
 {
     bool holder;

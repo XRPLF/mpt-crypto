@@ -392,6 +392,8 @@ mpt_get_clawback_proof(
  *
  * @param priv              [in] 32-byte issuer secret key for issuer_pub.
  * @param issuer_pub        [in] 33-byte issuer key the issuer mirror is currently encrypted under.
+ *                               For a stale mirror this is an earlier key, not the currently
+ *                               registered one.
  * @param issuer_ciphertext [in] The holder's 66-byte issuer mirror.
  * @param balance           [in] The plaintext balance the issuer mirror encrypts.
  * @param blinding_factor   [in] The randomness used for the new ciphertext(s).
@@ -501,7 +503,8 @@ mpt_get_holder_key_recovery_proof(
  * balance as the holder's issuer mirror under the issuer key.
  *
  * @param priv                    [in] The issuer's 32-byte secret key.
- * @param pub                     [in] The issuer's 33-byte public key.
+ * @param pub                     [in] The issuer's 33-byte currently registered public key,
+ *                                     which the issuer mirror must be encrypted under.
  * @param balance                 [in] The plaintext balance the issuer mirror encrypts.
  * @param issuer_ciphertext       [in] The holder's 66-byte issuer mirror.
  * @param recovery_pubkey         [in] The holder's 33-byte RecoveryKey.
@@ -647,6 +650,8 @@ mpt_verify_clawback_proof(
  *
  * @param proof             [in] The 128-byte proof.
  * @param issuer_pub        [in] 33-byte issuer key the issuer mirror is currently encrypted under.
+ *                               For a stale mirror this is an earlier key, not the currently
+ *                               registered one.
  * @param issuer_ciphertext [in] The holder's 66-byte issuer mirror.
  * @param issuer            [in] New issuer key and new issuer mirror, or NULL.
  * @param auditor           [in] New auditor key and new auditor mirror, or NULL.
@@ -728,7 +733,8 @@ mpt_verify_holder_key_recovery_proof(
  * @brief Verify proof for ConfidentialMPTRecoverBalance.
  *
  * @param proof                   [in] The 128-byte proof.
- * @param pub                     [in] The issuer's 33-byte public key.
+ * @param pub                     [in] The issuer's 33-byte currently registered public key,
+ *                                     which the issuer mirror must be encrypted under.
  * @param issuer_ciphertext       [in] The holder's 66-byte issuer mirror.
  * @param recovery_pubkey         [in] The holder's 33-byte RecoveryKey.
  * @param new_spending_ciphertext [in] The 66-byte new spending balance under recovery_pubkey.
