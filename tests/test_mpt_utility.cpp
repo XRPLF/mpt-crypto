@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 // helper to create mock accounts and issuance IDs
@@ -144,6 +145,172 @@ make_send_fixture(size_t n_participants = 3)
 
     return f;
 }
+
+// Keys, ciphertexts and context for one ConfidentialMPTMirrorUpdate. The anchor is the issuer
+// mirror under the old issuer key (issuer mode) or the spending balance under the holder key
+// (holder mode). Both targets are encrypted with one shared blinding factor.
+struct MirrorUpdateFixture
+{
+    uint64_t balance = 0;
+    uint8_t anchor_priv[kMPT_PRIVKEY_SIZE];
+    uint8_t anchor_pub[kMPT_PUBKEY_SIZE];
+    uint8_t anchor_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    mpt_confidential_participant issuer;
+    mpt_confidential_participant auditor;
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+};
+
+static MirrorUpdateFixture
+make_mirror_update_fixture(bool holder_mode, uint64_t balance)
+{
+    MirrorUpdateFixture f;
+    f.balance = balance;
+
+    uint8_t anchor_bf[kMPT_BLINDING_FACTOR_SIZE];
+    EXPECT(mpt_generate_keypair(f.anchor_priv, f.anchor_pub) == 0);
+    EXPECT(mpt_generate_blinding_factor(anchor_bf) == 0);
+    EXPECT(mpt_encrypt_amount(balance, f.anchor_pub, anchor_bf, f.anchor_ct) == 0);
+
+    uint8_t unused_priv[kMPT_PRIVKEY_SIZE];
+    EXPECT(mpt_generate_keypair(unused_priv, f.issuer.pubkey) == 0);
+    EXPECT(mpt_generate_keypair(unused_priv, f.auditor.pubkey) == 0);
+
+    EXPECT(mpt_generate_blinding_factor(f.bf) == 0);
+    EXPECT(mpt_encrypt_amount(balance, f.issuer.pubkey, f.bf, f.issuer.ciphertext) == 0);
+    EXPECT(mpt_encrypt_amount(balance, f.auditor.pubkey, f.bf, f.auditor.ciphertext) == 0);
+
+    account_id issuer_acc = create_mock_id<account_id>(0x11);
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xDD);
+    if (holder_mode)
+    {
+        EXPECT(
+            mpt_get_mirror_update_context_hash(
+                holder_acc, issuance, 7, holder_acc, 3, f.ctx_hash) == 0);
+    }
+    else
+    {
+        EXPECT(
+            mpt_get_mirror_update_context_hash(
+                issuer_acc, issuance, 7, holder_acc, 0, f.ctx_hash) == 0);
+    }
+
+    return f;
+}
+
+// Keys, balances and context for one ConfidentialMPTHolderKeyUpdate rotation.
+struct HolderRotationFixture
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+    uint8_t new_priv[kMPT_PRIVKEY_SIZE];
+    uint8_t new_pub[kMPT_PUBKEY_SIZE];
+    mpt_balance_reencryption spending;
+    mpt_balance_reencryption inbox;
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+};
+
+static void
+reencrypt_balance(
+    uint64_t amount,
+    uint8_t const old_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const new_pub[kMPT_PUBKEY_SIZE],
+    mpt_balance_reencryption& out)
+{
+    uint8_t old_bf[kMPT_BLINDING_FACTOR_SIZE];
+    out.amount = amount;
+    EXPECT(mpt_generate_blinding_factor(old_bf) == 0);
+    EXPECT(mpt_encrypt_amount(amount, old_pub, old_bf, out.ciphertext) == 0);
+    EXPECT(mpt_generate_blinding_factor(out.blinding_factor) == 0);
+    EXPECT(mpt_encrypt_amount(amount, new_pub, out.blinding_factor, out.new_ciphertext) == 0);
+}
+
+static HolderRotationFixture
+make_holder_rotation_fixture(uint64_t spending, uint64_t inbox)
+{
+    HolderRotationFixture f;
+    EXPECT(mpt_generate_keypair(f.priv, f.pub) == 0);
+    EXPECT(mpt_generate_keypair(f.new_priv, f.new_pub) == 0);
+    reencrypt_balance(spending, f.pub, f.new_pub, f.spending);
+    reencrypt_balance(inbox, f.pub, f.new_pub, f.inbox);
+
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xDD);
+    EXPECT(mpt_get_holder_key_update_context_hash(holder_acc, issuance, 9, 5, f.ctx_hash) == 0);
+    return f;
+}
+
+static int
+verify_holder_rotation(HolderRotationFixture const& f, uint8_t const* proof)
+{
+    return mpt_verify_holder_key_rotation_proof(
+        proof,
+        f.pub,
+        f.new_pub,
+        f.spending.ciphertext,
+        f.spending.new_ciphertext,
+        f.inbox.ciphertext,
+        f.inbox.new_ciphertext,
+        f.ctx_hash);
+}
+
+// Keys, ciphertexts and context for one ConfidentialMPTRecoverBalance.
+struct RecoverBalanceFixture
+{
+    uint64_t balance = 0;
+    uint8_t issuer_priv[kMPT_PRIVKEY_SIZE];
+    uint8_t issuer_pub[kMPT_PUBKEY_SIZE];
+    uint8_t issuer_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t recovery_pub[kMPT_PUBKEY_SIZE];
+    uint8_t new_spending_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+};
+
+static RecoverBalanceFixture
+make_recover_balance_fixture(uint64_t balance)
+{
+    RecoverBalanceFixture f;
+    f.balance = balance;
+
+    uint8_t mirror_bf[kMPT_BLINDING_FACTOR_SIZE];
+    EXPECT(mpt_generate_keypair(f.issuer_priv, f.issuer_pub) == 0);
+    EXPECT(mpt_generate_blinding_factor(mirror_bf) == 0);
+    EXPECT(mpt_encrypt_amount(balance, f.issuer_pub, mirror_bf, f.issuer_ct) == 0);
+
+    uint8_t recovery_priv[kMPT_PRIVKEY_SIZE];
+    EXPECT(mpt_generate_keypair(recovery_priv, f.recovery_pub) == 0);
+    EXPECT(mpt_generate_blinding_factor(f.bf) == 0);
+    EXPECT(mpt_encrypt_amount(balance, f.recovery_pub, f.bf, f.new_spending_ct) == 0);
+
+    account_id issuer_acc = create_mock_id<account_id>(0x11);
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xDD);
+    EXPECT(
+        mpt_get_recover_balance_context_hash(issuer_acc, issuance, 11, holder_acc, f.ctx_hash) ==
+        0);
+    return f;
+}
+
+// The prover and verifier of one mirror update mode, so a test can loop over both modes and check
+// one mode's proof against the other mode's verifier.
+struct MirrorUpdateMode
+{
+    bool holder;
+    decltype(&mpt_get_issuer_mirror_update_proof) prove;
+    decltype(&mpt_verify_issuer_mirror_update_proof) verify;
+};
+
+constexpr MirrorUpdateMode kIssuerMirrorUpdate{
+    false,
+    mpt_get_issuer_mirror_update_proof,
+    mpt_verify_issuer_mirror_update_proof};
+
+constexpr MirrorUpdateMode kHolderMirrorUpdate{
+    true,
+    mpt_get_holder_mirror_update_proof,
+    mpt_verify_holder_mirror_update_proof};
 
 /* ============================================================================
  * Integration Tests
@@ -383,6 +550,106 @@ test_mpt_clawback_integrate()
             proof, claw_amount, issuer_pub, issuer_encrypted_bal, context_hash) == 0);
 }
 
+void
+test_mpt_mirror_update_integrate()
+{
+    // Issuer migrates both mirrors after rotating both keys.
+    {
+        MirrorUpdateFixture f = make_mirror_update_fixture(false, 1000);
+        uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+        EXPECT(
+            mpt_get_issuer_mirror_update_proof(
+                f.anchor_priv,
+                f.anchor_pub,
+                f.anchor_ct,
+                f.balance,
+                f.bf,
+                &f.issuer,
+                &f.auditor,
+                f.ctx_hash,
+                proof) == 0);
+        EXPECT(
+            mpt_verify_issuer_mirror_update_proof(
+                proof, f.anchor_pub, f.anchor_ct, &f.issuer, &f.auditor, f.ctx_hash) == 0);
+    }
+
+    // Holder migrates its own issuer mirror after an issuer key rotation.
+    {
+        MirrorUpdateFixture f = make_mirror_update_fixture(true, 1000);
+        uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+        EXPECT(
+            mpt_get_holder_mirror_update_proof(
+                f.anchor_priv,
+                f.anchor_pub,
+                f.anchor_ct,
+                f.balance,
+                f.bf,
+                &f.issuer,
+                nullptr,
+                f.ctx_hash,
+                proof) == 0);
+        EXPECT(
+            mpt_verify_holder_mirror_update_proof(
+                proof, f.anchor_pub, f.anchor_ct, &f.issuer, nullptr, f.ctx_hash) == 0);
+    }
+}
+
+void
+test_mpt_holder_key_update_integrate()
+{
+    // Rotation mode.
+    HolderRotationFixture f = make_holder_rotation_fixture(700, 300);
+    uint8_t rotation_proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE];
+    EXPECT(
+        mpt_get_holder_key_rotation_proof(
+            f.priv,
+            f.pub,
+            f.new_priv,
+            f.new_pub,
+            &f.spending,
+            &f.inbox,
+            f.ctx_hash,
+            rotation_proof) == 0);
+    EXPECT(verify_holder_rotation(f, rotation_proof) == 0);
+
+    // Recovery mode.
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xDD);
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+    EXPECT(mpt_get_holder_key_update_context_hash(holder_acc, issuance, 10, 0, ctx_hash) == 0);
+
+    uint8_t recovery_priv[kMPT_PRIVKEY_SIZE], recovery_pub[kMPT_PUBKEY_SIZE];
+    EXPECT(mpt_generate_keypair(recovery_priv, recovery_pub) == 0);
+    uint8_t recovery_proof[SECP256K1_ROTATE_RECOVERY_KEY_PROOF_SIZE];
+    EXPECT(
+        mpt_get_holder_key_recovery_proof(recovery_pub, recovery_priv, ctx_hash, recovery_proof) ==
+        0);
+    EXPECT(mpt_verify_holder_key_recovery_proof(recovery_proof, recovery_pub, ctx_hash) == 0);
+}
+
+void
+test_mpt_recover_balance_integrate()
+{
+    RecoverBalanceFixture f = make_recover_balance_fixture(1000);
+
+    uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+    EXPECT(
+        mpt_get_recover_balance_proof(
+            f.issuer_priv,
+            f.issuer_pub,
+            f.balance,
+            f.issuer_ct,
+            f.recovery_pub,
+            f.new_spending_ct,
+            f.bf,
+            f.ctx_hash,
+            proof) == 0);
+
+    EXPECT(
+        mpt_verify_recover_balance_proof(
+            proof, f.issuer_pub, f.issuer_ct, f.recovery_pub, f.new_spending_ct, f.ctx_hash) == 0);
+}
+
 /* ============================================================================
  * Unit Tests
  * ============================================================================ */
@@ -434,6 +701,14 @@ test_mpt_context_hash_validation()
     EXPECT(mpt_get_convert_back_context_hash(acc, issuance, 1, 2, nullptr) != 0);
     EXPECT(mpt_get_send_context_hash(acc, issuance, 1, other, 2, nullptr) != 0);
     EXPECT(mpt_get_clawback_context_hash(acc, issuance, 1, other, nullptr) != 0);
+
+    EXPECT(mpt_get_mirror_update_context_hash(acc, issuance, 1, other, 2, out_hash) == 0);
+    EXPECT(mpt_get_holder_key_update_context_hash(acc, issuance, 1, 2, out_hash) == 0);
+    EXPECT(mpt_get_recover_balance_context_hash(acc, issuance, 1, other, out_hash) == 0);
+
+    EXPECT(mpt_get_mirror_update_context_hash(acc, issuance, 1, other, 2, nullptr) != 0);
+    EXPECT(mpt_get_holder_key_update_context_hash(acc, issuance, 1, 2, nullptr) != 0);
+    EXPECT(mpt_get_recover_balance_context_hash(acc, issuance, 1, other, nullptr) != 0);
 }
 
 void
@@ -982,6 +1257,295 @@ test_mpt_clawback()
 }
 
 void
+test_mpt_mirror_update()
+{
+    // Every mode and target combination proves and verifies, and is rejected when any part of
+    // the statement changes.
+    for (auto const& [mode, other_mode] :
+         {std::pair{kIssuerMirrorUpdate, kHolderMirrorUpdate},
+          std::pair{kHolderMirrorUpdate, kIssuerMirrorUpdate}})
+    {
+        for (auto const& [with_issuer, with_auditor] :
+             {std::pair{true, false}, std::pair{false, true}, std::pair{true, true}})
+        {
+            MirrorUpdateFixture f = make_mirror_update_fixture(mode.holder, 1000);
+            mpt_confidential_participant const* issuer = with_issuer ? &f.issuer : nullptr;
+            mpt_confidential_participant const* auditor = with_auditor ? &f.auditor : nullptr;
+
+            uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+            EXPECT(
+                mode.prove(
+                    f.anchor_priv,
+                    f.anchor_pub,
+                    f.anchor_ct,
+                    f.balance,
+                    f.bf,
+                    issuer,
+                    auditor,
+                    f.ctx_hash,
+                    proof) == 0);
+
+            EXPECT(mode.verify(proof, f.anchor_pub, f.anchor_ct, issuer, auditor, f.ctx_hash) == 0);
+
+            // The issuer-mode and holder-mode proofs are domain separated.
+            EXPECT(
+                other_mode.verify(proof, f.anchor_pub, f.anchor_ct, issuer, auditor, f.ctx_hash) !=
+                0);
+
+            // Corrupted proof.
+            uint8_t bad_proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+            std::memcpy(bad_proof, proof, sizeof(proof));
+            bad_proof[0] ^= 0xFF;
+            EXPECT(
+                mode.verify(bad_proof, f.anchor_pub, f.anchor_ct, issuer, auditor, f.ctx_hash) !=
+                0);
+
+            // Wrong context hash.
+            uint8_t bad_ctx[kMPT_HALF_SHA_SIZE] = {0};
+            EXPECT(mode.verify(proof, f.anchor_pub, f.anchor_ct, issuer, auditor, bad_ctx) != 0);
+
+            // A target that encrypts a different balance under the same randomness.
+            mpt_confidential_participant wrong = with_issuer ? f.issuer : f.auditor;
+            EXPECT(mpt_encrypt_amount(f.balance + 1, wrong.pubkey, f.bf, wrong.ciphertext) == 0);
+            EXPECT(
+                mode.verify(
+                    proof,
+                    f.anchor_pub,
+                    f.anchor_ct,
+                    with_issuer ? &wrong : nullptr,
+                    with_issuer ? auditor : &wrong,
+                    f.ctx_hash) != 0);
+        }
+    }
+
+    // At least one target is required.
+    {
+        MirrorUpdateFixture f = make_mirror_update_fixture(false, 1000);
+        uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+        EXPECT(
+            mpt_get_issuer_mirror_update_proof(
+                f.anchor_priv,
+                f.anchor_pub,
+                f.anchor_ct,
+                f.balance,
+                f.bf,
+                nullptr,
+                nullptr,
+                f.ctx_hash,
+                proof) != 0);
+        EXPECT(
+            mpt_verify_issuer_mirror_update_proof(
+                proof, f.anchor_pub, f.anchor_ct, nullptr, nullptr, f.ctx_hash) != 0);
+    }
+
+    // Both targets must be encrypted with the same randomness.
+    {
+        MirrorUpdateFixture f = make_mirror_update_fixture(false, 1000);
+        uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+        EXPECT(
+            mpt_get_issuer_mirror_update_proof(
+                f.anchor_priv,
+                f.anchor_pub,
+                f.anchor_ct,
+                f.balance,
+                f.bf,
+                &f.issuer,
+                &f.auditor,
+                f.ctx_hash,
+                proof) == 0);
+
+        uint8_t other_bf[kMPT_BLINDING_FACTOR_SIZE];
+        EXPECT(mpt_generate_blinding_factor(other_bf) == 0);
+        mpt_confidential_participant auditor = f.auditor;
+        EXPECT(mpt_encrypt_amount(f.balance, auditor.pubkey, other_bf, auditor.ciphertext) == 0);
+
+        EXPECT(
+            mpt_get_issuer_mirror_update_proof(
+                f.anchor_priv,
+                f.anchor_pub,
+                f.anchor_ct,
+                f.balance,
+                f.bf,
+                &f.issuer,
+                &auditor,
+                f.ctx_hash,
+                proof) != 0);
+        EXPECT(
+            mpt_verify_issuer_mirror_update_proof(
+                proof, f.anchor_pub, f.anchor_ct, &f.issuer, &auditor, f.ctx_hash) != 0);
+    }
+}
+
+void
+test_mpt_holder_key_rotation()
+{
+    // An empty inbox rotates like any other balance.
+    {
+        HolderRotationFixture f = make_holder_rotation_fixture(700, 0);
+        uint8_t proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE];
+        EXPECT(
+            mpt_get_holder_key_rotation_proof(
+                f.priv, f.pub, f.new_priv, f.new_pub, &f.spending, &f.inbox, f.ctx_hash, proof) ==
+            0);
+        EXPECT(verify_holder_rotation(f, proof) == 0);
+    }
+
+    HolderRotationFixture f = make_holder_rotation_fixture(700, 300);
+    uint8_t proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE];
+    EXPECT(
+        mpt_get_holder_key_rotation_proof(
+            f.priv, f.pub, f.new_priv, f.new_pub, &f.spending, &f.inbox, f.ctx_hash, proof) == 0);
+
+    // Corrupted proof.
+    {
+        uint8_t bad_proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE];
+        std::memcpy(bad_proof, proof, sizeof(proof));
+        bad_proof[0] ^= 0xFF;
+        EXPECT(verify_holder_rotation(f, bad_proof) != 0);
+    }
+
+    // Wrong context hash.
+    {
+        HolderRotationFixture g = f;
+        std::memset(g.ctx_hash, 0, sizeof(g.ctx_hash));
+        EXPECT(verify_holder_rotation(g, proof) != 0);
+    }
+
+    // A different new key than the one proven.
+    {
+        HolderRotationFixture g = f;
+        uint8_t unused_priv[kMPT_PRIVKEY_SIZE];
+        EXPECT(mpt_generate_keypair(unused_priv, g.new_pub) == 0);
+        EXPECT(verify_holder_rotation(g, proof) != 0);
+    }
+
+    // New spending and inbox ciphertexts swapped.
+    {
+        HolderRotationFixture g = f;
+        std::memcpy(g.spending.new_ciphertext, f.inbox.new_ciphertext, kMPT_ELGAMAL_TOTAL_SIZE);
+        std::memcpy(g.inbox.new_ciphertext, f.spending.new_ciphertext, kMPT_ELGAMAL_TOTAL_SIZE);
+        EXPECT(verify_holder_rotation(g, proof) != 0);
+    }
+
+    // The spending and inbox re-encryptions must not share randomness.
+    {
+        HolderRotationFixture g = f;
+        std::memcpy(g.inbox.blinding_factor, g.spending.blinding_factor, kMPT_BLINDING_FACTOR_SIZE);
+        EXPECT(
+            mpt_encrypt_amount(
+                g.inbox.amount, g.new_pub, g.inbox.blinding_factor, g.inbox.new_ciphertext) == 0);
+        uint8_t shared_proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE];
+        EXPECT(
+            mpt_get_holder_key_rotation_proof(
+                g.priv,
+                g.pub,
+                g.new_priv,
+                g.new_pub,
+                &g.spending,
+                &g.inbox,
+                g.ctx_hash,
+                shared_proof) != 0);
+    }
+}
+
+void
+test_mpt_holder_key_recovery()
+{
+    account_id holder_acc = create_mock_id<account_id>(0x22);
+    mpt_issuance_id issuance = create_mock_id<mpt_issuance_id>(0xDD);
+    uint8_t ctx_hash[kMPT_HALF_SHA_SIZE];
+    EXPECT(mpt_get_holder_key_update_context_hash(holder_acc, issuance, 10, 0, ctx_hash) == 0);
+
+    uint8_t priv[kMPT_PRIVKEY_SIZE], pub[kMPT_PUBKEY_SIZE];
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+
+    uint8_t proof[SECP256K1_ROTATE_RECOVERY_KEY_PROOF_SIZE];
+    EXPECT(mpt_get_holder_key_recovery_proof(pub, priv, ctx_hash, proof) == 0);
+    EXPECT(mpt_verify_holder_key_recovery_proof(proof, pub, ctx_hash) == 0);
+
+    // The recovery proof and the ConfidentialMPTConvert proof are the same size but domain
+    // separated, so neither is accepted in place of the other.
+    uint8_t convert_proof[kMPT_SCHNORR_PROOF_SIZE];
+    EXPECT(mpt_get_convert_proof(pub, priv, ctx_hash, convert_proof) == 0);
+    EXPECT(mpt_verify_holder_key_recovery_proof(convert_proof, pub, ctx_hash) != 0);
+    EXPECT(mpt_verify_convert_proof(proof, pub, ctx_hash) != 0);
+
+    // Corrupted proof.
+    uint8_t bad_proof[SECP256K1_ROTATE_RECOVERY_KEY_PROOF_SIZE];
+    std::memcpy(bad_proof, proof, sizeof(proof));
+    bad_proof[0] ^= 0xFF;
+    EXPECT(mpt_verify_holder_key_recovery_proof(bad_proof, pub, ctx_hash) != 0);
+
+    // Wrong context hash.
+    uint8_t bad_ctx[kMPT_HALF_SHA_SIZE] = {0};
+    EXPECT(mpt_verify_holder_key_recovery_proof(proof, pub, bad_ctx) != 0);
+
+    // A different key than the one proven.
+    uint8_t other_priv[kMPT_PRIVKEY_SIZE], other_pub[kMPT_PUBKEY_SIZE];
+    EXPECT(mpt_generate_keypair(other_priv, other_pub) == 0);
+    EXPECT(mpt_verify_holder_key_recovery_proof(proof, other_pub, ctx_hash) != 0);
+}
+
+void
+test_mpt_recover_balance()
+{
+    RecoverBalanceFixture f = make_recover_balance_fixture(1000);
+    uint8_t proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+    EXPECT(
+        mpt_get_recover_balance_proof(
+            f.issuer_priv,
+            f.issuer_pub,
+            f.balance,
+            f.issuer_ct,
+            f.recovery_pub,
+            f.new_spending_ct,
+            f.bf,
+            f.ctx_hash,
+            proof) == 0);
+
+    // Corrupted proof.
+    {
+        uint8_t bad_proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE];
+        std::memcpy(bad_proof, proof, sizeof(proof));
+        bad_proof[0] ^= 0xFF;
+        EXPECT(
+            mpt_verify_recover_balance_proof(
+                bad_proof,
+                f.issuer_pub,
+                f.issuer_ct,
+                f.recovery_pub,
+                f.new_spending_ct,
+                f.ctx_hash) != 0);
+    }
+
+    // Wrong context hash.
+    {
+        uint8_t bad_ctx[kMPT_HALF_SHA_SIZE] = {0};
+        EXPECT(
+            mpt_verify_recover_balance_proof(
+                proof, f.issuer_pub, f.issuer_ct, f.recovery_pub, f.new_spending_ct, bad_ctx) != 0);
+    }
+
+    // A different recovery key than the one the balance was encrypted under.
+    {
+        uint8_t other_priv[kMPT_PRIVKEY_SIZE], other_pub[kMPT_PUBKEY_SIZE];
+        EXPECT(mpt_generate_keypair(other_priv, other_pub) == 0);
+        EXPECT(
+            mpt_verify_recover_balance_proof(
+                proof, f.issuer_pub, f.issuer_ct, other_pub, f.new_spending_ct, f.ctx_hash) != 0);
+    }
+
+    // A new spending balance that encrypts a different amount.
+    {
+        uint8_t wrong_ct[kMPT_ELGAMAL_TOTAL_SIZE];
+        EXPECT(mpt_encrypt_amount(f.balance + 1, f.recovery_pub, f.bf, wrong_ct) == 0);
+        EXPECT(
+            mpt_verify_recover_balance_proof(
+                proof, f.issuer_pub, f.issuer_ct, f.recovery_pub, wrong_ct, f.ctx_hash) != 0);
+    }
+}
+
+void
 run_integration_tests()
 {
     test_encryption_decryption_integrate();
@@ -989,6 +1553,9 @@ run_integration_tests()
     test_mpt_confidential_send_integrate();
     test_mpt_convert_back_integrate();
     test_mpt_clawback_integrate();
+    test_mpt_mirror_update_integrate();
+    test_mpt_holder_key_update_integrate();
+    test_mpt_recover_balance_integrate();
 }
 
 void
@@ -1003,6 +1570,10 @@ run_unit_tests()
     test_mpt_confidential_send();
     test_mpt_convert_back();
     test_mpt_clawback();
+    test_mpt_mirror_update();
+    test_mpt_holder_key_rotation();
+    test_mpt_holder_key_recovery();
+    test_mpt_recover_balance();
 }
 
 int
