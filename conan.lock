@@ -2,7 +2,7 @@
     "version": "0.5",
     "requires": [
         "zlib/1.3.2#1cb806da49011867778ffb6ac7190fcb%1778091116.056",
-        "secp256k1/0.7.1#b1f450b7f78a36fff75bb6934a356f3a%1782338840.242",
+        "secp256k1/0.7.1#cdda8d30dfebf254383ea77ba276dce0%1791646336.0",
         "openssl/3.6.2#4789bbf131b77d0515d15e094c8f697f%1778071755.506"
     ],
     "build_requires": [
