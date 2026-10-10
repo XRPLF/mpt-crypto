@@ -100,6 +100,15 @@ jobs:
         working-directory: ${{ env.BUILD_DIR }}
 
       - name: Run tests
+        # LeakSanitizer rides along with ASan on Linux and is on by default, so
+        # the .asan cells already fail on a leak. Setting it explicitly pins
+        # that: it is the coverage TOB-RIPCTXR-3 asked for (see #121), and if a
+        # future profile or image change turned it off, leaks would stop being
+        # caught without anything failing to say so. Only set on the .asan
+        # cells: Darwin ASan has no LeakSanitizer and rejects the option, and
+        # the macOS matrix entries carry no sanitizer_ext.
+        env:
+          ASAN_OPTIONS: ${{ matrix.sanitizer_ext == '.asan' && 'detect_leaks=1' || '' }}
         run: ctest --output-on-failure
         working-directory: ${{ env.BUILD_DIR }}
 
