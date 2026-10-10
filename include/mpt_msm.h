@@ -11,8 +11,8 @@ extern "C" {
 
 /* Two-profile MSM API.
  *
- * mpt_msm_variable_time   -- Vendored Pippenger/Straus from
- *                            libsecp256k1 (third_party/secp256k1-msm).
+ * mpt_msm_variable_time   -- libsecp256k1's internal Pippenger/Straus
+ *                            (secp256k1_ecmult_multi_var).
  *                            NOT constant-time. Verifier path only;
  *                            do not call with secret scalars.
  *

@@ -1,55 +1,49 @@
 /* SPDX-License-Identifier: MIT
  *
- * mpt_msm.c -- wrapper translation unit for the vendored
- * libsecp256k1 multi-scalar multiplication.
+ * mpt_msm.c -- wrapper around libsecp256k1's internal
+ * multi-scalar multiplication (secp256k1_ecmult_multi_var).
  *
- * This TU includes the vendored upstream headers (which contain
- * `static` definitions of the MSM and its supporting machinery)
- * and exposes a single external entry point: mpt_msm_variable_time.
+ * The MSM and its supporting machinery come from the internal
+ * headers that the secp256k1 conan package exports under private/,
+ * the same way mpt_scalar.c and bsgs_dlp.c use them. All upstream
+ * functions are static, so the only external symbol here is
+ * mpt_msm_variable_time.
  *
- * Because all upstream functions are file-local (static), the
- * vendored sources do not collide with any symbols in the linked
- * libsecp256k1 binary that the rest of mpt-crypto uses for the
- * public-API surface (tweak_mul, pubkey_combine, ecdh, etc.).
- *
- * See PROVENANCE for upstream version + commit hash and the
- * README for the threat model and design rationale.
+ * The G term reads the library's own precomputed tables
+ * (secp256k1_pre_g, secp256k1_pre_g_128). These are hidden-visibility
+ * symbols, so libsecp256k1 must be linked statically (the package
+ * default).
  */
 
-#define SECP256K1_BUILD
+/* Must not exceed the window libsecp256k1 was built with, since the
+ * precomputed G tables are sized by it. 15 is upstream's default and
+ * the conan recipe does not override it. */
+#define ECMULT_WINDOW_SIZE 15
 
-/* libsecp256k1 build-time configuration. The upstream library
- * picks the wide-multiplication strategy at compile time. We
- * mirror what its CMake build does: prefer __int128 if the
- * compiler supports it, otherwise fall back to 64x64->128
- * struct emulation. */
-#if defined(__SIZEOF_INT128__)
-#define SECP256K1_WIDEMUL_INT128 1
-#else
-#define SECP256K1_WIDEMUL_INT64 1
-#endif
-
-/* Disable runtime assertion macros that are normally driven by
- * libsecp256k1's autoconf. We treat the vendored MSM as a
- * release build. (VERIFY/CHECK still work for our internal use.) */
-#define USE_NUM_NONE 1
-#define USE_FIELD_INV_BUILTIN 1
-#define USE_SCALAR_INV_BUILTIN 1
-
-/* Match upstream's secp256k1.c include order. Order is significant:
- * ecmult_impl.h uses identifiers defined in group_impl.h, etc. Do
- * not let an autoformatter alphabetize this block. */
+/* Include order matches mpt_scalar.c and bsgs_dlp.c: low-level
+ * utilities first. ecmult_impl.h uses identifiers from group_impl.h,
+ * so do not let an autoformatter reorder this block. */
 /* clang-format off */
-#include <secp256k1.h>
-#include "assumptions.h"
-#include "checkmem.h"
-#include "util.h"
-#include "field_impl.h"
-#include "scalar_impl.h"
-#include "group_impl.h"
-#include "int128_impl.h"
-#include "ecmult_impl.h"
-#include "scratch_impl.h"
+#include <private/int128.h>
+#include <private/int128_impl.h>
+#include <private/util.h>
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
+#include <private/field.h>
+#include <private/field_impl.h>
+#include <private/scalar.h>
+#include <private/scalar_impl.h>
+#include <private/group.h>
+#include <private/group_impl.h>
+#include <private/ecmult.h>
+#include <private/ecmult_impl.h>
+#include <private/scratch.h>
+#include <private/scratch_impl.h>
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 /* clang-format on */
 
 /* Public API. */

@@ -1,10 +1,11 @@
 /* Calibration test for mpt_msm_variable_time.
  *
- * Compares the vendored MSM output against a reference computed via
- * the public libsecp256k1 API (tweak_mul + pubkey_combine in a loop).
- * If the two paths agree on randomized inputs, the vendoring is
- * mechanically correct: same secp256k1 group, same scalar/point
- * encodings, same big-endian conventions.
+ * Compares the MSM output against a reference computed via the public
+ * libsecp256k1 API (tweak_mul + pubkey_combine in a loop, pubkey_create
+ * for the G term). If the two paths agree on randomized inputs, the
+ * wrapper is mechanically correct: same secp256k1 group, same
+ * scalar/point encodings, same big-endian conventions, and the
+ * precomputed G tables match the window size the wrapper assumes.
  */
 
 #include "mpt_msm.h"
@@ -82,6 +83,52 @@ static int reference_msm(secp256k1_context const *ctx,
                                        SECP256K1_EC_COMPRESSED);
 }
 
+/* Reference for the G term: r = g*G (+ base, if given), via the public API.
+ * mpt_msm_variable_time evaluates g*G from libsecp256k1's precomputed
+ * tables, so this checks those tables against an independent path. */
+static int reference_add_g(secp256k1_context const *ctx,
+                           unsigned char r_sec1_33[33],
+                           unsigned char const base_sec1_33[33],
+                           unsigned char const g[32])
+{
+  secp256k1_pubkey gpk, base, sum;
+  secp256k1_pubkey const *parts[2];
+  size_t outlen = 33;
+
+  if (!secp256k1_ec_pubkey_create(ctx, &gpk, g))
+    return 0;
+  if (base_sec1_33 == NULL)
+    return secp256k1_ec_pubkey_serialize(ctx, r_sec1_33, &outlen, &gpk,
+                                         SECP256K1_EC_COMPRESSED);
+  if (!secp256k1_ec_pubkey_parse(ctx, &base, base_sec1_33, 33))
+    return 0;
+  parts[0] = &gpk;
+  parts[1] = &base;
+  if (!secp256k1_ec_pubkey_combine(ctx, &sum, parts, 2))
+    return 0;
+  return secp256k1_ec_pubkey_serialize(ctx, r_sec1_33, &outlen, &sum,
+                                       SECP256K1_EC_COMPRESSED);
+}
+
+static int check_equal(char const *label, int trial,
+                       unsigned char const r_msm[33],
+                       unsigned char const r_ref[33])
+{
+  if (memcmp(r_msm, r_ref, 33) == 0)
+  {
+    printf("trial %d (%s): OK\n", trial, label);
+    return 0;
+  }
+  fprintf(stderr, "trial %d (%s): MISMATCH\n  msm: ", trial, label);
+  for (int i = 0; i < 33; i++)
+    fprintf(stderr, "%02x", r_msm[i]);
+  fprintf(stderr, "\n  ref: ");
+  for (int i = 0; i < 33; i++)
+    fprintf(stderr, "%02x", r_ref[i]);
+  fprintf(stderr, "\n");
+  return 1;
+}
+
 static void random_scalar_nonzero_below_n(unsigned char out[32])
 {
   /* Reject 0 and values >= n. We don't need uniformity for a calibration test;
@@ -153,21 +200,33 @@ int main(void)
       continue;
     }
 
-    if (memcmp(r_msm, r_ref, 33) != 0)
+    failures += check_equal("points", trial, r_msm, r_ref);
+
+    /* G term alone (n = 0), then G term plus the same points. */
+    unsigned char g[32], r_pts[33];
+    random_scalar_nonzero_below_n(g);
+    memcpy(r_pts, r_ref, 33);
+
+    if (!mpt_msm_variable_time(ctx, r_msm, g, NULL, NULL, 0) ||
+        !reference_add_g(ctx, r_ref, NULL, g))
     {
-      fprintf(stderr, "trial %d: MISMATCH\n", trial);
-      fprintf(stderr, "  msm: ");
-      for (int i = 0; i < 33; i++)
-        fprintf(stderr, "%02x", r_msm[i]);
-      fprintf(stderr, "\n  ref: ");
-      for (int i = 0; i < 33; i++)
-        fprintf(stderr, "%02x", r_ref[i]);
-      fprintf(stderr, "\n");
+      fprintf(stderr, "trial %d (G only): call failed\n", trial);
       failures++;
     }
     else
     {
-      printf("trial %d: OK\n", trial);
+      failures += check_equal("G only", trial, r_msm, r_ref);
+    }
+
+    if (!mpt_msm_variable_time(ctx, r_msm, g, test_cb, &ti, N_POINTS) ||
+        !reference_add_g(ctx, r_ref, r_pts, g))
+    {
+      fprintf(stderr, "trial %d (G + points): call failed\n", trial);
+      failures++;
+    }
+    else
+    {
+      failures += check_equal("G + points", trial, r_msm, r_ref);
     }
   }
 
