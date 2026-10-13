@@ -162,10 +162,9 @@ test_encryption_decryption_integrate()
         0,
         1,
         1000,
-        // Large amounts are omitted for test performance. With BSGS these
-        // will be fast and can be re-enabled.
-        // 123456789,
-        // 10000000000ULL
+        123456789,
+        10000000000ULL,
+        (1ULL << 40) - 1,
     };
 
     for (uint64_t original_amount : test_amounts)
@@ -174,8 +173,17 @@ test_encryption_decryption_integrate()
 
         EXPECT(mpt_generate_blinding_factor(bf) == 0);
         EXPECT(mpt_encrypt_amount(original_amount, pub, bf, ciphertext) == 0);
-        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount, 0, 2000) == 0);
+        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == 0);
         EXPECT(decrypted_amount == original_amount);
+    }
+
+    // An amount outside the supported range cannot be recovered.
+    {
+        uint64_t decrypted_amount = 0;
+
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(1ULL << 40, pub, bf, ciphertext) == 0);
+        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == -1);
     }
 }
 

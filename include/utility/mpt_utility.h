@@ -171,25 +171,21 @@ mpt_encrypt_amount(
 
 /**
  * @brief Decrypts an MPT amount from a ciphertext pair.
+ *
+ * Uses the Baby-Step Giant-Step solver (secp256k1_elgamal_decrypt_bsgs) with
+ * the default parameters, decrypting amounts in [0, 2^MPT_BSGS_DEFAULT_BITS_TOTAL).
+ *
  * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
  * @param privkey    [in]  The 32-byte private key.
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
- * @param range_low  [in]  Lower bound of the search range (inclusive).
- * @param range_high [in]  Upper bound of the search range (inclusive).
- *                         Must satisfy range_low <= range_high and
- *                         range_high != UINT64_MAX.
- * @return 0 on success, -1 on failure, -2 if range_low > range_high or
- *         range_high == UINT64_MAX.
- * @note Performance scales linearly with (range_high - range_low). A range of [0, 1,000,000] takes
- * approximately 3 seconds on Apple Silicon. Do not pass arbitrarily large ranges.
+ * @return 0 on success, -1 on failure (invalid input, wrong key, or an amount
+ *         outside the supported range).
  */
 int
 mpt_decrypt_amount(
     uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t* out_amount,
-    uint64_t range_low,
-    uint64_t range_high);
+    uint64_t* out_amount);
 
 /* ============================================================================
  * ZKProof Generation

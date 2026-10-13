@@ -3,9 +3,11 @@
 #include <openssl/rand.h>
 #include <utility/mpt_utility.h>
 
+#include <bsgs_dlp.h>
 #include <secp256k1_mpt.h>
 
 #include <cstring>
+#include <mutex>
 #include <vector>
 
 // Platform endianness support for serialization
@@ -509,28 +511,62 @@ mpt_encrypt_amount(
     return 0;
 }
 
+/**
+ * @internal
+ * Shared BSGS context for mpt_decrypt_amount.
+ */
+static secp256k1_elgamal_bsgs_ctx const*
+mpt_bsgs_context()
+{
+    struct BsgsContextHolder
+    {
+        secp256k1_elgamal_bsgs_ctx* ctx = nullptr;
+
+        BsgsContextHolder()
+        {
+            if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
+            {
+                ctx = secp256k1_elgamal_bsgs_ctx_create(
+                    secp_ctx, MPT_BSGS_DEFAULT_BITS_TOTAL, MPT_BSGS_DEFAULT_L1, nullptr);
+            }
+        }
+
+        ~BsgsContextHolder()
+        {
+            secp256k1_elgamal_bsgs_ctx_destroy(ctx);
+        }
+    };
+
+    static BsgsContextHolder holder;
+    return holder.ctx;
+}
+
 int
 mpt_decrypt_amount(
     uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t* out_amount,
-    uint64_t range_low,
-    uint64_t range_high)
+    uint64_t* out_amount)
 {
     if (!in_ciphertext || !privkey || !out_amount)
         return -1;
-    if (range_low > range_high || range_high == UINT64_MAX)
-        return -2;
 
     secp256k1_context const* ctx = mpt_secp256k1_context();
     if (!ctx)
+        return -1;
+
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context();
+    if (!bsgs_ctx)
         return -1;
 
     secp256k1_pubkey c1, c2;
     if (!mpt_make_ec_pair(in_ciphertext, &c1, &c2))
         return -1;
 
-    if (secp256k1_elgamal_decrypt(ctx, out_amount, &c1, &c2, privkey, range_low, range_high) != 1)
+    static std::mutex bsgs_mutex;
+    std::lock_guard<std::mutex> const lock(bsgs_mutex);
+
+    if (secp256k1_elgamal_decrypt_bsgs(
+            ctx, bsgs_ctx, out_amount, &c1, &c2, privkey, MPT_BSGS_DEFAULT_WINDOW) != 1)
         return -1;
 
     return 0;
