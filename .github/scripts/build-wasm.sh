@@ -322,10 +322,12 @@ EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
 #    TextDecoder.decode throw in Chrome ("ArrayBuffer must not be resizable"), which
 #    breaks the xrpl.js browser tests. Setting 0 keeps growth but reallocates a plain
 #    (non-resizable) buffer on each grow — browser-safe, and no fixed memory cap.
-#  - MAXIMUM_MEMORY=128MB: a defense-in-depth ceiling. The real working set is small
-#    and stable — dominated by secp256k1's static tables, with per-op allocations
-#    freed and reused, so it does not grow over time — and stays far below this cap.
-#    The ceiling just bounds a hypothetical runaway well under the 2GB default.
+#  - MAXIMUM_MEMORY=128MB: a defense-in-depth ceiling. The working set is secp256k1's
+#    static tables plus the BSGS lookup tables that mpt_decrypt_amount builds on first
+#    use and keeps for the life of the module: about 22 MB at the default width
+#    (peaking around 45 MB while it is built), less for smaller ceilings. Per-op
+#    allocations are freed and reused, so it stays well below this cap; the ceiling
+#    bounds a hypothetical runaway well under the 2GB default.
 #  - EXPORTED_RUNTIME_METHODS: the TS marshalling layer needs HEAPU8 + ccall/cwrap.
 #  - ENVIRONMENT=web,node: the base .js/.mjs glues run under Node; a dedicated
 #    browser glue is re-linked below as web,worker (no Node branch) — see the links.
