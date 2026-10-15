@@ -175,6 +175,12 @@ mpt_encrypt_amount(
  * Uses the Baby-Step Giant-Step solver (secp256k1_elgamal_decrypt_bsgs) with
  * the default parameters, decrypting amounts in [0, 2^MPT_BSGS_DEFAULT_BITS_TOTAL).
  *
+ * @warning Decryption is not constant-time: it takes longer for larger amounts,
+ *          so its timing reveals the approximate amount. Where a third party can
+ *          observe the timing, such as a server decrypting on request, callers
+ *          must hide it, e.g. by decrypting off the request path and caching
+ *          balances, or by padding responses to a fixed duration.
+ *
  * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
  * @param privkey    [in]  The 32-byte private key.
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
