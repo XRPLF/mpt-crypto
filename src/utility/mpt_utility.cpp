@@ -546,6 +546,9 @@ mpt_bsgs_context(int bits_total)
     secp256k1_elgamal_bsgs_ctx*& ctx = cache.ctxs[bits_total];
     if (!ctx)
     {
+        // No disk cache (nullptr), so each process builds the table on its first decrypt for this
+        // width and reuses it afterwards. The table's memory and build time grow with the width.
+        // bsgs_dlp.h recommends a cache path for long-running or frequently restarted processes.
         if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
             ctx = secp256k1_elgamal_bsgs_ctx_create(
                 secp_ctx, bits_total, bits_total / 2 + 2, nullptr);
