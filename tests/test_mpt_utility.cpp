@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 // helper to create mock accounts and issuance IDs
@@ -185,6 +186,54 @@ test_encryption_decryption_integrate()
         EXPECT(mpt_encrypt_amount(1ULL << 40, pub, bf, ciphertext) == 0);
         EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == -1);
     }
+}
+
+void
+test_decryption_with_ceiling_integrate()
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+
+    auto const decrypt = [&](uint64_t amount, uint64_t max_amount, uint64_t& out) {
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(amount, pub, bf, ciphertext) == 0);
+        return mpt_decrypt_amount_with_ceiling(ciphertext, priv, max_amount, &out);
+    };
+
+    // Amounts up to and including the ceiling are recovered, for a ceiling
+    // below the smallest table, one at a power-of-two boundary, and the largest
+    // allowed ceiling.
+    for (auto const& [amount, max_amount] : std::vector<std::pair<uint64_t, uint64_t>>{
+             {0, 1000},
+             {1000, 1000},
+             {1ULL << 30, 1ULL << 30},
+             {(1ULL << 40) - 1, (1ULL << 40) - 1},
+         })
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(amount, max_amount, decrypted_amount) == 0);
+        EXPECT(decrypted_amount == amount);
+    }
+
+    // An amount above the ceiling is rejected, even when the table covering
+    // the ceiling would find it.
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1001, 1000, decrypted_amount) == -1);
+        EXPECT(decrypt((1ULL << 30) + 1, 1ULL << 30, decrypted_amount) == -1);
+    }
+
+    // A ceiling outside the supported range is rejected.
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1, 1ULL << 40, decrypted_amount) == -2);
+    }
+
+    // A null output pointer is rejected.
+    EXPECT(mpt_decrypt_amount_with_ceiling(ciphertext, priv, 1000, nullptr) == -1);
 }
 
 void
@@ -993,6 +1042,7 @@ void
 run_integration_tests()
 {
     test_encryption_decryption_integrate();
+    test_decryption_with_ceiling_integrate();
     test_mpt_confidential_convert_integrate();
     test_mpt_confidential_send_integrate();
     test_mpt_convert_back_integrate();

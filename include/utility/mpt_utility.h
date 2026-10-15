@@ -187,6 +187,29 @@ mpt_decrypt_amount(
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
     uint64_t* out_amount);
 
+/**
+ * @brief Decrypts an MPT amount known to be at most max_amount.
+ *
+ * Like mpt_decrypt_amount, but searches only [0, max_amount]. A smaller
+ * ceiling uses a smaller Baby-Step Giant-Step table, so it needs less memory,
+ * builds faster on first use, and gives up sooner when the amount is not
+ * found. It does not speed up decrypting an amount that is found.
+ *
+ * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
+ * @param privkey    [in]  The 32-byte private key.
+ * @param max_amount [in]  The largest amount to search for. Must be below
+ *                         2^MPT_BSGS_DEFAULT_BITS_TOTAL, i.e. 2^40.
+ * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
+ * @return 0 on success, -1 on failure (invalid input, wrong key, or an amount
+ *         above max_amount), -2 if max_amount is not below 2^40.
+ */
+int
+mpt_decrypt_amount_with_ceiling(
+    uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    uint64_t max_amount,
+    uint64_t* out_amount);
+
 /* ============================================================================
  * ZKProof Generation
  * ============================================================================ */

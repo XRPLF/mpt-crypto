@@ -513,38 +513,56 @@ mpt_encrypt_amount(
 
 /**
  * @internal
- * Shared BSGS context for mpt_decrypt_amount.
+ * Smallest search width, in bits, of a BSGS table built for
+ * mpt_decrypt_amount_with_ceiling. Smaller ceilings share this table.
+ */
+static constexpr int kMPT_BSGS_MIN_BITS = 24;
+
+/**
+ * @internal
+ * Shared BSGS context covering [0, 2^bits_total), created on first use and
+ * kept for the life of the process. bits_total must be in
+ * [kMPT_BSGS_MIN_BITS, MPT_BSGS_DEFAULT_BITS_TOTAL]. The baby-step width is
+ * bits_total / 2 + 2, which gives MPT_BSGS_DEFAULT_L1 at the default width.
+ *
+ * The caller must hold the BSGS mutex.
  */
 static secp256k1_elgamal_bsgs_ctx const*
-mpt_bsgs_context()
+mpt_bsgs_context(int bits_total)
 {
-    struct BsgsContextHolder
+    struct BsgsContextCache
     {
-        secp256k1_elgamal_bsgs_ctx* ctx = nullptr;
+        secp256k1_elgamal_bsgs_ctx* ctxs[MPT_BSGS_DEFAULT_BITS_TOTAL + 1] = {};
 
-        BsgsContextHolder()
+        ~BsgsContextCache()
         {
-            if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
-            {
-                ctx = secp256k1_elgamal_bsgs_ctx_create(
-                    secp_ctx, MPT_BSGS_DEFAULT_BITS_TOTAL, MPT_BSGS_DEFAULT_L1, nullptr);
-            }
-        }
-
-        ~BsgsContextHolder()
-        {
-            secp256k1_elgamal_bsgs_ctx_destroy(ctx);
+            for (secp256k1_elgamal_bsgs_ctx* ctx : ctxs)
+                secp256k1_elgamal_bsgs_ctx_destroy(ctx);
         }
     };
 
-    static BsgsContextHolder holder;
-    return holder.ctx;
+    static BsgsContextCache cache;
+
+    secp256k1_elgamal_bsgs_ctx*& ctx = cache.ctxs[bits_total];
+    if (!ctx)
+    {
+        if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
+            ctx = secp256k1_elgamal_bsgs_ctx_create(
+                secp_ctx, bits_total, bits_total / 2 + 2, nullptr);
+    }
+    return ctx;
 }
 
-int
-mpt_decrypt_amount(
+/**
+ * @internal
+ * Decrypts an amount in [0, 2^bits_total) with the shared BSGS context for
+ * that width.
+ */
+static int
+mpt_internal_decrypt_bsgs(
     uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    int bits_total,
     uint64_t* out_amount)
 {
     if (!in_ciphertext || !privkey || !out_amount)
@@ -554,10 +572,6 @@ mpt_decrypt_amount(
     if (!ctx)
         return -1;
 
-    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context();
-    if (!bsgs_ctx)
-        return -1;
-
     secp256k1_pubkey c1, c2;
     if (!mpt_make_ec_pair(in_ciphertext, &c1, &c2))
         return -1;
@@ -565,10 +579,55 @@ mpt_decrypt_amount(
     static std::mutex bsgs_mutex;
     std::lock_guard<std::mutex> const lock(bsgs_mutex);
 
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context(bits_total);
+    if (!bsgs_ctx)
+        return -1;
+
     if (secp256k1_elgamal_decrypt_bsgs(
             ctx, bsgs_ctx, out_amount, &c1, &c2, privkey, MPT_BSGS_DEFAULT_WINDOW) != 1)
         return -1;
 
+    return 0;
+}
+
+int
+mpt_decrypt_amount(
+    uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    uint64_t* out_amount)
+{
+    return mpt_internal_decrypt_bsgs(
+        in_ciphertext, privkey, MPT_BSGS_DEFAULT_BITS_TOTAL, out_amount);
+}
+
+int
+mpt_decrypt_amount_with_ceiling(
+    uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    uint64_t max_amount,
+    uint64_t* out_amount)
+{
+    if (max_amount >= (1ULL << MPT_BSGS_DEFAULT_BITS_TOTAL))
+        return -2;
+    if (!out_amount)
+        return -1;
+
+    // Search the smallest supported power-of-two range that contains max_amount.
+    int bits_total = 0;
+    for (uint64_t v = max_amount; v != 0; v >>= 1)
+        ++bits_total;
+    if (bits_total < kMPT_BSGS_MIN_BITS)
+        bits_total = kMPT_BSGS_MIN_BITS;
+
+    uint64_t amount = 0;
+    if (mpt_internal_decrypt_bsgs(in_ciphertext, privkey, bits_total, &amount) != 0)
+        return -1;
+
+    // The table covers a power-of-two range; enforce the exact ceiling.
+    if (amount > max_amount)
+        return -1;
+
+    *out_amount = amount;
     return 0;
 }
 
