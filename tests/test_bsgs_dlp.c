@@ -18,6 +18,7 @@
  *      baby-step index off-by-ones that drop odd multiples of 2^(l1-1))
  *  12. window parameter validation (reject out-of-range windows)
  *  13. Corrupt cache stash_count rejected (no out-of-bounds read on load)
+ *  14. Parallel decrypt matches single-threaded (threads=1,4,10)
  */
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
@@ -60,6 +61,8 @@ static void test_null_rejection(const secp256k1_context *ctx,
 static void test_decrypt_full_coverage(const secp256k1_context *ctx);
 static void test_window_validation(const secp256k1_context *ctx,
                                    secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_parallel_decrypt(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_cache_corrupt_stash(const secp256k1_context *ctx);
 
 /* --- helpers --- */
@@ -108,6 +111,7 @@ int main(void)
   test_roundtrip(ctx, bsgs);
   test_window_validation(ctx, bsgs);
   test_decrypt_full_coverage(ctx);
+  test_parallel_decrypt(ctx, bsgs);
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
   secp256k1_context_destroy(ctx);
@@ -361,7 +365,7 @@ static void test_cache_roundtrip(const secp256k1_context *ctx)
  *
  * The sweep is repeated across several window sizes. This matters because
  * the solver takes different code paths depending on W vs J:
- *   - W >= J  (e.g. the default 128): windowed loop never fires, tail only.
+ *   - W >= J  (e.g. the default 512): windowed loop never fires, tail only.
  *   - W <  J  (e.g. 8): full windowed batches exercise fe_batch_invert_tree.
  *   - W == 1: single-element batch-inversion tree (degenerate edge case).
  * Without the small-window passes the windowed TreeMon path is untested. */
@@ -515,6 +519,56 @@ static void test_null_rejection(const secp256k1_context *ctx,
                                         TEST_WINDOW) == 0);
   EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, NULL,
                                         TEST_WINDOW) == 0);
+
+  printf("Test passed!\n");
+}
+
+/* Correctness-only check for the parallel solver: confirms
+ * secp256k1_elgamal_decrypt_bsgs_parallel() recovers the right plaintext
+ * across threads=1,4,10 and agrees with the single-threaded path. This is a
+ * functional/parity test at TEST_BITS=28, not a performance benchmark — the
+ * small range decrypts near-instantly and says nothing about speedup. See the
+ * commit message / ePrint 2026/2102 for timing numbers at larger bit sizes. */
+static void test_parallel_decrypt(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel decrypt (threads=1,4,10)...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  /* Test m=0 */
+  encrypt_amount(ctx, 0, &pubkey, &c1, &c2);
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 1) == 1);
+  EXPECT(recovered == 0);
+
+  /* Test m=1 */
+  encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(recovered == 1);
+
+  /* Test m=42 with 10 threads */
+  encrypt_amount(ctx, 42, &pubkey, &c1, &c2);
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 10) == 1);
+  EXPECT(recovered == 42);
+
+  /* Verify parallel matches single-threaded */
+  uint64_t m_test = 1000;
+  encrypt_amount(ctx, m_test, &pubkey, &c1, &c2);
+  uint64_t r_single = 0, r_parallel = 0;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &r_single, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 1);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &r_parallel, &c1, &c2, privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(r_single == r_parallel);
+  EXPECT(r_single == m_test);
 
   printf("Test passed!\n");
 }
