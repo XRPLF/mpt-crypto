@@ -1019,8 +1019,8 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   uint64_t J = b->J;
   if (J <= 1)
     return 0;
-  if ((uint64_t)nthreads > (J - 1))
-    nthreads = (int)(J - 1);
+  if ((uint64_t)nthreads > J)
+    nthreads = (int)J;
 
   pthread_t *tids = (pthread_t *)calloc((size_t)nthreads, sizeof(pthread_t));
   bsgs_worker_args *args =
@@ -1040,7 +1040,11 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   secp256k1_ge target_ge;
   pubkey_to_ge(target_pm, &target_ge);
 
-  uint64_t total = J - 1;
+  /* Giant steps j = 1 .. J inclusive (J work units), matching the
+   * single-threaded bsgs_solve() coverage. Omitting j = J would leave the
+   * top Mhalf = 2^(l1-1) plaintexts near 2^bits_total unrecoverable (they are
+   * only reachable via m = J*M - i). */
+  uint64_t total = J;
   uint64_t chunk = total / (uint64_t)nthreads;
   uint64_t rem = total % (uint64_t)nthreads;
   uint64_t jcur = 1;
