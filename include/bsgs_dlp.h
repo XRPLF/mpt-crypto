@@ -90,9 +90,9 @@ extern "C" {
 #define MPT_BSGS_DEFAULT_L1 22
 
 /**
- * Default window size for the windowed TreeMon batch inversion in the
- * giant-step loop. Must be a power of 2. Larger values amortize field
- * inversions more aggressively at the cost of more stack allocation.
+ * Default window size for the windowed batch inversion in the
+ * giant-step loop. Larger values amortize field inversions more 
+ * aggressively at the cost of more stack allocation.
  */
 #define MPT_BSGS_DEFAULT_WINDOW 512
 
@@ -164,7 +164,7 @@ secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx* bsgs_ctx);
  * @param[in]  privkey   32-byte private key scalar.
  * @param[in]  window    Window size for batch inversion. Must be in
  *                       [1, MPT_BSGS_MAX_WINDOW]; values outside that range
- *                       return 0. Internally rounded up to a power of 2.
+ *                       return 0.
  *                       Use MPT_BSGS_DEFAULT_WINDOW.
  *
  * @return 1 if the amount was successfully recovered and *amount is set;

@@ -443,9 +443,8 @@ static void test_window_validation(const secp256k1_context *ctx,
                                         1) == 1);
   EXPECT(out == 42);
 
-  /* A non-power-of-2 in-range window still decrypts correctly: the solver
-   * rounds it up to the next power of 2 internally (while (w < W) w <<= 1),
-   * so 100 -> 128. The cases above use only 1 or powers of 2 and never
+  /* A non-power-of-2 in-range window still decrypts correctly.
+   * The cases above use only 1 or powers of 2 and never
    * exercise that round-up path. */
   out = 0xDEADBEEFu;
   EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &out, &c1, &c2, privkey,
