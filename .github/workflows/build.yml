@@ -61,9 +61,15 @@ jobs:
           fetch-depth: 0
 
       - name: Prepare runner
-        uses: XRPLF/actions/prepare-runner@7bf7ceca5932114abdd0d43493c3c30c5a654e13
+        uses: XRPLF/actions/prepare-runner@8e98d61f011fd2a67f3fde5f0f075662c099a527
         with:
           enable_ccache: false
+
+      # prepare-runner now points CONAN_HOME at RUNNER_TEMP, but the clio-ci
+      # image ships its compiler profiles (gcc.asan, clang.tsan, ...) in /root/.conan2.
+      - name: Use the image's Conan home (Linux)
+        if: ${{ runner.os == 'Linux' }}
+        run: echo "CONAN_HOME=/root/.conan2" >> "${GITHUB_ENV}"
 
       # --force also overrides the xrplf remote the clio-ci image preconfigures.
       - name: Set up Conan remote
