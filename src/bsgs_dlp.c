@@ -133,38 +133,6 @@ static void ge_xb32(const secp256k1_ge *ge, unsigned char buf[32])
   secp256k1_fe_get_b32(buf, &x);
 }
 
-/*
- * Check Jacobian point a == affine point b WITHOUT field inversion.
- *
- * a = (X:Y:Z) Jacobian, b = (x,y) affine.
- * Equal iff X == x*Z^2  AND  Y == y*Z^3  (mod p).
- * Cost: 1 sqr + 2 mul + 2 normalise + 2 compare.
- */
-static int gej_eq_ge(const secp256k1_gej *a, const secp256k1_ge *b)
-{
-  secp256k1_fe z2, z3, u, s, ax, ay;
-  if (a->infinity)
-    return b->infinity;
-  if (b->infinity)
-    return 0;
-
-  secp256k1_fe_sqr(&z2, &a->z);
-  secp256k1_fe_mul(&z3, &z2, &a->z);
-
-  secp256k1_fe_mul(&u, &b->x, &z2);
-  ax = a->x;
-  secp256k1_fe_normalize_var(&ax);
-  secp256k1_fe_normalize_var(&u);
-  if (!secp256k1_fe_equal(&ax, &u))
-    return 0;
-
-  secp256k1_fe_mul(&s, &b->y, &z3);
-  ay = a->y;
-  secp256k1_fe_normalize_var(&ay);
-  secp256k1_fe_normalize_var(&s);
-  return secp256k1_fe_equal(&ay, &s);
-}
-
 /* =========================================================================
  * Windowed TreeMon batch inversion
  *
@@ -815,16 +783,13 @@ static void *bsgs_worker_thread(void *argp)
     return NULL;
   }
 
-  secp256k1_gej jMGj;
-  pubkey_to_gej(&jMG_pub, &jMGj);
-
   secp256k1_ge jMG_ge, neg_jMG_ge;
   pubkey_to_ge(&jMG_pub, &jMG_ge);
   ge_negate(&neg_jMG_ge, &jMG_ge);
 
   secp256k1_gej Qj;
   pubkey_to_gej(&a->targetPm, &Qj);
-  secp256k1_gej_add_ge(&Qj, &Qj, &neg_jMG_ge);
+  secp256k1_gej_add_ge_var(&Qj, &Qj, &neg_jMG_ge, NULL);
 
   uint64_t max_m =
       (b->bits_total < 64) ? ((1ULL << b->bits_total) - 1) : UINT64_MAX;
@@ -838,7 +803,7 @@ static void *bsgs_worker_thread(void *argp)
     int early = 0;
     for (size_t w = 0; w < W; w++)
     {
-      if (gej_eq_ge(&jMGj, &a->target_ge))
+      if (secp256k1_gej_is_infinity(&Qj))
       {
         uint64_t cand = (j + (uint64_t)w) * b->M;
         if (cand <= max_m)
@@ -856,8 +821,7 @@ static void *bsgs_worker_thread(void *argp)
       }
       Q_win[w] = Qj;
       j_win[w] = j + (uint64_t)w;
-      secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
-      secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
+      secp256k1_gej_add_ge_var(&Qj, &Qj, &b->neg_MG_ge, NULL);
     }
     if (early)
       break;
@@ -918,7 +882,7 @@ static void *bsgs_worker_thread(void *argp)
   /* Remaining steps (< W) */
   while (j < a->j_end && !atomic_load_explicit(a->found, memory_order_relaxed))
   {
-    if (gej_eq_ge(&jMGj, &a->target_ge))
+    if (secp256k1_gej_is_infinity(&Qj))
     {
       uint64_t cand = j * b->M;
       if (cand <= max_m)
@@ -969,8 +933,7 @@ static void *bsgs_worker_thread(void *argp)
     }
     if (got_it)
       break;
-    secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
-    secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
+    secp256k1_gej_add_ge_var(&Qj, &Qj, &b->neg_MG_ge, NULL);
     j++;
   }
 
@@ -1124,11 +1087,7 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   /* Qj = target - 1*MG (Q for first giant step j=1) */
   secp256k1_gej Qj;
   pubkey_to_gej(target_pm, &Qj);
-  secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
-
-  /* jMGj tracks j*MG in Jacobian for the direct equality check. */
-  secp256k1_gej jMGj;
-  secp256k1_gej_set_ge(&jMGj, &b->MG_ge);
+  secp256k1_gej_add_ge_var(&Qj, &Qj, &b->neg_MG_ge, NULL);
 
   /* Ensure window is at least 1 and a power of 2. */
   size_t W = (size_t)(window < 1 ? 1 : window);
@@ -1163,12 +1122,10 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   {
     for (size_t w = 0; w < W; w++)
     {
-      /* Direct check: j*MG == target → m = j*M (baby i = 0). A direct hit
-       * uniquely determines m; Qj is the point at infinity here and must not
-       * reach batch inversion, so resolve the range check and return now.
-       * m = j*M out of range (only possible at j = J, m = 2^bits_total)
-       * means the plaintext is out of range: report not-found. */
-      if (gej_eq_ge(&jMGj, &target_ge))
+      /* If Qj = Pm - jMG is the point at infinity, then Pm = jMG.
+       * To avoid running batch inversion on the point at infinity,
+       * compute m = j * M and return immediately. */
+      if (secp256k1_gej_is_infinity(&Qj))
       {
         uint64_t cand = (j + (uint64_t)w) * b->M;
         if (cand <= max_m)
@@ -1184,8 +1141,7 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
       }
       Q_win[w] = Qj;
       j_win[w] = j + (uint64_t)w;
-      secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
-      secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
+      secp256k1_gej_add_ge_var(&Qj, &Qj, &b->neg_MG_ge, NULL);
     }
     j += (uint64_t)W;
 
@@ -1226,7 +1182,7 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   /* Tail loop — remaining steps that don't fill a full window. */
   for (; j <= b->J && !result; j++)
   {
-    if (gej_eq_ge(&jMGj, &target_ge))
+    if (secp256k1_gej_is_infinity(&Qj))
     {
       uint64_t cand = j * b->M;
       if (cand <= max_m)
@@ -1263,8 +1219,7 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
 
     if (!result)
     {
-      secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
-      secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
+      secp256k1_gej_add_ge_var(&Qj, &Qj, &b->neg_MG_ge, NULL);
     }
   }
 
