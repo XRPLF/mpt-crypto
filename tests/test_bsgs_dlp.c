@@ -19,6 +19,7 @@
  *  12. window parameter validation (reject out-of-range windows)
  *  13. Corrupt cache stash_count rejected (no out-of-bounds read on load)
  *  14. Parallel decrypt matches single-threaded (threads=1,4,10)
+ *  15. Parallel decrypt the maximum value for bits_total=28 (boundary)
  */
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
@@ -62,6 +63,8 @@ static void test_decrypt_full_coverage(const secp256k1_context *ctx);
 static void test_window_validation(const secp256k1_context *ctx,
                                    secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_parallel_decrypt(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_parallel_decrypt_boundary(const secp256k1_context *ctx,
                                   secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_cache_corrupt_stash(const secp256k1_context *ctx);
 
@@ -112,6 +115,8 @@ int main(void)
   test_window_validation(ctx, bsgs);
   test_decrypt_full_coverage(ctx);
   test_parallel_decrypt(ctx, bsgs);
+  test_parallel_decrypt_boundary(ctx, bsgs);
+
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
   secp256k1_context_destroy(ctx);
@@ -569,6 +574,27 @@ static void test_parallel_decrypt(const secp256k1_context *ctx,
              ctx, bsgs, &r_parallel, &c1, &c2, privkey, TEST_WINDOW, 4) == 1);
   EXPECT(r_single == r_parallel);
   EXPECT(r_single == m_test);
+
+  printf("Test passed!\n");
+}
+
+static void test_parallel_decrypt_boundary(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel_decrypt at maximum range boundary (2^%d - 1)...\n",
+         TEST_BITS);
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  uint64_t max_amount = (1ULL << TEST_BITS) - 1;
+  encrypt_amount(ctx, max_amount, &pubkey, &c1, &c2);
+
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &recovered, &c1, &c2,
+                                        privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(recovered == max_amount);
 
   printf("Test passed!\n");
 }

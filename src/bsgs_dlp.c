@@ -752,7 +752,7 @@ void secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx *bsgs_ctx)
  *
  *   - j=0 is handled once, up front, on the calling thread: a direct baby
  *     lookup for Pm = i*G. Only the j >= 1 range is parallelized.
- *   - The giant-step range [1, J) is partitioned into N contiguous chunks
+ *   - The giant-step range [1, J] is partitioned into N contiguous chunks
  *     (remainder spread one-per-thread across the first few workers). Each
  *     worker owns [j_start, j_end) and recomputes its own starting point
  *     Q = Pm - j_start*M*G, so the threads share no mutable solver state.
@@ -1005,22 +1005,21 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   /* j=0: direct baby lookup for Pm = i*G */
   unsigned char txb[32];
   memcpy(txb, t33 + 1, 32);
-  {
-    uint32_t cands[3 + CUCKOO_STASH_SZ];
-    int nc = map_get_all(&b->baby, txb, cands);
-    for (int ci = 0; ci < nc; ci++)
-      if (verify_candidate(ctx, (uint64_t)cands[ci], t33))
-      {
-        *out_m = (uint64_t)cands[ci];
-        return 1;
-      }
+  uint32_t cands[3 + CUCKOO_STASH_SZ];
+  int nc = map_get_all(&b->baby, txb, cands);
+  for (int ci = 0; ci < nc; ci++){
+    if (verify_candidate(ctx, (uint64_t)cands[ci], t33))
+    {
+      *out_m = (uint64_t)cands[ci];
+      return 1;
+    }
   }
 
   uint64_t J = b->J;
   if (J <= 1)
     return 0;
-  if ((uint64_t)nthreads > (J - 1))
-    nthreads = (int)(J - 1);
+  if ((uint64_t)nthreads > (J))
+    nthreads = (int)(J);
 
   pthread_t *tids = (pthread_t *)calloc((size_t)nthreads, sizeof(pthread_t));
   bsgs_worker_args *args =
@@ -1040,25 +1039,23 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   secp256k1_ge target_ge;
   pubkey_to_ge(target_pm, &target_ge);
 
-  uint64_t total = J - 1;
-  uint64_t chunk = total / (uint64_t)nthreads;
-  uint64_t rem = total % (uint64_t)nthreads;
+  uint64_t chunk = (J + (uint64_t)nthreads - 1)/(uint64_t)nthreads;
   uint64_t jcur = 1;
 
   for (int t = 0; t < nthreads; t++)
   {
-    uint64_t take = chunk + ((uint64_t)t < rem ? 1 : 0);
     args[t].b = b;
     args[t].targetPm = *target_pm;
     memcpy(args[t].target33, t33, 33);
     args[t].target_ge = target_ge;
     args[t].j_start = jcur;
-    args[t].j_end = jcur + take;
+    args[t].j_end = jcur + chunk < J + 1 ?
+                    jcur + chunk : J + 1 ; /* j_end is not included */
     args[t].window = window;
     args[t].found = &found;
     args[t].found_m = &found_m;
     args[t].found_mu = &found_mu;
-    jcur += take;
+    jcur += chunk;
     pthread_create(&tids[t], NULL, bsgs_worker_thread, &args[t]);
   }
 
