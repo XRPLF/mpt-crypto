@@ -65,11 +65,13 @@ jobs:
         with:
           enable_ccache: false
 
-      - name: Set up Conan (macOS)
+      # --force also overrides the xrplf remote the clio-ci image preconfigures.
+      - name: Set up Conan remote
+        run: conan remote add --index 0 --force xrplf https://conan.xrplf.org/repository/conan/
+
+      - name: Set up Conan profile (macOS)
         if: ${{ runner.os == 'macOS' }}
         run: |
-          conan remote add --index 0 xrplf https://conan.ripplex.io
-
           mkdir -p "${CONAN_HOME}"/profiles/
           cp .github/scripts/conan/apple-clang.profile "${CONAN_HOME}"/profiles/apple-clang
 

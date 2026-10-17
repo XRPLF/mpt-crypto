@@ -54,7 +54,7 @@ fi
 # outside Conan (git tag / release tarball), so verify them the way Conan does
 # from conan.lock. Update these together with the versions above.
 SECP256K1_COMMIT="1a53f4961f337b4d166c25fce72ef0dc88806618"                       # tag v0.7.1
-OPENSSL_SHA256="aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f" # openssl-3.6.2.tar.gz
+OPENSSL_SHA256="a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98" # openssl-3.6.5.tar.gz
 
 # Portable sha256 (Linux coreutils sha256sum; macOS shasum).
 sha256_of() {
