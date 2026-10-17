@@ -317,9 +317,11 @@ EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
 # 0. Exporting it keeps observers (explorers, compliance tooling, a wallet
 # auditing its own exposure) on the same deterministic derivation validators
 # use, instead of reimplementing the hash-and-rejection-sample outside the
-# library where a drift would fail silently. Marshals via
-# _mpt_make_ec_pair/_mpt_serialize_ec_pair like the two above.
-EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero"
+# library where a drift would fail silently. The output pair serializes via
+# _mpt_serialize_ec_pair like the two above, but the input is a single 33-byte
+# holder key, which _mpt_make_ec_pair (66-byte pairs) can't parse, so
+# _secp256k1_ec_pubkey_parse is exported for that.
+EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero,_secp256k1_ec_pubkey_parse"
 
 # Why these -s link flags (they define the JS-facing contract, so don't drop them
 # without checking the @xrplf/mpt-crypto TS wrapper):
