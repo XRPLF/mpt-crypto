@@ -1268,14 +1268,6 @@ int secp256k1_elgamal_decrypt_bsgs_parallel(
   if (threads < 1)
     threads = 1;
 
-  /* Round window up to next power of 2. */
-  {
-    int w = 1;
-    while (w < window)
-      w <<= 1;
-    window = w;
-  }
-
   /* 1. Compute S = sk * C1. */
   secp256k1_pubkey S = *c1;
   if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey))
