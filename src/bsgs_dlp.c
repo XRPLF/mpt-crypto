@@ -1393,9 +1393,12 @@ int secp256k1_elgamal_decrypt_bsgs_parallel(
     window = w;
   }
 
-  /* 1. Compute S = sk * C1. */
+  if (!secp256k1_ec_seckey_verify(ctx, privkey))
+    return 0;
+
+  /* 1. Compute S = sk * C1 (constant-time, as in the single-threaded path). */
   secp256k1_pubkey S = *c1;
-  if (!secp256k1_ec_pubkey_tweak_mul(ctx, &S, privkey))
+  if (!mpt_ct_pubkey_tweak_mul(ctx, &S, privkey))
     return 0;
 
   /* 2. Constant-time check for m=0: C2 == S means C2 - S = infinity. */

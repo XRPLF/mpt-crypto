@@ -570,5 +570,36 @@ static void test_parallel_decrypt(const secp256k1_context *ctx,
   EXPECT(r_single == r_parallel);
   EXPECT(r_single == m_test);
 
+  /* Top-of-range regression for j=J: maxv, maxv-1, maxv-7 require the last
+   * giant step; check across thread counts and parity with single-threaded. */
+  {
+    const uint64_t maxv = (1ULL << TEST_BITS) - 1;
+    const uint64_t Mhalf = 1ULL << (TEST_L1 - 1);
+    uint64_t tops[] = {maxv, maxv - 1, maxv - 7, maxv - Mhalf};
+    int threadcts[] = {1, 4, 10};
+    for (size_t ti = 0; ti < sizeof(threadcts) / sizeof(threadcts[0]); ti++)
+    {
+      for (size_t vi = 0; vi < sizeof(tops) / sizeof(tops[0]); vi++)
+      {
+        encrypt_amount(ctx, tops[vi], &pubkey, &c1, &c2);
+        uint64_t rp = 0xDEADBEEFu, rs = 0xDEADBEEFu;
+        EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &rp, &c1, &c2,
+                                                       privkey, TEST_WINDOW,
+                                                       threadcts[ti]) == 1);
+        EXPECT(rp == tops[vi]);
+        EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &rs, &c1, &c2, privkey,
+                                              TEST_WINDOW) == 1);
+        EXPECT(rs == rp);
+      }
+    }
+
+    /* m = 2^TEST_BITS is one past the range: must be rejected. */
+    uint64_t oor = (1ULL << TEST_BITS);
+    encrypt_amount(ctx, oor, &pubkey, &c1, &c2);
+    uint64_t rp = 0xDEADBEEFu;
+    EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+               ctx, bsgs, &rp, &c1, &c2, privkey, TEST_WINDOW, 4) == 0);
+  }
+
   printf("Test passed!\n");
 }
