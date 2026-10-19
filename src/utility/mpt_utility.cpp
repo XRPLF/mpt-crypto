@@ -6,6 +6,7 @@
 #include <bsgs_dlp.h>
 #include <secp256k1_mpt.h>
 
+#include <algorithm>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -514,16 +515,31 @@ mpt_encrypt_amount(
 /**
  * @internal
  * Smallest search width, in bits, of a BSGS table built for
- * mpt_decrypt_amount_with_ceiling. Smaller ceilings share this table.
+ * mpt_decrypt_amount_with_bits_total. Smaller widths share this table.
  */
 static constexpr int kMPT_BSGS_MIN_BITS = 24;
 
 /**
  * @internal
+ * Largest search width accepted by mpt_decrypt_amount_with_bits_total. MPT amounts
+ * never exceed 2^63 - 1.
+ */
+static constexpr int kMPT_BSGS_MAX_BITS = 63;
+
+/**
+ * @internal
+ * Largest baby-step width, bounding the table at about 2^26 entries (~512 MB).
+ * Wider searches take more giant steps instead of a larger table.
+ */
+static constexpr int kMPT_BSGS_MAX_L1 = 27;
+
+/**
+ * @internal
  * Shared BSGS context covering [0, 2^bits_total), created on first use and
  * kept for the life of the process. bits_total must be in
- * [kMPT_BSGS_MIN_BITS, MPT_BSGS_DEFAULT_BITS_TOTAL]. The baby-step width is
- * bits_total / 2 + 2, which gives MPT_BSGS_DEFAULT_L1 at the default width.
+ * [kMPT_BSGS_MIN_BITS, kMPT_BSGS_MAX_BITS]. The baby-step width is
+ * bits_total / 2 + 2, capped at kMPT_BSGS_MAX_L1, which gives
+ * MPT_BSGS_DEFAULT_L1 at the default width.
  *
  * The caller must hold the BSGS mutex.
  */
@@ -532,7 +548,7 @@ mpt_bsgs_context(int bits_total)
 {
     struct BsgsContextCache
     {
-        secp256k1_elgamal_bsgs_ctx* ctxs[MPT_BSGS_DEFAULT_BITS_TOTAL + 1] = {};
+        secp256k1_elgamal_bsgs_ctx* ctxs[kMPT_BSGS_MAX_BITS + 1] = {};
 
         ~BsgsContextCache()
         {
@@ -549,9 +565,9 @@ mpt_bsgs_context(int bits_total)
         // No disk cache (nullptr), so each process builds the table on its first decrypt for this
         // width and reuses it afterwards. The table's memory and build time grow with the width.
         // bsgs_dlp.h recommends a cache path for long-running or frequently restarted processes.
+        int const l1 = std::min(bits_total / 2 + 2, kMPT_BSGS_MAX_L1);
         if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
-            ctx = secp256k1_elgamal_bsgs_ctx_create(
-                secp_ctx, bits_total, bits_total / 2 + 2, nullptr);
+            ctx = secp256k1_elgamal_bsgs_ctx_create(secp_ctx, bits_total, l1, nullptr);
     }
     return ctx;
 }
@@ -604,30 +620,25 @@ mpt_decrypt_amount(
 }
 
 int
-mpt_decrypt_amount_with_ceiling(
+mpt_decrypt_amount_with_bits_total(
     uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t max_amount,
+    int bits_total,
     uint64_t* out_amount)
 {
-    if (max_amount >= (1ULL << MPT_BSGS_DEFAULT_BITS_TOTAL))
+    if (bits_total < 1 || bits_total > kMPT_BSGS_MAX_BITS)
         return -2;
     if (!out_amount)
         return -1;
 
-    // Search the smallest supported power-of-two range that contains max_amount.
-    int bits_total = 0;
-    for (uint64_t v = max_amount; v != 0; v >>= 1)
-        ++bits_total;
-    if (bits_total < kMPT_BSGS_MIN_BITS)
-        bits_total = kMPT_BSGS_MIN_BITS;
-
+    // Narrow widths share the smallest table; the range check below keeps the
+    // result within the requested width.
     uint64_t amount = 0;
-    if (mpt_internal_decrypt_bsgs(in_ciphertext, privkey, bits_total, &amount) != 0)
+    if (mpt_internal_decrypt_bsgs(
+            in_ciphertext, privkey, std::max(bits_total, kMPT_BSGS_MIN_BITS), &amount) != 0)
         return -1;
 
-    // The table covers a power-of-two range; enforce the exact ceiling.
-    if (amount > max_amount)
+    if (bits_total < kMPT_BSGS_MIN_BITS && amount >= (1ULL << bits_total))
         return -1;
 
     *out_amount = amount;

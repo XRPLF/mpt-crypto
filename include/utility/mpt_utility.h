@@ -173,7 +173,15 @@ mpt_encrypt_amount(
  * @brief Decrypts an MPT amount from a ciphertext pair.
  *
  * Uses the Baby-Step Giant-Step solver (secp256k1_elgamal_decrypt_bsgs) with
- * the default parameters, decrypting amounts in [0, 2^MPT_BSGS_DEFAULT_BITS_TOTAL).
+ * the default parameters, decrypting amounts in [0, 2^MPT_BSGS_DEFAULT_BITS_TOTAL),
+ * i.e. a 40-bit width.
+ *
+ * @note For amounts that may be 2^40 or more, use
+ *       mpt_decrypt_amount_with_bits_total with a wider width.
+ *       The first call builds the lookup table, so it can be slow. Later calls
+ *       reuse the table.
+ *
+ * @see mpt_decrypt_amount_with_bits_total
  *
  * @warning Decryption is not constant-time: it takes longer for larger amounts,
  *          so its timing reveals the approximate amount. Where a third party can
@@ -185,7 +193,7 @@ mpt_encrypt_amount(
  * @param privkey    [in]  The 32-byte private key.
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
  * @return 0 on success, -1 on failure (invalid input, wrong key, or an amount
- *         outside the supported range).
+ *         of 2^40 or more).
  */
 int
 mpt_decrypt_amount(
@@ -194,26 +202,37 @@ mpt_decrypt_amount(
     uint64_t* out_amount);
 
 /**
- * @brief Decrypts an MPT amount known to be at most max_amount.
+ * @brief Decrypts an MPT amount in [0, 2^bits_total).
  *
- * Like mpt_decrypt_amount, but searches only [0, max_amount]. A smaller
- * ceiling uses a smaller Baby-Step Giant-Step table, so it needs less memory,
- * builds faster on first use, and gives up sooner when the amount is not
- * found. It does not speed up decrypting an amount that is found.
+ * Like mpt_decrypt_amount, but with a caller-chosen search width instead of
+ * the default 40 bits. A holder's confidential balance never exceeds the
+ * issuance's ConfidentialOutstandingAmount, so the bit width of that ledger
+ * value is sufficient.
+ *
+ * The Baby-Step Giant-Step table is chosen from bits_total and built once per
+ * process for each width. A wider search needs a larger table and more search
+ * steps; near 63 bits the worst case takes hours. A narrower search needs
+ * less memory and fails faster, but each of its steps covers fewer amounts, so
+ * decrypting a given amount can take longer than with mpt_decrypt_amount.
+ *
+ * @note The first call for each width builds its lookup table, so it can be
+ *       slow, and wider widths take longer. Later calls for the same width
+ *       reuse the table.
+ *
+ * @warning Not constant-time; see mpt_decrypt_amount.
  *
  * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
  * @param privkey    [in]  The 32-byte private key.
- * @param max_amount [in]  The largest amount to search for. Must be below
- *                         2^MPT_BSGS_DEFAULT_BITS_TOTAL, i.e. 2^40.
+ * @param bits_total [in]  Search width in bits, in [1, 63].
  * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
  * @return 0 on success, -1 on failure (invalid input, wrong key, or an amount
- *         above max_amount), -2 if max_amount is not below 2^40.
+ *         not below 2^bits_total), -2 if bits_total is outside [1, 63].
  */
 int
-mpt_decrypt_amount_with_ceiling(
+mpt_decrypt_amount_with_bits_total(
     uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
-    uint64_t max_amount,
+    int bits_total,
     uint64_t* out_amount);
 
 /* ============================================================================

@@ -282,7 +282,7 @@ EXPORTS="${EXPORTS},_mpt_secp256k1_context"
 # _mpt_generate_keypair intentionally NOT exported: ElGamal keys come from
 # ripple-keypairs (a separate secp256k1 seed), not the WASM CSPRNG.
 EXPORTS="${EXPORTS},_mpt_generate_blinding_factor"
-EXPORTS="${EXPORTS},_mpt_encrypt_amount,_mpt_decrypt_amount"
+EXPORTS="${EXPORTS},_mpt_encrypt_amount,_mpt_decrypt_amount,_mpt_decrypt_amount_with_bits_total"
 EXPORTS="${EXPORTS},_mpt_get_pedersen_commitment"
 # Per-transaction context-hash + proof entries. On each line the get_*_context_hash
 # and get_*_proof (generator) symbols ARE called by the @xrplf/mpt-crypto TS
@@ -325,8 +325,9 @@ EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
 #  - MAXIMUM_MEMORY=128MB: a defense-in-depth ceiling. The working set is secp256k1's
 #    static tables plus the BSGS lookup tables that mpt_decrypt_amount builds on first
 #    use and keeps for the life of the module: about 22 MB at the default width
-#    (peaking around 45 MB while it is built), less for smaller ceilings. Per-op
-#    allocations are freed and reused, so it stays well below this cap; the ceiling
+#    (peaking around 45 MB while it is built). mpt_decrypt_amount_with_bits_total uses
+#    smaller tables for narrower widths but larger ones above about 42 bits, which do
+#    not fit under this cap. Per-op allocations are freed and reused; the ceiling
 #    bounds a hypothetical runaway well under the 2GB default.
 #  - EXPORTED_RUNTIME_METHODS: the TS marshalling layer needs HEAPU8 + ccall/cwrap.
 #  - ENVIRONMENT=web,node: the base .js/.mjs glues run under Node; a dedicated
