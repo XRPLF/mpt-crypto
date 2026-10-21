@@ -235,6 +235,40 @@ mpt_decrypt_amount_with_bits_total(
     int bits_total,
     uint64_t* out_amount);
 
+/**
+ * @brief Decrypts an MPT amount in [0, 2^bits_total) with a caller-chosen
+ *        Baby-Step Giant-Step table.
+ *
+ * Like mpt_decrypt_amount_with_bits_total, but the caller also chooses l1, the
+ * baby-step width, instead of having it chosen from bits_total. The table holds
+ * 2^(l1 - 1) entries, so each +1 on l1 doubles its memory and build time and
+ * halves the worst-case number of search steps (2^(bits_total - l1)). Use it to
+ * trade memory for speed, e.g. a larger l1 on a server or a smaller one where
+ * memory is limited.
+ *
+ * @note The first call for each (bits_total, l1) pair builds its lookup table,
+ *       so it can be slow, and a larger l1 takes longer. Later calls with the
+ *       same pair reuse the table.
+ *
+ * @warning Not constant-time; see mpt_decrypt_amount.
+ *
+ * @param ciphertext [in]  A 66-byte buffer containing the two points (C1, C2).
+ * @param privkey    [in]  The 32-byte private key.
+ * @param bits_total [in]  Search width in bits, in [1, 63].
+ * @param l1         [in]  Baby-step width, in [1, 32] and less than bits_total.
+ * @param out_amount [out] Pointer to store the decrypted uint64_t amount.
+ * @return 0 on success, -1 on failure (invalid input, wrong key, an amount not
+ *         below 2^bits_total, or a table that cannot be allocated), -2 if
+ *         bits_total or l1 is out of range.
+ */
+int
+mpt_decrypt_amount_with_l1_bits_total(
+    uint8_t const ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    int bits_total,
+    int l1,
+    uint64_t* out_amount);
+
 /* ============================================================================
  * ZKProof Generation
  * ============================================================================ */

@@ -528,44 +528,64 @@ static constexpr int kMPT_BSGS_MAX_BITS = 63;
 
 /**
  * @internal
- * Largest baby-step width, bounding the table at about 2^26 entries (~512 MB).
- * Wider searches take more giant steps instead of a larger table.
+ * Largest baby-step width chosen automatically, bounding the table at about
+ * 2^26 entries (~512 MB). Wider searches take more giant steps instead of a
+ * larger table.
  */
 static constexpr int kMPT_BSGS_MAX_L1 = 27;
 
 /**
  * @internal
- * Shared BSGS context covering [0, 2^bits_total), created on first use and
- * kept for the life of the process. bits_total must be in
- * [kMPT_BSGS_MIN_BITS, kMPT_BSGS_MAX_BITS]. The baby-step width is
- * bits_total / 2 + 2, capped at kMPT_BSGS_MAX_L1, which gives
- * MPT_BSGS_DEFAULT_L1 at the default width.
+ * Largest baby-step width accepted by secp256k1_elgamal_bsgs_ctx_create, and so
+ * by mpt_decrypt_amount_with_l1_bits_total.
+ */
+static constexpr int kMPT_BSGS_L1_LIMIT = 32;
+
+/**
+ * @internal
+ * Baby-step width chosen automatically for a search width: bits_total / 2 + 2,
+ * capped at kMPT_BSGS_MAX_L1, which gives MPT_BSGS_DEFAULT_L1 at the default
+ * width.
+ */
+static int
+mpt_bsgs_auto_l1(int bits_total)
+{
+    return std::min(bits_total / 2 + 2, kMPT_BSGS_MAX_L1);
+}
+
+/**
+ * @internal
+ * Shared BSGS context covering [0, 2^bits_total) with baby-step width l1,
+ * created on first use and kept for the life of the process. bits_total must
+ * be in [1, kMPT_BSGS_MAX_BITS] and l1 in [1, kMPT_BSGS_L1_LIMIT].
  *
  * The caller must hold the BSGS mutex.
  */
 static secp256k1_elgamal_bsgs_ctx const*
-mpt_bsgs_context(int bits_total)
+mpt_bsgs_context(int bits_total, int l1)
 {
     struct BsgsContextCache
     {
-        secp256k1_elgamal_bsgs_ctx* ctxs[kMPT_BSGS_MAX_BITS + 1] = {};
+        secp256k1_elgamal_bsgs_ctx* ctxs[kMPT_BSGS_MAX_BITS + 1][kMPT_BSGS_L1_LIMIT + 1] = {};
 
         ~BsgsContextCache()
         {
-            for (secp256k1_elgamal_bsgs_ctx* ctx : ctxs)
-                secp256k1_elgamal_bsgs_ctx_destroy(ctx);
+            for (auto& row : ctxs)
+            {
+                for (secp256k1_elgamal_bsgs_ctx* ctx : row)
+                    secp256k1_elgamal_bsgs_ctx_destroy(ctx);
+            }
         }
     };
 
     static BsgsContextCache cache;
 
-    secp256k1_elgamal_bsgs_ctx*& ctx = cache.ctxs[bits_total];
+    secp256k1_elgamal_bsgs_ctx*& ctx = cache.ctxs[bits_total][l1];
     if (!ctx)
     {
         // No disk cache (nullptr), so each process builds the table on its first decrypt for this
-        // width and reuses it afterwards. The table's memory and build time grow with the width.
+        // width and l1, and reuses it afterwards. The table's memory and build time grow with l1.
         // bsgs_dlp.h recommends a cache path for long-running or frequently restarted processes.
-        int const l1 = std::min(bits_total / 2 + 2, kMPT_BSGS_MAX_L1);
         if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
             ctx = secp256k1_elgamal_bsgs_ctx_create(secp_ctx, bits_total, l1, nullptr);
     }
@@ -575,13 +595,14 @@ mpt_bsgs_context(int bits_total)
 /**
  * @internal
  * Decrypts an amount in [0, 2^bits_total) with the shared BSGS context for
- * that width.
+ * that width and l1.
  */
 static int
 mpt_internal_decrypt_bsgs(
     uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
     uint8_t const privkey[kMPT_PRIVKEY_SIZE],
     int bits_total,
+    int l1,
     uint64_t* out_amount)
 {
     if (!in_ciphertext || !privkey || !out_amount)
@@ -598,7 +619,7 @@ mpt_internal_decrypt_bsgs(
     static std::mutex bsgs_mutex;
     std::lock_guard<std::mutex> const lock(bsgs_mutex);
 
-    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context(bits_total);
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context(bits_total, l1);
     if (!bsgs_ctx)
         return -1;
 
@@ -616,7 +637,7 @@ mpt_decrypt_amount(
     uint64_t* out_amount)
 {
     return mpt_internal_decrypt_bsgs(
-        in_ciphertext, privkey, MPT_BSGS_DEFAULT_BITS_TOTAL, out_amount);
+        in_ciphertext, privkey, MPT_BSGS_DEFAULT_BITS_TOTAL, MPT_BSGS_DEFAULT_L1, out_amount);
 }
 
 int
@@ -633,9 +654,10 @@ mpt_decrypt_amount_with_bits_total(
 
     // Narrow widths share the smallest table; the range check below keeps the
     // result within the requested width.
+    int const table_bits = std::max(bits_total, kMPT_BSGS_MIN_BITS);
     uint64_t amount = 0;
     if (mpt_internal_decrypt_bsgs(
-            in_ciphertext, privkey, std::max(bits_total, kMPT_BSGS_MIN_BITS), &amount) != 0)
+            in_ciphertext, privkey, table_bits, mpt_bsgs_auto_l1(table_bits), &amount) != 0)
         return -1;
 
     if (bits_total < kMPT_BSGS_MIN_BITS && amount >= (1ULL << bits_total))
@@ -643,6 +665,22 @@ mpt_decrypt_amount_with_bits_total(
 
     *out_amount = amount;
     return 0;
+}
+
+int
+mpt_decrypt_amount_with_l1_bits_total(
+    uint8_t const in_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    int bits_total,
+    int l1,
+    uint64_t* out_amount)
+{
+    if (bits_total < 1 || bits_total > kMPT_BSGS_MAX_BITS)
+        return -2;
+    if (l1 < 1 || l1 > kMPT_BSGS_L1_LIMIT || l1 >= bits_total)
+        return -2;
+
+    return mpt_internal_decrypt_bsgs(in_ciphertext, privkey, bits_total, l1, out_amount);
 }
 
 static int
