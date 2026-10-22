@@ -309,6 +309,19 @@ EXPORTS="${EXPORTS},_mpt_compute_convert_back_remainder"
 # (CB_S' = CB_S -/+ the encrypted amount) so each chained proof binds to it. The TS
 # wrapper marshals bytes<->secp256k1_pubkey via _mpt_make_ec_pair/_mpt_serialize_ec_pair.
 EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
+# Canonical encrypted zero (secp256k1_pubkey out, defined in src/elgamal.c).
+# Not used by the proof builders, but XLS-0096 section 9.4 makes the canonical
+# zero a deliberately public property: anyone holding the ledger's public data
+# (holder encryption key, account ID, issuance ID) can recompute EncZero and
+# byte-compare it against a stored ciphertext to learn that a balance is exactly
+# 0. Exporting it keeps observers (explorers, compliance tooling, a wallet
+# auditing its own exposure) on the same deterministic derivation validators
+# use, instead of reimplementing the hash-and-rejection-sample outside the
+# library where a drift would fail silently. The output pair serializes via
+# _mpt_serialize_ec_pair like the two above, but the input is a single 33-byte
+# holder key, which _mpt_make_ec_pair (66-byte pairs) can't parse, so
+# _secp256k1_ec_pubkey_parse is exported for that.
+EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero,_secp256k1_ec_pubkey_parse"
 
 # Why these -s link flags (they define the JS-facing contract, so don't drop them
 # without checking the @xrplf/mpt-crypto TS wrapper):
