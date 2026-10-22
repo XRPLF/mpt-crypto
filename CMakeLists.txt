@@ -27,6 +27,7 @@ set(MPT_CRYPTO_SOURCES
     src/commitments.c
     src/elgamal.c
     src/bsgs_dlp.c
+    src/mpt_msm.c
     src/mpt_scalar.c
     src/proof_pok_sk.c
     src/proof_compact_standard.c
