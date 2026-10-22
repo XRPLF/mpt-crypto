@@ -17,17 +17,22 @@ extern "C" {
  * from the unmasked point M = m*G, as required by secp256k1_elgamal_decrypt_bsgs().
  *
  * @details
+ *
  * **Algorithm:**
  * Standard BSGS with a cuckoo hash (k=3) baby table and windowed TreeMon
  * batch inversion for the giant step loop, giving O(sqrt(N)) time and
- * O(sqrt(N)) space for a search range of [0, 2^bits_total).
+ * O(sqrt(N)) space for a search range of [0, 2^bits_total). Parallel
+ * giant-step search across T threads is available via
+ * secp256k1_elgamal_decrypt_bsgs_parallel(). See "Scalable
+ * Small ECDLP Solver via Windowed-Batch Inversion for Additively Homomorphic
+ * Encryption", IACR ePrint 2026/2102, https://eprint.iacr.org/2026/2102
  *
  * **Lifecycle:**
  * Building the baby table is expensive (seconds to minutes depending on l1).
  * Callers must initialize a secp256k1_elgamal_bsgs_ctx once — at process
  * startup or wallet initialization — and reuse it across all decrypt calls.
- * The context is read-only after initialization and safe to use from a
- * single thread. Multi-threaded use is not supported in this version.
+ * The context is read-only after initialization and safe to share across
+ * threads for concurrent decrypt calls.
  *
  * **Baby table cache:**
  * If cache_path is non-NULL, the baby table is saved to / loaded from a
@@ -85,17 +90,17 @@ extern "C" {
 #define MPT_BSGS_DEFAULT_L1 22
 
 /**
- * Default window size for the windowed TreeMon batch inversion in the
- * giant-step loop. Must be a power of 2. Larger values amortize field
- * inversions more aggressively at the cost of more stack allocation.
+ * Default window size for the windowed batch inversion in the
+ * giant-step loop. Larger values amortize field inversions more 
+ * aggressively at the cost of more stack allocation.
  */
-#define MPT_BSGS_DEFAULT_WINDOW 128
+#define MPT_BSGS_DEFAULT_WINDOW 512
 
 /**
  * Maximum accepted window. secp256k1_elgamal_decrypt_bsgs() rejects any window
  * outside [1, MPT_BSGS_MAX_WINDOW]: the solver allocates O(window) points and
  * field elements, so an unbounded value risks overflow in the allocation-size
- * computation. This cap is far above any useful window (default is 128).
+ * computation. This cap is far above any useful window (default is 512).
  */
 #define MPT_BSGS_MAX_WINDOW 65536
 
@@ -159,7 +164,7 @@ secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx* bsgs_ctx);
  * @param[in]  privkey   32-byte private key scalar.
  * @param[in]  window    Window size for batch inversion. Must be in
  *                       [1, MPT_BSGS_MAX_WINDOW]; values outside that range
- *                       return 0. Internally rounded up to a power of 2.
+ *                       return 0.
  *                       Use MPT_BSGS_DEFAULT_WINDOW.
  *
  * @return 1 if the amount was successfully recovered and *amount is set;
@@ -175,6 +180,34 @@ secp256k1_elgamal_decrypt_bsgs(
     secp256k1_pubkey const* c2,
     unsigned char const* privkey,
     int window);
+
+/**
+ * Default number of threads for the parallel BSGS solver.
+ */
+#define MPT_BSGS_DEFAULT_THREADS 1
+
+/**
+ * @brief Decrypts an ElGamal ciphertext using multi-threaded BSGS.
+ *
+ * Same as secp256k1_elgamal_decrypt_bsgs() but divides the giant-step
+ * range across multiple threads for faster decryption at larger bit sizes.
+ *
+ * @param[in]  threads   Number of threads. Must be >= 1. Values > 1 enable
+ *                       parallel search. Use MPT_BSGS_DEFAULT_THREADS for
+ *                       single-threaded behaviour.
+ *
+ * @return 1 if the amount was successfully recovered; 0 otherwise.
+ */
+SECP256K1_API int
+secp256k1_elgamal_decrypt_bsgs_parallel(
+    secp256k1_context const* ctx,
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx,
+    uint64_t* amount,
+    secp256k1_pubkey const* c1,
+    secp256k1_pubkey const* c2,
+    unsigned char const* privkey,
+    int window,
+    int threads);
 
 #ifdef __cplusplus
 }
