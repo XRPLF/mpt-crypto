@@ -215,6 +215,15 @@ mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey);
 
 /**
  * @brief Generates a 32-byte blinding factor.
+ *
+ * A blinding factor hides the encrypted amount. Use a fresh one for each
+ * transaction and never reuse it across transactions: reusing it reveals the
+ * difference between amounts and links the ciphertexts, and revealing it reveals
+ * the amount. Within one transaction, share a blinding factor between
+ * ciphertexts only where a function requires it (e.g. the recipients of a
+ * Convert, or both mirrors in a MirrorUpdate); otherwise use a separate one for
+ * each ciphertext.
+ *
  * @param out_factor [out] A 32-byte buffer to store the blinding factor.
  * @return 0 on success, -1 on failure.
  */
