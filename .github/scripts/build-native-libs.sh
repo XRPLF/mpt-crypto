@@ -13,7 +13,7 @@
 set -euo pipefail
 
 conan profile detect --force
-conan remote add --index 0 --force xrplf https://conan.ripplex.io
+conan remote add --index 0 --force xrplf https://conan.xrplf.org/repository/conan/
 
 CONAN_ARGS=(
   -of build

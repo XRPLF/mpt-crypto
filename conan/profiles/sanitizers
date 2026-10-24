@@ -1,0 +1,53 @@
+include(default)
+{% set sanitizers = os.getenv("SANITIZERS") %}
+
+{% if not sanitizers %}
+{# Sanitizers not configured; no additional settings needed #}
+{% elif context == "build" %}
+{# Build-context packages are tools we run, not code we test, so don't instrument them #}
+{% else %}
+
+{% set known_sanitizers = ["address", "thread", "undefinedbehavior"] %}
+{% set provided_sanitizers = [] %}
+{% for san in sanitizers.split(",") %}
+    {% set san = san.strip() %}
+    {% if san not in known_sanitizers %}
+        {{ "Unknown sanitizer in SANITIZERS: " ~ san }}
+    {% endif %}
+    {% set _ = provided_sanitizers.append(san) %}
+{% endfor %}
+
+{% set enable_asan = "address" in provided_sanitizers %}
+{% set enable_tsan = "thread" in provided_sanitizers %}
+{% set enable_ubsan = "undefinedbehavior" in provided_sanitizers %}
+
+{% if enable_asan and enable_tsan %}
+    {{ "AddressSanitizer and ThreadSanitizer are incompatible and cannot be enabled simultaneously." }}
+{% endif %}
+
+{% set sanitizer_types = [] %}
+{% if enable_asan %}
+    {% set _ = sanitizer_types.append("address") %}
+{% elif enable_tsan %}
+    {% set _ = sanitizer_types.append("thread") %}
+{% endif %}
+{% if enable_ubsan %}
+    {% set _ = sanitizer_types.append("undefined") %}
+{% endif %}
+
+{# Same flags as the previous clio-ci sanitizer profiles: debug info and frame pointers #}
+{# for meaningful stack traces; -O1 for reasonable performance. #}
+{% set fsanitize = "-fsanitize=" ~ ",".join(sanitizer_types) %}
+{% set sanitizer_compiler_flags = [fsanitize, "-g", "-O1", "-fno-omit-frame-pointer"] %}
+{% set sanitizer_linker_flags = [fsanitize] %}
+
+[conf]
+{# mpt-crypto and its dependencies (OpenSSL, secp256k1) are C, so instrument C as well as C++. #}
+tools.build:cflags+={{ sanitizer_compiler_flags }}
+tools.build:cxxflags+={{ sanitizer_compiler_flags }}
+tools.build:sharedlinkflags+={{ sanitizer_linker_flags }}
+tools.build:exelinkflags+={{ sanitizer_linker_flags }}
+
+tools.info.package_id:confs+=["tools.build:cflags", "tools.build:cxxflags", "tools.build:exelinkflags", "tools.build:sharedlinkflags"]
+
+{% endif %}
