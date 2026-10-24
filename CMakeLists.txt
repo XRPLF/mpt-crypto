@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(mpt-crypto C CXX)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 # --- Find Dependencies ---
 find_package(OpenSSL REQUIRED)
 find_package(secp256k1 REQUIRED)
@@ -32,6 +35,17 @@ set(MPT_CRYPTO_SOURCES
     src/proof_compact_standard.c
     src/proof_compact_clawback.c
     src/proof_compact_convertback.c
+    src/proof_rotate_both_core.c
+    src/proof_rotate_core.c
+    src/proof_rotate_holder_rotate.c
+    src/proof_rotate_mirror_auditor.c
+    src/proof_rotate_mirror_both_holder.c
+    src/proof_rotate_mirror_both_issuer.c
+    src/proof_rotate_mirror_holder.c
+    src/proof_rotate_mirror_holder_auditor.c
+    src/proof_rotate_mirror_issuer.c
+    src/proof_rotate_recover_balance.c
+    src/proof_rotate_recovery_key.c
     src/utility/mpt_utility.cpp
 )
 add_library(mpt-crypto ${MPT_CRYPTO_SOURCES})

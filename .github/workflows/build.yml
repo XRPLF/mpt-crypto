@@ -24,13 +24,10 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        sanitizer_ext: [.asan, .tsan, .ubsan]
+        sanitizers: [address, thread, undefinedbehavior]
         build_type: [Release, Debug]
         os: [heavy, heavy-arm64]
-        container:
-          [
-            '{ "image": "ghcr.io/xrplf/clio-ci:14342e087ceb8b593027198bf9ef06a43833c696" }',
-          ]
+        container: ['{ "image": "ghcr.io/xrplf/xrpld/nix-ubuntu:sha-ede8af8" }']
 
         include:
           - compiler: apple-clang
@@ -61,30 +58,38 @@ jobs:
           fetch-depth: 0
 
       - name: Prepare runner
-        uses: XRPLF/actions/prepare-runner@7bf7ceca5932114abdd0d43493c3c30c5a654e13
+        uses: XRPLF/actions/prepare-runner@8e98d61f011fd2a67f3fde5f0f075662c099a527
         with:
           enable_ccache: false
 
-      - name: Set up Conan (macOS)
-        if: ${{ runner.os == 'macOS' }}
+      # Pick the compiler for the `default` Conan profile, which detects it from CC/CXX.
+      # (macOS uses the runner's apple-clang.)
+      - name: Set compiler environment
+        if: ${{ runner.os == 'Linux' }}
+        env:
+          COMPILER: ${{ matrix.compiler }}
         run: |
-          conan remote add --index 0 xrplf https://conan.ripplex.io
+          case "${COMPILER}" in
+            gcc)   echo "CC=gcc"   >>"${GITHUB_ENV}"; echo "CXX=g++"     >>"${GITHUB_ENV}" ;;
+            clang) echo "CC=clang" >>"${GITHUB_ENV}"; echo "CXX=clang++" >>"${GITHUB_ENV}" ;;
+            *) echo "Unknown compiler: ${COMPILER}" >&2; exit 1 ;;
+          esac
 
-          mkdir -p "${CONAN_HOME}"/profiles/
-          cp .github/scripts/conan/apple-clang.profile "${CONAN_HOME}"/profiles/apple-clang
+      # Installs global.conf, the profiles and the xrplf remote into CONAN_HOME.
+      - name: Set up Conan
+        run: conan/init.sh
 
       - name: Run Conan
         env:
-          CONAN_PROFILE: ${{ matrix.compiler }}${{ matrix.sanitizer_ext }}
+          # Read by the `sanitizers` profile; empty (macOS) builds without sanitizers.
+          SANITIZERS: ${{ matrix.sanitizers }}
         run: |
           conan install . \
             -of "${BUILD_DIR}" \
             -b missing \
             -s "build_type=${BUILD_TYPE}" \
             -o "&:tests=True" \
-            -c tools.files.download:retry=5 \
-            -c tools.files.download:retry_wait=30 \
-            --profile:all "${CONAN_PROFILE}"
+            --profile:all sanitizers
 
       - name: Run CMake
         run: |
