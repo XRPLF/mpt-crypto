@@ -69,6 +69,30 @@ endfunction()
 add_mpt_test(test_elgamal test_elgamal.c DEPENDENCIES mpt-crypto)
 
 add_mpt_test(
+    test_rotate_reencrypt
+    test_rotate_reencrypt.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+add_mpt_test(
+    test_rotate_recovery_key
+    test_rotate_recovery_key.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+add_mpt_test(
+    test_rotate_holder_rotate
+    test_rotate_holder_rotate.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+add_mpt_test(
+    test_rotate_mirror_both
+    test_rotate_mirror_both.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
+add_mpt_test(
     test_elgamal_verify
     test_elgamal_verify.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1

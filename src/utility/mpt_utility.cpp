@@ -5,6 +5,7 @@
 
 #include <secp256k1_mpt.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -442,6 +443,79 @@ mpt_get_clawback_context_hash(
 }
 
 int
+mpt_get_mirror_update_context_hash(
+    account_id acc,
+    mpt_issuance_id iss,
+    uint32_t seq,
+    account_id counterparty,
+    uint32_t ver,
+    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!out_hash)
+        return -1;
+
+    uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+    Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
+
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_MIRROR_UPDATE, acc, iss, seq);
+    s.addRaw(counterparty.bytes, sizeof(counterparty.bytes));
+    s.add32(ver);
+
+    if (!s.isValid())
+        return -1;
+
+    return sha512_half(buf, s.offset, out_hash);
+}
+
+int
+mpt_get_holder_key_update_context_hash(
+    account_id acc,
+    mpt_issuance_id iss,
+    uint32_t seq,
+    uint32_t ver,
+    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!out_hash)
+        return -1;
+
+    uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+    Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
+
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_HOLDER_KEY_UPDATE, acc, iss, seq);
+    s.addRaw(acc.bytes, sizeof(acc.bytes));
+    s.add32(ver);
+
+    if (!s.isValid())
+        return -1;
+
+    return sha512_half(buf, s.offset, out_hash);
+}
+
+int
+mpt_get_recover_balance_context_hash(
+    account_id acc,
+    mpt_issuance_id iss,
+    uint32_t seq,
+    account_id holder,
+    uint8_t out_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!out_hash)
+        return -1;
+
+    uint8_t buf[kMPT_ZKP_CONTEXT_HASH_SIZE];
+    Serializer s(buf, kMPT_ZKP_CONTEXT_HASH_SIZE);
+
+    mpt_add_common_zkp_fields(s, kCONFIDENTIAL_MPT_RECOVER_BALANCE, acc, iss, seq);
+    s.addRaw(holder.bytes, sizeof(holder.bytes));
+    s.add32(0);
+
+    if (!s.isValid())
+        return -1;
+
+    return sha512_half(buf, s.offset, out_hash);
+}
+
+int
 mpt_generate_keypair(uint8_t* out_privkey, uint8_t* out_pubkey)
 {
     if (!out_privkey || !out_pubkey)
@@ -557,6 +631,72 @@ mpt_internal_verify_single(
         return -1;
 
     return 0;
+}
+
+// Parsed public key and ciphertext of a mirror update target.
+struct mpt_mirror_target
+{
+    secp256k1_pubkey pk;
+    secp256k1_pubkey c1;
+    secp256k1_pubkey c2;
+};
+
+// Parsed inputs shared by every mirror update proof: the anchor key and ciphertext, and the
+// targets that are present.
+struct mpt_mirror_update_statement
+{
+    secp256k1_pubkey pk;
+    secp256k1_pubkey a1;
+    secp256k1_pubkey a2;
+    mpt_mirror_target issuer;
+    mpt_mirror_target auditor;
+};
+
+static bool
+mpt_internal_parse_mirror_update(
+    secp256k1_context const* ctx,
+    uint8_t const pub[kMPT_PUBKEY_SIZE],
+    uint8_t const anchor_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor,
+    mpt_mirror_update_statement* out)
+{
+    // A mirror update needs at least one target. When it has both, they are encrypted with one
+    // randomness value, so their first components must be identical.
+    if (!issuer && !auditor)
+        return false;
+
+    if (issuer && auditor &&
+        !std::equal(
+            issuer->ciphertext, issuer->ciphertext + kMPT_ELGAMAL_CIPHER_SIZE, auditor->ciphertext))
+        return false;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &out->pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return false;
+
+    if (!mpt_make_ec_pair(anchor_ciphertext, &out->a1, &out->a2))
+        return false;
+
+    if (issuer)
+    {
+        if (secp256k1_ec_pubkey_parse(ctx, &out->issuer.pk, issuer->pubkey, kMPT_PUBKEY_SIZE) != 1)
+            return false;
+
+        if (!mpt_make_ec_pair(issuer->ciphertext, &out->issuer.c1, &out->issuer.c2))
+            return false;
+    }
+
+    if (auditor)
+    {
+        if (secp256k1_ec_pubkey_parse(ctx, &out->auditor.pk, auditor->pubkey, kMPT_PUBKEY_SIZE) !=
+            1)
+            return false;
+
+        if (!mpt_make_ec_pair(auditor->ciphertext, &out->auditor.c1, &out->auditor.c2))
+            return false;
+    }
+
+    return true;
 }
 
 int
@@ -848,6 +988,311 @@ mpt_get_clawback_proof(
 
     if (secp256k1_compact_clawback_prove(
             ctx, out_proof, amount, priv, &pk, &c1, &c2, context_hash) != 1)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+mpt_get_issuer_mirror_update_proof(
+    uint8_t const priv[kMPT_PRIVKEY_SIZE],
+    uint8_t const issuer_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const issuer_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint64_t balance,
+    uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t out_proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE])
+{
+    if (!priv || !issuer_pub || !issuer_ciphertext || !blinding_factor || !context_hash ||
+        !out_proof)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    mpt_mirror_update_statement s{};
+    if (!mpt_internal_parse_mirror_update(ctx, issuer_pub, issuer_ciphertext, issuer, auditor, &s))
+        return -1;
+
+    int ok = 0;
+    if (issuer && auditor)
+    {
+        ok = secp256k1_rotate_mirror_both_issuer_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.auditor.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+    else if (issuer)
+    {
+        ok = secp256k1_rotate_mirror_issuer_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            context_hash);
+    }
+    else
+    {
+        ok = secp256k1_rotate_mirror_auditor_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.auditor.pk,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+
+    return ok == 1 ? 0 : -1;
+}
+
+int
+mpt_get_holder_mirror_update_proof(
+    uint8_t const priv[kMPT_PRIVKEY_SIZE],
+    uint8_t const holder_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint64_t balance,
+    uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t out_proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE])
+{
+    if (!priv || !holder_pub || !spending_ciphertext || !blinding_factor || !context_hash ||
+        !out_proof)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    mpt_mirror_update_statement s{};
+    if (!mpt_internal_parse_mirror_update(
+            ctx, holder_pub, spending_ciphertext, issuer, auditor, &s))
+        return -1;
+
+    int ok = 0;
+    if (issuer && auditor)
+    {
+        ok = secp256k1_rotate_mirror_both_holder_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.auditor.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+    else if (issuer)
+    {
+        ok = secp256k1_rotate_mirror_holder_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            context_hash);
+    }
+    else
+    {
+        ok = secp256k1_rotate_mirror_holder_auditor_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.auditor.pk,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+
+    return ok == 1 ? 0 : -1;
+}
+
+int
+mpt_get_holder_key_rotation_proof(
+    uint8_t const priv[kMPT_PRIVKEY_SIZE],
+    uint8_t const pub[kMPT_PUBKEY_SIZE],
+    uint8_t const new_priv[kMPT_PRIVKEY_SIZE],
+    uint8_t const new_pub[kMPT_PUBKEY_SIZE],
+    mpt_balance_reencryption const* spending,
+    mpt_balance_reencryption const* inbox,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t out_proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE])
+{
+    if (!priv || !pub || !new_priv || !new_pub || !spending || !inbox || !context_hash ||
+        !out_proof)
+        return -1;
+
+    // Both new ciphertexts are under the same new key, so sharing their randomness would reveal
+    // the difference between the spending and inbox balances.
+    if (std::equal(
+            spending->blinding_factor,
+            spending->blinding_factor + kMPT_BLINDING_FACTOR_SIZE,
+            inbox->blinding_factor))
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk, pk_new;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pk_new, new_pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey s1, s2, s1_new, s2_new, i1, i2, i1_new, i2_new;
+    if (!mpt_make_ec_pair(spending->ciphertext, &s1, &s2) ||
+        !mpt_make_ec_pair(spending->new_ciphertext, &s1_new, &s2_new) ||
+        !mpt_make_ec_pair(inbox->ciphertext, &i1, &i2) ||
+        !mpt_make_ec_pair(inbox->new_ciphertext, &i1_new, &i2_new))
+        return -1;
+
+    if (secp256k1_rotate_holder_rotate_prove(
+            ctx,
+            out_proof,
+            spending->amount,
+            inbox->amount,
+            priv,
+            spending->blinding_factor,
+            new_priv,
+            inbox->blinding_factor,
+            &pk,
+            &pk_new,
+            &s1,
+            &s2,
+            &s1_new,
+            &s2_new,
+            &i1,
+            &i2,
+            &i1_new,
+            &i2_new,
+            context_hash) != 1)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+mpt_get_holder_key_recovery_proof(
+    uint8_t const pubkey[kMPT_PUBKEY_SIZE],
+    uint8_t const privkey[kMPT_PRIVKEY_SIZE],
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t out_proof[SECP256K1_ROTATE_RECOVERY_KEY_PROOF_SIZE])
+{
+    if (!pubkey || !privkey || !context_hash || !out_proof)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_rotate_recovery_key_prove(ctx, out_proof, privkey, &pk, context_hash) != 1)
+        return -1;
+
+    return 0;
+}
+
+int
+mpt_get_recover_balance_proof(
+    uint8_t const priv[kMPT_PRIVKEY_SIZE],
+    uint8_t const pub[kMPT_PUBKEY_SIZE],
+    uint64_t balance,
+    uint8_t const issuer_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const recovery_pubkey[kMPT_PUBKEY_SIZE],
+    uint8_t const new_spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const blinding_factor[kMPT_BLINDING_FACTOR_SIZE],
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE],
+    uint8_t out_proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE])
+{
+    if (!priv || !pub || !issuer_ciphertext || !recovery_pubkey || !new_spending_ciphertext ||
+        !blinding_factor || !context_hash || !out_proof)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk, pk_recovery;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pk_recovery, recovery_pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey e1, e2, s1_new, s2_new;
+    if (!mpt_make_ec_pair(issuer_ciphertext, &e1, &e2) ||
+        !mpt_make_ec_pair(new_spending_ciphertext, &s1_new, &s2_new))
+        return -1;
+
+    if (secp256k1_rotate_recover_balance_prove(
+            ctx,
+            out_proof,
+            balance,
+            priv,
+            blinding_factor,
+            &pk,
+            &e1,
+            &e2,
+            &pk_recovery,
+            &s1_new,
+            &s2_new,
+            context_hash) != 1)
     {
         return -1;
     }
@@ -1230,5 +1675,255 @@ mpt_verify_clawback_proof(
         valid = false;
 
     return valid ? 0 : -1;
+}
+
+int
+mpt_verify_issuer_mirror_update_proof(
+    uint8_t const proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE],
+    uint8_t const issuer_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const issuer_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!proof || !issuer_pub || !issuer_ciphertext || !context_hash)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    mpt_mirror_update_statement s{};
+    if (!mpt_internal_parse_mirror_update(ctx, issuer_pub, issuer_ciphertext, issuer, auditor, &s))
+        return -1;
+
+    int ok = 0;
+    if (issuer && auditor)
+    {
+        ok = secp256k1_rotate_mirror_both_issuer_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.auditor.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+    else if (issuer)
+    {
+        ok = secp256k1_rotate_mirror_issuer_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            context_hash);
+    }
+    else
+    {
+        ok = secp256k1_rotate_mirror_auditor_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.auditor.pk,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+
+    return ok == 1 ? 0 : -1;
+}
+
+int
+mpt_verify_holder_mirror_update_proof(
+    uint8_t const proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE],
+    uint8_t const holder_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    mpt_confidential_participant const* issuer,
+    mpt_confidential_participant const* auditor,
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!proof || !holder_pub || !spending_ciphertext || !context_hash)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    mpt_mirror_update_statement s{};
+    if (!mpt_internal_parse_mirror_update(
+            ctx, holder_pub, spending_ciphertext, issuer, auditor, &s))
+        return -1;
+
+    int ok = 0;
+    if (issuer && auditor)
+    {
+        ok = secp256k1_rotate_mirror_both_holder_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.auditor.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+    else if (issuer)
+    {
+        ok = secp256k1_rotate_mirror_holder_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.issuer.pk,
+            &s.issuer.c1,
+            &s.issuer.c2,
+            context_hash);
+    }
+    else
+    {
+        ok = secp256k1_rotate_mirror_holder_auditor_verify(
+            ctx,
+            proof,
+            &s.pk,
+            &s.a1,
+            &s.a2,
+            &s.auditor.pk,
+            &s.auditor.c1,
+            &s.auditor.c2,
+            context_hash);
+    }
+
+    return ok == 1 ? 0 : -1;
+}
+
+int
+mpt_verify_holder_key_rotation_proof(
+    uint8_t const proof[SECP256K1_ROTATE_HOLDER_ROTATE_PROOF_SIZE],
+    uint8_t const pub[kMPT_PUBKEY_SIZE],
+    uint8_t const new_pub[kMPT_PUBKEY_SIZE],
+    uint8_t const spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const new_spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const inbox_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const new_inbox_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!proof || !pub || !new_pub || !spending_ciphertext || !new_spending_ciphertext ||
+        !inbox_ciphertext || !new_inbox_ciphertext || !context_hash)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk, pk_new;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pk_new, new_pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey s1, s2, s1_new, s2_new, i1, i2, i1_new, i2_new;
+    if (!mpt_make_ec_pair(spending_ciphertext, &s1, &s2) ||
+        !mpt_make_ec_pair(new_spending_ciphertext, &s1_new, &s2_new) ||
+        !mpt_make_ec_pair(inbox_ciphertext, &i1, &i2) ||
+        !mpt_make_ec_pair(new_inbox_ciphertext, &i1_new, &i2_new))
+        return -1;
+
+    if (secp256k1_rotate_holder_rotate_verify(
+            ctx,
+            proof,
+            &pk,
+            &pk_new,
+            &s1,
+            &s2,
+            &s1_new,
+            &s2_new,
+            &i1,
+            &i2,
+            &i1_new,
+            &i2_new,
+            context_hash) != 1)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+mpt_verify_holder_key_recovery_proof(
+    uint8_t const proof[SECP256K1_ROTATE_RECOVERY_KEY_PROOF_SIZE],
+    uint8_t const pubkey[kMPT_PUBKEY_SIZE],
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!proof || !pubkey || !context_hash)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_rotate_recovery_key_verify(ctx, proof, &pk, context_hash) != 1)
+        return -1;
+
+    return 0;
+}
+
+int
+mpt_verify_recover_balance_proof(
+    uint8_t const proof[SECP256K1_ROTATE_REENCRYPT_PROOF_SIZE],
+    uint8_t const pub[kMPT_PUBKEY_SIZE],
+    uint8_t const issuer_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const recovery_pubkey[kMPT_PUBKEY_SIZE],
+    uint8_t const new_spending_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE],
+    uint8_t const context_hash[kMPT_HALF_SHA_SIZE])
+{
+    if (!proof || !pub || !issuer_ciphertext || !recovery_pubkey || !new_spending_ciphertext ||
+        !context_hash)
+        return -1;
+
+    secp256k1_context const* ctx = mpt_secp256k1_context();
+    if (!ctx)
+        return -1;
+
+    secp256k1_pubkey pk, pk_recovery;
+    if (secp256k1_ec_pubkey_parse(ctx, &pk, pub, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    if (secp256k1_ec_pubkey_parse(ctx, &pk_recovery, recovery_pubkey, kMPT_PUBKEY_SIZE) != 1)
+        return -1;
+
+    secp256k1_pubkey e1, e2, s1_new, s2_new;
+    if (!mpt_make_ec_pair(issuer_ciphertext, &e1, &e2) ||
+        !mpt_make_ec_pair(new_spending_ciphertext, &s1_new, &s2_new))
+        return -1;
+
+    if (secp256k1_rotate_recover_balance_verify(
+            ctx, proof, &pk, &e1, &e2, &pk_recovery, &s1_new, &s2_new, context_hash) != 1)
+    {
+        return -1;
+    }
+
+    return 0;
 }
 }
