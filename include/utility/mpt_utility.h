@@ -285,15 +285,16 @@ mpt_decrypt_amount(
  * issuance's ConfidentialOutstandingAmount, so the bit width of that ledger
  * value is sufficient.
  *
- * The Baby-Step Giant-Step table is chosen from bits_total and built once per
- * process for each width. A wider search needs a larger table and more search
- * steps; near 63 bits the worst case takes hours. A narrower search needs
- * less memory and fails faster, but each of its steps covers fewer amounts, so
- * decrypting a given amount can take longer than with mpt_decrypt_amount.
+ * The Baby-Step Giant-Step table is chosen from bits_total. A wider search
+ * needs a larger table and more search steps; near 63 bits the worst case
+ * takes hours. A narrower search needs less memory and fails faster, but each
+ * of its steps covers fewer amounts, so decrypting a given amount can take
+ * longer than with mpt_decrypt_amount.
  *
- * @note The first call for each width builds its lookup table, so it can be
- *       slow, and wider widths take longer. Later calls for the same width
- *       reuse the table.
+ * @note The first call for a width builds its lookup table, so it can be slow,
+ *       and wider widths take longer. Besides the default table, only the most
+ *       recently used one is kept, so later calls reuse it until a different
+ *       width (or l1) is requested; alternating between widths rebuilds it.
  *
  * @warning Not constant-time; see mpt_decrypt_amount.
  *
@@ -322,9 +323,11 @@ mpt_decrypt_amount_with_bits_total(
  * trade memory for speed, e.g. a larger l1 on a server or a smaller one where
  * memory is limited.
  *
- * @note The first call for each (bits_total, l1) pair builds its lookup table,
- *       so it can be slow, and a larger l1 takes longer. Later calls with the
- *       same pair reuse the table.
+ * @note The first call for a (bits_total, l1) pair builds its lookup table, so
+ *       it can be slow, and a larger l1 takes longer. Besides the default
+ *       table, only the most recently used one is kept, so later calls reuse it
+ *       until a different pair is requested; alternating between pairs rebuilds
+ *       it.
  *
  * @warning Not constant-time; see mpt_decrypt_amount.
  *

@@ -339,8 +339,9 @@ EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero,_secp256k1_ec_pubkey_pars
 #    (non-resizable) buffer on each grow — browser-safe, and no fixed memory cap.
 #  - MAXIMUM_MEMORY=128MB: a defense-in-depth ceiling. The working set is secp256k1's
 #    static tables plus the BSGS lookup tables that the decrypt functions build on first
-#    use and keep for the life of the module. The default table fits well under this
-#    cap; wider widths or a larger l1 need larger tables, which may not. Per-op
+#    use. At most two are kept, the default one and the most recently used other one,
+#    and the old one is freed before a new one is built. The default table fits well
+#    under this cap; wider widths or a larger l1 need larger tables, which may not. Per-op
 #    allocations are freed and reused; the ceiling bounds a hypothetical runaway well
 #    under the 2GB default.
 #  - EXPORTED_RUNTIME_METHODS: the TS marshalling layer needs HEAPU8 + ccall/cwrap.

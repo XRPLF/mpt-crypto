@@ -628,41 +628,61 @@ mpt_bsgs_auto_l1(int bits_total)
 
 /**
  * @internal
- * Shared BSGS context covering [0, 2^bits_total) with baby-step width l1,
- * created on first use and kept for the life of the process. bits_total must
- * be in [1, kMPT_BSGS_MAX_BITS] and l1 in [1, kMPT_BSGS_L1_LIMIT].
+ * Shared BSGS context covering [0, 2^bits_total) with baby-step width l1.
+ * bits_total must be in [1, kMPT_BSGS_MAX_BITS] and l1 in
+ * [1, kMPT_BSGS_L1_LIMIT].
  *
- * The caller must hold the BSGS mutex.
+ * At most two tables are kept, so memory stays bounded however many widths
+ * callers use. The default (MPT_BSGS_DEFAULT_BITS_TOTAL, MPT_BSGS_DEFAULT_L1)
+ * table is kept for the life of the process. Every other combination shares a
+ * single slot whose table is replaced when a different combination is
+ * requested, so switching between non-default combinations rebuilds it.
+ *
+ * The caller must hold the BSGS mutex while using the returned context, since
+ * a later call may replace it.
  */
 static secp256k1_elgamal_bsgs_ctx const*
 mpt_bsgs_context(int bits_total, int l1)
 {
-    struct BsgsContextCache
+    struct BsgsContextSlot
     {
-        secp256k1_elgamal_bsgs_ctx* ctxs[kMPT_BSGS_MAX_BITS + 1][kMPT_BSGS_L1_LIMIT + 1] = {};
+        secp256k1_elgamal_bsgs_ctx* ctx = nullptr;
+        int bits_total = 0;
+        int l1 = 0;
 
-        ~BsgsContextCache()
+        ~BsgsContextSlot()
         {
-            for (auto& row : ctxs)
-            {
-                for (secp256k1_elgamal_bsgs_ctx* ctx : row)
-                    secp256k1_elgamal_bsgs_ctx_destroy(ctx);
-            }
+            secp256k1_elgamal_bsgs_ctx_destroy(ctx);
         }
     };
 
-    static BsgsContextCache cache;
+    static BsgsContextSlot default_slot;
+    static BsgsContextSlot other_slot;
 
-    secp256k1_elgamal_bsgs_ctx*& ctx = cache.ctxs[bits_total][l1];
-    if (!ctx)
+    bool const is_default = bits_total == MPT_BSGS_DEFAULT_BITS_TOTAL && l1 == MPT_BSGS_DEFAULT_L1;
+    BsgsContextSlot& slot = is_default ? default_slot : other_slot;
+
+    if (slot.ctx && (slot.bits_total != bits_total || slot.l1 != l1))
     {
-        // No disk cache (nullptr), so each process builds the table on its first decrypt for this
-        // width and l1, and reuses it afterwards. The table's memory and build time grow with l1.
-        // bsgs_dlp.h recommends a cache path for long-running or frequently restarted processes.
-        if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
-            ctx = secp256k1_elgamal_bsgs_ctx_create(secp_ctx, bits_total, l1, nullptr);
+        // Free the previous table before building the next one, so the two never
+        // coexist in memory.
+        secp256k1_elgamal_bsgs_ctx_destroy(slot.ctx);
+        slot.ctx = nullptr;
     }
-    return ctx;
+
+    if (!slot.ctx)
+    {
+        // The table is built in memory on first use and reused until
+        // replaced.
+        if (secp256k1_context const* secp_ctx = mpt_secp256k1_context())
+        {
+            slot.ctx = secp256k1_elgamal_bsgs_ctx_create(secp_ctx, bits_total, l1, nullptr);
+            slot.bits_total = bits_total;
+            slot.l1 = l1;
+        }
+    }
+
+    return slot.ctx;
 }
 
 /**
