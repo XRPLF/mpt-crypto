@@ -52,6 +52,25 @@ struct CleanseGuard
     CleanseGuard&
     operator=(CleanseGuard const&) = delete;
 };
+
+/**
+ * @internal
+ * A cached BSGS context and the (bits_total, l1) it was built for. Its mutex
+ * guards the other members and serializes searches on the context, since the
+ * BSGS solver documents single-threaded use.
+ */
+struct BsgsContextSlot
+{
+    std::mutex mutex;
+    secp256k1_elgamal_bsgs_ctx* ctx = nullptr;
+    int bits_total = 0;
+    int l1 = 0;
+
+    ~BsgsContextSlot()
+    {
+        secp256k1_elgamal_bsgs_ctx_destroy(ctx);
+    }
+};
 }  // namespace
 
 extern "C" {
@@ -628,40 +647,39 @@ mpt_bsgs_auto_l1(int bits_total)
 
 /**
  * @internal
- * Shared BSGS context covering [0, 2^bits_total) with baby-step width l1.
- * bits_total must be in [1, kMPT_BSGS_MAX_BITS] and l1 in
- * [1, kMPT_BSGS_L1_LIMIT].
+ * Returns the cache slot for (bits_total, l1).
  *
  * At most two tables are kept, so memory stays bounded however many widths
  * callers use. The default (MPT_BSGS_DEFAULT_BITS_TOTAL, MPT_BSGS_DEFAULT_L1)
- * table is kept for the life of the process. Every other combination shares a
- * single slot whose table is replaced when a different combination is
- * requested, so switching between non-default combinations rebuilds it.
- *
- * The caller must hold the BSGS mutex while using the returned context, since
- * a later call may replace it.
+ * table has its own slot and is kept for the life of the process. Every other
+ * combination shares a second slot whose table is replaced when a different
+ * combination is requested, so switching between non-default combinations
+ * rebuilds it. Each slot has its own mutex, so a long search in one slot does
+ * not block decryption in the other.
  */
-static secp256k1_elgamal_bsgs_ctx const*
-mpt_bsgs_context(int bits_total, int l1)
+static BsgsContextSlot&
+mpt_bsgs_slot(int bits_total, int l1)
 {
-    struct BsgsContextSlot
-    {
-        secp256k1_elgamal_bsgs_ctx* ctx = nullptr;
-        int bits_total = 0;
-        int l1 = 0;
-
-        ~BsgsContextSlot()
-        {
-            secp256k1_elgamal_bsgs_ctx_destroy(ctx);
-        }
-    };
-
     static BsgsContextSlot default_slot;
     static BsgsContextSlot other_slot;
 
     bool const is_default = bits_total == MPT_BSGS_DEFAULT_BITS_TOTAL && l1 == MPT_BSGS_DEFAULT_L1;
-    BsgsContextSlot& slot = is_default ? default_slot : other_slot;
+    return is_default ? default_slot : other_slot;
+}
 
+/**
+ * @internal
+ * Returns the slot's BSGS context covering [0, 2^bits_total) with baby-step
+ * width l1, building it, or replacing a context built for a different
+ * combination, as needed. bits_total must be in [1, kMPT_BSGS_MAX_BITS] and l1
+ * in [1, kMPT_BSGS_L1_LIMIT].
+ *
+ * The caller must hold slot.mutex while using the returned context, since a
+ * later call may replace it.
+ */
+static secp256k1_elgamal_bsgs_ctx const*
+mpt_bsgs_slot_context(BsgsContextSlot& slot, int bits_total, int l1)
+{
     if (slot.ctx && (slot.bits_total != bits_total || slot.l1 != l1))
     {
         // Free the previous table before building the next one, so the two never
@@ -713,10 +731,12 @@ mpt_internal_decrypt_bsgs(
     if (secp256k1_ec_seckey_verify(ctx, privkey) != 1)
         return -1;
 
-    static std::mutex bsgs_mutex;
-    std::lock_guard<std::mutex> const lock(bsgs_mutex);
+    // Only the slot for this combination is locked, so a long search in the
+    // other slot does not block this decryption.
+    BsgsContextSlot& slot = mpt_bsgs_slot(bits_total, l1);
+    std::lock_guard<std::mutex> const lock(slot.mutex);
 
-    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_context(bits_total, l1);
+    secp256k1_elgamal_bsgs_ctx const* bsgs_ctx = mpt_bsgs_slot_context(slot, bits_total, l1);
     if (!bsgs_ctx)
         return -1;
 
