@@ -319,9 +319,10 @@ mpt_decrypt_amount_with_bits_total(
  * Like mpt_decrypt_amount_with_bits_total, but the caller also chooses l1, the
  * baby-step width, instead of having it chosen from bits_total. The table holds
  * 2^(l1 - 1) entries, so each +1 on l1 doubles its memory and build time and
- * halves the worst-case number of search steps (2^(bits_total - l1)). Use it to
- * trade memory for speed, e.g. a larger l1 on a server or a smaller one where
- * memory is limited.
+ * halves the worst-case number of search steps (2^(bits_total - l1)). Prefer
+ * mpt_decrypt_amount_with_bits_total, which chooses l1 automatically; use this
+ * function only to trade memory for speed, e.g. a larger l1 on a server or a
+ * smaller one where memory is limited.
  *
  * @note The first call for a (bits_total, l1) pair builds its lookup table, so
  *       it can be slow, and a larger l1 takes longer. Besides the default
