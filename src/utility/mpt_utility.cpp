@@ -689,6 +689,10 @@ mpt_internal_decrypt_bsgs(
     if (!mpt_make_ec_pair(in_ciphertext, &c1, &c2))
         return -1;
 
+    // Reject an invalid key before taking the lock.
+    if (secp256k1_ec_seckey_verify(ctx, privkey) != 1)
+        return -1;
+
     static std::mutex bsgs_mutex;
     std::lock_guard<std::mutex> const lock(bsgs_mutex);
 
