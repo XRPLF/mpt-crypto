@@ -54,7 +54,7 @@ fi
 # outside Conan (git tag / release tarball), so verify them the way Conan does
 # from conan.lock. Update these together with the versions above.
 SECP256K1_COMMIT="1a53f4961f337b4d166c25fce72ef0dc88806618"                       # tag v0.7.1
-OPENSSL_SHA256="aaf51a1fe064384f811daeaeb4ec4dce7340ec8bd893027eee676af31e83a04f" # openssl-3.6.2.tar.gz
+OPENSSL_SHA256="a2157c2830efdec3788939b00c9b0638306d3f0bbb76dc4832ee503bb397df98" # openssl-3.6.5.tar.gz
 
 # Portable sha256 (Linux coreutils sha256sum; macOS shasum).
 sha256_of() {
@@ -311,6 +311,19 @@ EXPORTS="${EXPORTS},_mpt_compute_convert_back_remainder"
 # (CB_S' = CB_S -/+ the encrypted amount) so each chained proof binds to it. The TS
 # wrapper marshals bytes<->secp256k1_pubkey via _mpt_make_ec_pair/_mpt_serialize_ec_pair.
 EXPORTS="${EXPORTS},_secp256k1_elgamal_add,_secp256k1_elgamal_subtract"
+# Canonical encrypted zero (secp256k1_pubkey out, defined in src/elgamal.c).
+# Not used by the proof builders, but XLS-0096 section 9.4 makes the canonical
+# zero a deliberately public property: anyone holding the ledger's public data
+# (holder encryption key, account ID, issuance ID) can recompute EncZero and
+# byte-compare it against a stored ciphertext to learn that a balance is exactly
+# 0. Exporting it keeps observers (explorers, compliance tooling, a wallet
+# auditing its own exposure) on the same deterministic derivation validators
+# use, instead of reimplementing the hash-and-rejection-sample outside the
+# library where a drift would fail silently. The output pair serializes via
+# _mpt_serialize_ec_pair like the two above, but the input is a single 33-byte
+# holder key, which _mpt_make_ec_pair (66-byte pairs) can't parse, so
+# _secp256k1_ec_pubkey_parse is exported for that.
+EXPORTS="${EXPORTS},_generate_canonical_encrypted_zero,_secp256k1_ec_pubkey_parse"
 
 # Why these -s link flags (they define the JS-facing contract, so don't drop them
 # without checking the @xrplf/mpt-crypto TS wrapper):
