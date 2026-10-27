@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -329,10 +330,9 @@ test_encryption_decryption_integrate()
         0,
         1,
         1000,
-        // Large amounts are omitted for test performance. With BSGS these
-        // will be fast and can be re-enabled.
-        // 123456789,
-        // 10000000000ULL
+        123456789,
+        10000000000ULL,
+        (1ULL << 40) - 1,
     };
 
     for (uint64_t original_amount : test_amounts)
@@ -341,9 +341,118 @@ test_encryption_decryption_integrate()
 
         EXPECT(mpt_generate_blinding_factor(bf) == 0);
         EXPECT(mpt_encrypt_amount(original_amount, pub, bf, ciphertext) == 0);
-        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount, 0, 2000) == 0);
+        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == 0);
         EXPECT(decrypted_amount == original_amount);
     }
+
+    // An amount outside the supported range cannot be recovered.
+    {
+        uint64_t decrypted_amount = 0;
+
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(1ULL << 40, pub, bf, ciphertext) == 0);
+        EXPECT(mpt_decrypt_amount(ciphertext, priv, &decrypted_amount) == -1);
+    }
+}
+
+void
+test_decryption_with_bits_total_integrate()
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+
+    auto const decrypt = [&](uint64_t amount, int bits_total, uint64_t& out) {
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(amount, pub, bf, ciphertext) == 0);
+        return mpt_decrypt_amount_with_bits_total(ciphertext, priv, bits_total, &out);
+    };
+
+    // Amounts below 2^bits_total are recovered, for a width below the smallest
+    // table, a mid-range width, and a width above the default 40 bits.
+    for (auto const& [amount, bits_total] : std::vector<std::pair<uint64_t, int>>{
+             {0, 10},
+             {(1ULL << 10) - 1, 10},
+             {(1ULL << 30) - 1, 30},
+             {(1ULL << 40) + 7, 41},
+         })
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(amount, bits_total, decrypted_amount) == 0);
+        EXPECT(decrypted_amount == amount);
+    }
+
+    // An amount of 2^bits_total or more is rejected, both when a wider shared
+    // table would find it and when it is beyond the table.
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1ULL << 10, 10, decrypted_amount) == -1);
+        EXPECT(decrypt(1ULL << 30, 30, decrypted_amount) == -1);
+    }
+
+    // A width outside [1, 63] is rejected.
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1, 0, decrypted_amount) == -2);
+        EXPECT(decrypt(1, 64, decrypted_amount) == -2);
+    }
+
+    // A null output pointer is rejected.
+    EXPECT(mpt_decrypt_amount_with_bits_total(ciphertext, priv, 10, nullptr) == -1);
+}
+
+void
+test_decryption_with_l1_bits_total_integrate()
+{
+    uint8_t priv[kMPT_PRIVKEY_SIZE];
+    uint8_t pub[kMPT_PUBKEY_SIZE];
+    uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+    uint8_t ciphertext[kMPT_ELGAMAL_TOTAL_SIZE];
+    EXPECT(mpt_generate_keypair(priv, pub) == 0);
+
+    auto const decrypt = [&](uint64_t amount, int bits_total, int l1, uint64_t& out) {
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(amount, pub, bf, ciphertext) == 0);
+        return mpt_decrypt_amount_with_l1_bits_total(ciphertext, priv, bits_total, l1, &out);
+    };
+
+    // Amounts below 2^bits_total are recovered with the default table and with a
+    // smaller one that trades memory for more search steps.
+    for (auto const& [amount, bits_total, l1] : std::vector<std::tuple<uint64_t, int, int>>{
+             {(1ULL << 40) - 1, 40, 22},
+             {0, 30, 12},
+             {(1ULL << 30) - 1, 30, 12},
+         })
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(amount, bits_total, l1, decrypted_amount) == 0);
+        EXPECT(decrypted_amount == amount);
+    }
+
+    // An amount of 2^bits_total or more is rejected.
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1ULL << 30, 30, 12, decrypted_amount) == -1);
+    }
+
+    // Out-of-range parameters are rejected: bits_total outside [1, 63], l1
+    // outside [1, 32], or l1 not below bits_total.
+    for (auto const& [bits_total, l1] : std::vector<std::pair<int, int>>{
+             {0, 1},
+             {64, 22},
+             {30, 0},
+             {40, 33},
+             {20, 20},
+         })
+    {
+        uint64_t decrypted_amount = 0;
+        EXPECT(decrypt(1, bits_total, l1, decrypted_amount) == -2);
+    }
+
+    // A null output pointer is rejected.
+    EXPECT(mpt_decrypt_amount_with_l1_bits_total(ciphertext, priv, 30, 12, nullptr) == -1);
 }
 
 void
@@ -1549,6 +1658,8 @@ void
 run_integration_tests()
 {
     test_encryption_decryption_integrate();
+    test_decryption_with_bits_total_integrate();
+    test_decryption_with_l1_bits_total_integrate();
     test_mpt_confidential_convert_integrate();
     test_mpt_confidential_send_integrate();
     test_mpt_convert_back_integrate();
