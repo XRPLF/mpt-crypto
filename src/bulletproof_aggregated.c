@@ -966,7 +966,7 @@ cleanup:
  *
  * Given:
  *   - the original generator vectors G_vec and H_vec,
- *   - the prover’s cross-term commitments L_i and R_i,
+ *   - the prover's cross-term commitments L_i and R_i,
  *   - the final folded scalars a_final and b_final,
  *   - the binding scalar ux,
  *   - and the initial commitment P,
@@ -1182,6 +1182,11 @@ int secp256k1_bulletproof_create_commitment(
     uint64_t value, const unsigned char *blinding_factor,
     const secp256k1_pubkey *h_generator)
 {
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(commitment_C != NULL);
+  MPT_ARG_CHECK(blinding_factor != NULL);
+  MPT_ARG_CHECK(h_generator != NULL);
+
   secp256k1_pubkey G_term, Pk_term;
   const secp256k1_pubkey *points_to_add[2];
   int v_is_zero = (value == 0);
@@ -1284,8 +1289,12 @@ static int calculate_commitment_term(
  * - context_id: Optional 32-byte unique ID to bind the proof to a context.
  *
  * Outputs:
- * - proof_out: Buffer to receive the serialized proof.
- * - proof_len: On input, size of proof_out. On output, actual proof size.
+ * - proof_out: Buffer to receive the serialized proof. NULL makes this a size
+ *   query: *proof_len is set to the required length, 1 is returned, and no
+ *   proving work is done.
+ * - proof_len: On input, the capacity of proof_out. On output, the number of
+ *   bytes written, or -- if the input capacity was too small -- the required
+ *   length, with 0 returned and proof_out left untouched.
  *
  * Returns 1 on success, 0 on failure.
  */
@@ -1294,6 +1303,13 @@ int secp256k1_bulletproof_prove_agg(
     const uint64_t *values, const unsigned char *blindings_flat, size_t m,
     const secp256k1_pubkey *h_generator, const unsigned char *context_id)
 {
+  /* context_id is documented as optional and is NULL-guarded at every
+     transcript absorption below, so it is deliberately not checked here. */
+  MPT_ARG_CHECK(ctx != NULL);
+  MPT_ARG_CHECK(values != NULL);
+  MPT_ARG_CHECK(blindings_flat != NULL);
+  MPT_ARG_CHECK(h_generator != NULL);
+
   /* ---- 0. Dimensions ---- */
   const size_t n = BP_TOTAL_BITS(m);      /* 64*m */
   const size_t rounds = bp_ipa_rounds(n); /* log2(64*m) */
@@ -1306,8 +1322,35 @@ int secp256k1_bulletproof_prove_agg(
 
   /* Proof length = 4*33 + 2*rounds*33 + 5*32 */
   const size_t proof_size = 292 + 66 * rounds;
-  if (proof_len)
+
+  /* Capture the caller-supplied capacity before *proof_len is written to.
+     Serialization below is gated on this, not on *proof_len: overwriting
+     *proof_len first would make the capacity check compare proof_size against
+     itself and always pass, serializing past the end of an undersized
+     proof_out. */
+  const size_t proof_cap = proof_len ? *proof_len : 0;
+
+  /* Size query: report the required length without writing a proof. Answered
+     here rather than after proving, since nothing before serialization is
+     needed to compute it. */
+  if (proof_out == NULL)
+  {
+    if (proof_len == NULL)
+      return 0;
     *proof_len = proof_size;
+    return 1;
+  }
+
+  if (proof_len == NULL)
+    return 0;
+
+  /* Insufficient capacity: report the required length and fail before doing
+     any proving work. */
+  if (proof_cap < proof_size)
+  {
+    *proof_len = proof_size;
+    return 0;
+  }
 
   int ok = 0;
 
@@ -2039,23 +2082,12 @@ int secp256k1_bulletproof_prove_agg(
   {
     const size_t expected = 292 + 66 * rounds; /* 4*33 + 2*rounds*33 + 5*32 */
 
-    /* Standard pattern: query size only */
-    if (proof_out == NULL)
-    {
-      if (proof_len)
-        *proof_len = expected;
-      ok = 1;
+    /* proof_out == NULL (size query), proof_len == NULL, and insufficient
+       capacity are all rejected at the top of the function, before any proving
+       work. proof_cap is the caller's original capacity; *proof_len has not
+       been written at this point. */
+    if (proof_cap < expected)
       goto cleanup;
-    }
-
-    if (proof_len == NULL)
-      goto cleanup;
-
-    if (*proof_len < expected)
-    {
-      *proof_len = expected;
-      goto cleanup; /* not enough space */
-    }
 
     unsigned char *ptr = proof_out;
     size_t ser_len;
