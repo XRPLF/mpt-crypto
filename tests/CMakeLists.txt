@@ -152,3 +152,10 @@ add_mpt_test(
     test_bsgs_dlp.c
     DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
+# Calibration test for the Pippenger/Straus MSM:
+# verifies bit-identical output against a public-API reference.
+add_mpt_test(
+    test_mpt_msm
+    test_mpt_msm.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
