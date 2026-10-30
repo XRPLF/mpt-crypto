@@ -113,7 +113,7 @@
   %
   In \cref{app:twisted}, we evaluate the twisted ElGamal variant and
   show that, under compact form, its advantage over standard EC-ElGamal
-  shrinks to an irreducible $64$~bytes---insufficient to justify the
+  shrinks to $32$~bytes---insufficient to justify the
   specification, implementation, and audit costs.
 \end{abstract}
 
@@ -190,7 +190,7 @@ equality proof due to Cenk~\cite{Cenk2026unification}.
 \Cref{sec:implementation} discusses implementation considerations.
 \Cref{sec:sizes} gives the transaction size analysis.
 \Cref{app:twisted} evaluates the twisted ElGamal variant and shows
-that compact form reduces its advantage to $64$~bytes.
+that compact form reduces its advantage to $32$~bytes.
 
 %--------------------------------------------------------------------
 \section{Combined Proof Statement}
@@ -1471,43 +1471,46 @@ CMPT specification, for the reasons summarised in
 In twisted ElGamal, each ciphertext component $Y = r \cdot G + m \cdot H$
 simultaneously serves as a Pedersen commitment, eliminating separate
 $\mathit{PC}_m$ and $\mathit{PC}_b$.
-The refreshed remainder ciphertext $(Y^*, X^*)$ uses a DDH proof
-to link to the balance.
+The refreshed remainder ciphertext $(X^*, Y^*)$, with $X^* = r^* \cdot \pk_A$, is linked to the balance by a DDH
+proof on the difference ciphertext and by a proof of knowledge of $r^*$.
 The combined relation is:
 \begin{multline*}
   L_{\mathrm{comb}}^{(n)} = \bigl\{
-  (\pk_i, Y, X_i, \pk_A, D_X, D_Y) \;\big|\;
-  \exists\,(r, m, \sk_A) \in \Zq^3: \\
+  (\pk_i, Y, X_i, \pk_A, X^*, D_X, D_Y) \;\big|\;
+  \exists\,(r, m, r^*, \sk_A) \in \Zq^4: \\
   Y = r \cdot G + m \cdot H
   \;\wedge\;
   X_i = r \cdot \pk_i\; \forall i
+  \;\wedge\;
+  X^* = r^* \cdot \pk_A \\
   \;\wedge\;
   \pk_A = \sk_A \cdot G
   \;\wedge\;
   D_X = \sk_A \cdot D_Y
   \bigr\},
 \end{multline*}
-where $D_X, D_Y$ are the difference ciphertext components.
-The witness is $(r, m, \sk_A)$---only three scalars, compared to five
+where $D_X = X_{\mathrm{rem}} - X^*$ and $D_Y = Y_{\mathrm{rem}} - Y^*$ are the difference ciphertext components.
+The witness is $(r, m, r^*, \sk_A)$---four scalars, compared to five
 for standard EC-ElGamal.
+(Setting $r^* = r$ to save a witness would make $Y^* - Y = (b-2m) \cdot H$ public and leak $b$.)
 
 \subsection{Compact-Form Protocol}
 
-The AND-composed sigma protocol has nonces $(a, b, k)$ for
-$(r, m, \sk_A)$, with $n + 3$ first-round commitments:
+The AND-composed sigma protocol has nonces $(a, b, a^*, k)$ for
+$(r, m, r^*, \sk_A)$, with $n + 4$ first-round commitments:
 \begin{align*}
   T_Y &= a \cdot G + b \cdot H, &
   T_{X,i} &= a \cdot \pk_i \quad (i = 1, \ldots, n), \\
-  K_1 &= k \cdot G, &
-  K_2 &= k \cdot D_Y.
+  T^* &= a^* \cdot \pk_A, &
+  K_1 &= k \cdot G, \quad K_2 = k \cdot D_Y.
 \end{align*}
 Responses: $z_1 = a + e \cdot r$, $z_2 = b + e \cdot m$,
-$z_3 = k + e \cdot \sk_A$.
+$z_3 = a^* + e \cdot r^*$, $z_4 = k + e \cdot \sk_A$.
 
 \medskip
 \noindent\textbf{Compact form.}
-$\Pi_{\mathrm{comb}} = (e, z_1, z_2, z_3) \in \Zq^4$:
-$4 \times 32 = \mathbf{128}$~bytes.
+$\Pi_{\mathrm{comb}} = (e, z_1, z_2, z_3, z_4) \in \Zq^5$:
+$5 \times 32 = \mathbf{160}$~bytes.
 
 \medskip
 \noindent\textbf{Verification.}
@@ -1515,15 +1518,18 @@ Reconstruct commitments:
 \begin{align*}
   T_Y &= z_1 \cdot G + z_2 \cdot H - e \cdot Y, &
   T_{X,i} &= z_1 \cdot \pk_i - e \cdot X_i, \\
-  K_1 &= z_3 \cdot G - e \cdot \pk_A, &
-  K_2 &= z_3 \cdot D_Y - e \cdot D_X.
+  T^* &= z_3 \cdot \pk_A - e \cdot X^*, &
+  K_1 &= z_4 \cdot G - e \cdot \pk_A, \\
+  K_2 &= z_4 \cdot D_Y - e \cdot D_X.
 \end{align*}
 Check $e \stackrel{?}{=} \mathcal{H}(\cdots)$.
 
 Security follows from the same arguments as \cref{sec:security},
-with the witness and nonce spaces having dimension~$3$ instead of~$5$.
+with the witness and nonce spaces having dimension~$4$ instead of~$5$.
+That the proved relation pins the committed remainder to $b - m$ is shown by
+the soundness lemma of the twisted ElGamal note~\cite{Dore2026twisted}.
 
-\subsection{The 64-Byte Gap}
+\subsection{The 32-Byte Gap}
 \label{sec:twisted-gap}
 
 \Cref{tab:twisted-comparison} compares the sigma overhead of both
@@ -1549,14 +1555,14 @@ schemes across proof formats.
     & $457$ & $424$
     & $192$ \\[2pt]
     \textbf{Twisted ElGamal}
-    & $327$ & $294$
-    & $327$ & $294$
-    & $128$ \\
+    & $392$ & $359$
+    & $392$ & $359$
+    & $160$ \\
     \midrule
     \textbf{Std.\ $\to$ Twisted savings}
-    & $292$ & $292$
-    & $130$ & $130$
-    & $\mathbf{64}$ \\
+    & $227$ & $227$
+    & $65$ & $65$
+    & $\mathbf{32}$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1567,31 +1573,32 @@ Two observations:
 \begin{enumerate}
   \item \textbf{Compact form benefits standard EC-ElGamal more.}
     Standard EC-ElGamal has more group-element commitments to
-    eliminate ($8$ vs.\ $6$ in merged form), yielding a larger
-    absolute reduction ($-232$~B vs.\ $-166$~B).
+    eliminate ($8$ vs.\ $7$ in merged form at $n = 3$), yielding a larger
+    absolute reduction ($-232$~B vs.\ $-199$~B).
 
-  \item \textbf{The twisted ElGamal advantage shrinks from $292$ to
-    $64$~bytes.}
+  \item \textbf{The twisted ElGamal advantage shrinks from $227$ to
+    $32$~bytes.}
     In commitment form, twisted ElGamal saves bytes primarily by
     eliminating linkage proofs whose cost comes from group-element
     commitments ($33$~B each).
     Compact form removes \emph{all} group-element commitments from
     \emph{both} schemes.
-    What remains is the irreducible per-witness cost: each independent
+    What remains is the per-witness cost: each independent
     scalar witness contributes one $32$-byte response.
-    Twisted ElGamal has three witnesses $(r, m, \sk_A)$ whereas
-    standard EC-ElGamal has five $(m, r, b, \rho, \sk_A)$, because
-    the dual-purpose ciphertext/commitment structure of twisted
-    ElGamal makes separate Pedersen commitments---and their associated
-    witnesses $\rho$ and~$b$---unnecessary.
+    Twisted ElGamal has four witnesses $(r, m, r^*, \sk_A)$ whereas
+    standard EC-ElGamal has five $(m, r, b, \rho, \sk_A)$.
+    The dual-purpose ciphertext/commitment structure of twisted
+    ElGamal makes the separate Pedersen commitments---and their
+    witnesses $\rho$ and~$b$---unnecessary, but the refreshed
+    ciphertext needs its own randomness $r^*$, which cannot be
+    identified with $r$ without leaking the balance.
 \end{enumerate}
 
 \noindent
-The $64$-byte gap is \textbf{structural and irreducible}: it comes
-from the number of independent scalar witnesses, not from group
-elements.
+The $32$-byte gap comes from the number of independent scalar witnesses,
+not from group elements.
 No further compression technique---including the $\mathcal{O}(1)$
-equality proof of \cref{sec:equality-o1}---can close it.
+equality proof of \cref{sec:equality-o1}---changes the witness count.
 Adding or removing auditors changes the ciphertext count by
 $\pm 33$~bytes per recipient, identically for both schemes, so the
 relative comparison is unaffected by~$n$.
@@ -1622,8 +1629,8 @@ relative comparison is unaffected by~$n$.
       & $0$ \\
     Compact sigma proof
       & $192$ & $192$
-      & $128$ & $128$
-      & $-64$ \\
+      & $160$ & $160$
+      & $-32$ \\
     Aggregated Bulletproof
       & $754$ & $754$
       & $754$ & $754$
@@ -1631,13 +1638,13 @@ relative comparison is unaffected by~$n$.
     \midrule
     \textbf{Total}
       & $\mathbf{1177}$ & $\mathbf{1144}$
-      & $\mathbf{1113}$ & $\mathbf{1080}$
-      & $\mathbf{-64}$ \\
+      & $\mathbf{1145}$ & $\mathbf{1112}$
+      & $\mathbf{-32}$ \\
     \midrule
     \textit{With BP++ upgrade}
       & $\sim 905$ & $\sim 872$
-      & $\sim 841$ & $\sim 816$
-      & $\sim\!-64$ \\
+      & $\sim 873$ & $\sim 840$
+      & $\sim\!-32$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -1645,7 +1652,7 @@ relative comparison is unaffected by~$n$.
 \subsection{Assessment}
 \label{sec:twisted-assessment}
 
-The $64$-byte advantage of twisted ElGamal must be weighed against its
+The $32$-byte advantage of twisted ElGamal must be weighed against its
 costs:
 
 \begin{enumerate}[label=(\roman*)]
@@ -1672,15 +1679,15 @@ costs:
 
 \noindent
 For context, the BP++ upgrade saves $\sim 272$~bytes---more than
-$4\times$ the twisted ElGamal advantage.
+$8\times$ the twisted ElGamal advantage.
 At $n = 4$, standard EC-ElGamal with compact sigma and BP++ gives
-$\sim 905$~bytes, compared to $\sim 841$~bytes for twisted ElGamal
-with the same optimizations: a difference of $64$~bytes ($7\%$) on a
+$\sim 905$~bytes, compared to $\sim 873$~bytes for twisted ElGamal
+with the same optimizations: a difference of $32$~bytes ($4\%$) on a
 total already below $1$~KB.
 
 \begin{remark}[Recommendation]
   Given that the compact sigma optimization is adopted, the
-  $64$-byte saving from twisted ElGamal does not justify the
+  $32$-byte saving from twisted ElGamal does not justify the
   specification, implementation, and audit costs.
   The team's decision to proceed with standard EC-ElGamal and
   compact sigma is sound.
