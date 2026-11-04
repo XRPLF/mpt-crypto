@@ -110,6 +110,12 @@ add_mpt_test(
     DEPENDENCIES mpt-crypto secp256k1::secp256k1
 )
 
+add_mpt_test(
+    test_generator_independence
+    test_generator_independence.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1
+)
+
 add_mpt_test(test_ipa test_ipa.c DEPENDENCIES mpt-crypto secp256k1::secp256k1)
 
 add_mpt_test(
