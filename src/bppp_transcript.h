@@ -1,0 +1,117 @@
+/**
+ * Fiat-Shamir transcript for the BP++ range proof (CMPT_BPPP_RANGE).
+ *
+ * Byte-level specification: cmpt-bppp-upgrade.tex, section "Fiat-Shamir
+ * Transcript Specification" (internal-ripplex-research, technical-reports,
+ * bppp-upgrade/). Every hash input starts with the 15-byte domain string D,
+ * labels are length-prefixed (one byte), points are 33-byte SEC1 compressed,
+ * integers are 4-byte big-endian. SHA-256 throughout.
+ *
+ *   pp   = H(D || Lbl("params") || 0x01 || u32(k) || u32(N) || u32(b)
+ *            || u32(N_n) || u32(N_h) || Pt(G) || Pt(G_0..) || Pt(H_0..))
+ *   s_0  = H(D || Lbl("statement") || pp || context || Pt(V_0..V_{k-1}))
+ *   s_1  = H(D || Lbl("round1") || s_0 || Pt(C_L) || Pt(C_O))     alpha
+ *   s_2  = H(D || Lbl("round2") || s_1 || Pt(C_R))       rho lambda beta delta
+ *   s_3  = H(D || Lbl("round3") || s_2 || Pt(C_S))                 tau
+ *   s_3+j= H(D || Lbl("nla") || u32(j) || s_2+j || Pt(X_j) || Pt(R_j))  gamma_j
+ *   Ch(s, l) = H(D || Lbl("chal") || Lbl(l) || s) mod q
+ *
+ * Challenge validity (prover restarts, verifier rejects): every challenge is
+ * nonzero, and alpha + t != 0 for t = 0..b-1. The functions below return 0
+ * in that case, as for any argument or hashing failure, so a 0 return must
+ * be treated as "reject" by a verifier and "retry with fresh randomness" by
+ * a prover.
+ *
+ * Rounds must be called in order; a call out of order returns 0. The final
+ * norm-linear message is never absorbed (no challenge follows it).
+ *
+ * Test vectors: bppp-oracle/vectors/transcript-secp256k1.json in the
+ * confidential-transactions repository, reproduced by tests/test_bppp_transcript.c.
+ */
+#ifndef MPT_BPPP_TRANSCRIPT_H
+#define MPT_BPPP_TRANSCRIPT_H
+
+#include <secp256k1.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define kBPPP_DOMAIN "CMPT_BPPP_RANGE"
+#define kBPPP_DOMAIN_LEN 15
+#define kBPPP_CIRCUIT_VERSION 0x01
+
+typedef struct
+{
+    unsigned char state[32]; /* s_i */
+    uint32_t round;          /* 0 after init; 1..3; 3 + j after NLA round j */
+    uint32_t base;           /* digit base b, for the alpha validity check */
+} secp256k1_bppp_transcript;
+
+/** Parameter digest pp for the shape (k, N, b) and its compiled generators. */
+int
+secp256k1_bppp_params_digest(
+    secp256k1_context const* ctx,
+    unsigned char pp32[32],
+    uint32_t k,
+    uint32_t n_bits,
+    uint32_t base,
+    secp256k1_pubkey const* G,
+    secp256k1_pubkey const* G_vec,
+    uint32_t n_n,
+    secp256k1_pubkey const* H_vec,
+    uint32_t n_h);
+
+/** s_0 from pp, the mandatory 32-byte context and the k input commitments. */
+int
+secp256k1_bppp_transcript_init(
+    secp256k1_context const* ctx,
+    secp256k1_bppp_transcript* t,
+    unsigned char const pp32[32],
+    unsigned char const context32[32],
+    uint32_t base,
+    secp256k1_pubkey const* V,
+    size_t k);
+
+int
+secp256k1_bppp_transcript_round1(
+    secp256k1_context const* ctx,
+    secp256k1_bppp_transcript* t,
+    secp256k1_pubkey const* C_L,
+    secp256k1_pubkey const* C_O,
+    unsigned char alpha[32]);
+
+int
+secp256k1_bppp_transcript_round2(
+    secp256k1_context const* ctx,
+    secp256k1_bppp_transcript* t,
+    secp256k1_pubkey const* C_R,
+    unsigned char rho[32],
+    unsigned char lambda[32],
+    unsigned char beta[32],
+    unsigned char delta[32]);
+
+int
+secp256k1_bppp_transcript_round3(
+    secp256k1_context const* ctx,
+    secp256k1_bppp_transcript* t,
+    secp256k1_pubkey const* C_S,
+    unsigned char tau[32]);
+
+/** Norm-linear round j = 1, 2, ...: absorb (X_j, R_j), derive gamma_j. */
+int
+secp256k1_bppp_transcript_nla_round(
+    secp256k1_context const* ctx,
+    secp256k1_bppp_transcript* t,
+    uint32_t j,
+    secp256k1_pubkey const* X,
+    secp256k1_pubkey const* R,
+    unsigned char gamma[32]);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* MPT_BPPP_TRANSCRIPT_H */

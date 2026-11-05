@@ -1,0 +1,299 @@
+/* Byte-level conformance test for the BP++ transcript (src/bppp_transcript.c)
+ * against bppp-oracle/vectors/transcript-secp256k1.json (confidential-
+ * transactions repository). The vectors use small multiples of the base
+ * point as stand-ins for the prover's messages; the generators are
+ * mpt-crypto's own (G = base point, G_i = NUMS("G", i), H_i = NUMS("H", i)).
+ * Regenerate the table from the JSON if the transcript changes. */
+#include "../src/bppp_transcript.h"
+#include "secp256k1_mpt.h"
+#include "test_utils.h"
+#include <secp256k1.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+extern int secp256k1_mpt_hash_to_point_nums(const secp256k1_context *ctx,
+                                            secp256k1_pubkey *out,
+                                            const unsigned char *label,
+                                            size_t label_len, uint32_t index);
+
+#define N_H 8
+#define MAX_N_N 32
+#define NLA_ROUNDS 3
+
+typedef struct
+{
+  uint32_t k, n_bits, base, n_n, n_h;
+  const char *context, *pp, *s0;
+  uint64_t v_mult[2];
+  uint64_t c_l_mult, c_o_mult, c_r_mult, c_s_mult;
+  const char *s1, *alpha;
+  const char *s2, *rho, *lambda, *beta, *delta;
+  const char *s3, *tau;
+  uint64_t x_mult[NLA_ROUNDS], r_mult[NLA_ROUNDS];
+  const char *s_nla[NLA_ROUNDS], *gamma[NLA_ROUNDS];
+} vector_t;
+
+static const vector_t VECTORS[] = {
+    {1,
+     64,
+     16,
+     16,
+     8,
+     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+     "00bb81d0064cc830941b6587d7451dc2ea86c64579c7d14355eb9c70dfa186ba",
+     "cdb1bc21f29d101dbb1e0fa944b074443df7bf3aef21e99e56b1a92ed35cb5e7",
+     {2, 0},
+     10,
+     11,
+     12,
+     13,
+     "bd970a27d3a7ae21497fb7f13227db1341e9097bbdaacecf5cc51b937c2d7d5d",
+     "62fdb298a86b1fea1c1edec9b01d3054113dcdb5e99b405375909c7e904fe070",
+     "84d436b3bb6d739ddaf4018b346b071c6f783edd2f7514d1c5782d7acaca27f5",
+     "58b8aa5dcf3c93d9c8e500b7f237f5b6ffb12e6c3a1abab90ce8bc27097c0534",
+     "ac5f641aca8d2eb588ddbe6253d4f8f654b3eec5d0cf49db5db653232e79caa8",
+     "111d717fd96036c3bcb76dd0346a757538113d269b475d7a665289533045cd25",
+     "4f713bff8b55f4fa63aee77cf5621eff1ee629778a47f4cd50ec4e346e11acac",
+     "b635e014a4a2fb1bcb4fdb78acb7caecd769e491122df9d3c697d801bc61ef69",
+     "e486e0c0efc16bd97c1e3084f82693f41c5ee52d21e7081f4428261dc8de7358",
+     {22, 24, 26},
+     {23, 25, 27},
+     {"95ea03559424141440d4369a48d52b5a6000901edf2b7541c1140619dcd64581",
+      "7f184573b097b041207e727e66efcb44d7386976b7bab0b979219b07f661be52",
+      "2aa52c985c92fa30dfa1fc9e8caade1fb849df8f38da0ca3ed2a074a4d80db0d"},
+     {"a36ab9703b71513552f63bd335e4eea5c72f903bdabc8bf16fa0ef9aa5b4dea4",
+      "7254ce0af2657ae9b928cfa09a5e1b248dfee76e791e1ad41c578d456a45d550",
+      "4d27fad5ab1684ac36e841dba7687a2650115816d745103fc2aadddc63b908bc"}},
+    {2,
+     64,
+     16,
+     32,
+     8,
+     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+     "2bc95c5f38ac26add12d28983a0a3ba0a872bb57ecbe6b1e0aea535c27f63561",
+     "3897a67eb9218b985be5d93fbb950d0f89e8f4c0da24fc724b686870286fbb3d",
+     {2, 3},
+     10,
+     11,
+     12,
+     13,
+     "27307a2c16aa1f30fb7ba7bf29522a4c7411feb644e99fab50207479777d916d",
+     "1f3aaea15eac3fc1345ae1ca03cfe2aef0e186840417dcd8f2272cbf4686e59a",
+     "88d9979cbc6ab8d9a5109f012c12bd84008f2cd06cd5cb6b9e4513585e1d2f77",
+     "ed2595146d7c2420402ee45934021c39fb92cc40dc4ca4b6f4ac2abef1a391a4",
+     "27a32d95e41f3a159ec97623339ae97455d988ba7038d6557acc4b43991c65fb",
+     "8f599882df128400ad2b89451f87846d2b08ae5ca4c26df5801d71e612355d07",
+     "952ee3e43ea02018ff7d410ee78e82185e83f3c2acec2eba5e6faa33cc513e20",
+     "6de64eb11dd7b2cc0b7716a9b7add123413178a9b40849f8e50b07a4a6bc1bfc",
+     "da902049df6f347655eac27739a070b2c8154db7e91dd3cfc16f76164db9fae1",
+     {22, 24, 26},
+     {23, 25, 27},
+     {"fbdb35cc83052b2e09fae387029f5fc80bd38e417b72b24fd6e672626c7777ba",
+      "acc0d744d7eebd9d642eb764a3d688498f628750e21b5ddcb9699b404ac7505e",
+      "f0e54035b73b9340424d009f4ba134f84a8faece90503c6e775d64e3116fa4a4"},
+     {"63b10f60309d6addbd671db47ec61b6436de2a3e0cd4649d049556aa0381738c",
+      "85b484a5976ef9d7c60c44de6a922b4435802d530573d29b62abc48fc311839f",
+      "19f96d9ea292ab047c6bb1dd04325b22795f5edf32f4e01e79c485f0d7c63cb9"}},
+};
+
+static int hex32(unsigned char out[32], const char *hex)
+{
+  size_t i;
+  if (strlen(hex) != 64)
+    return 0;
+  for (i = 0; i < 32; i++)
+  {
+    unsigned int b;
+    if (sscanf(hex + 2 * i, "%2x", &b) != 1)
+      return 0;
+    out[i] = (unsigned char)b;
+  }
+  return 1;
+}
+
+static int expect32(const char *what, const unsigned char got[32],
+                    const char *hex)
+{
+  unsigned char want[32];
+  if (!hex32(want, hex) || memcmp(got, want, 32) != 0)
+  {
+    size_t i;
+    printf("  MISMATCH %s\n    got  ", what);
+    for (i = 0; i < 32; i++)
+      printf("%02x", got[i]);
+    printf("\n    want %s\n", hex);
+    return 0;
+  }
+  return 1;
+}
+
+static int mult_g(const secp256k1_context *ctx, secp256k1_pubkey *out,
+                  uint64_t m)
+{
+  unsigned char s[32];
+  uint64_to_scalar32(s, m);
+  return secp256k1_ec_pubkey_create(ctx, out, s);
+}
+
+static int build_gens(const secp256k1_context *ctx, secp256k1_pubkey *G,
+                      secp256k1_pubkey *G_vec, uint32_t n_n,
+                      secp256k1_pubkey *H_vec, uint32_t n_h)
+{
+  uint32_t i;
+  if (!mult_g(ctx, G, 1))
+    return 0;
+  for (i = 0; i < n_n; i++)
+    if (!secp256k1_mpt_hash_to_point_nums(ctx, &G_vec[i],
+                                          (const unsigned char *)"G", 1, i))
+      return 0;
+  for (i = 0; i < n_h; i++)
+    if (!secp256k1_mpt_hash_to_point_nums(ctx, &H_vec[i],
+                                          (const unsigned char *)"H", 1, i))
+      return 0;
+  return 1;
+}
+
+/* H_0 must be the Pedersen blinding generator the library uses elsewhere. */
+static int check_h0_is_pedersen_h(const secp256k1_context *ctx,
+                                  const secp256k1_pubkey *H0)
+{
+  secp256k1_pubkey h;
+  unsigned char a[33], b[33];
+  size_t la = 33, lb = 33;
+  if (!secp256k1_mpt_get_h_generator(ctx, &h))
+    return 0;
+  secp256k1_ec_pubkey_serialize(ctx, a, &la, H0, SECP256K1_EC_COMPRESSED);
+  secp256k1_ec_pubkey_serialize(ctx, b, &lb, &h, SECP256K1_EC_COMPRESSED);
+  return memcmp(a, b, 33) == 0;
+}
+
+static int run_vector(const secp256k1_context *ctx, const vector_t *v)
+{
+  secp256k1_pubkey G, G_vec[MAX_N_N], H_vec[N_H], V[2], C_L, C_O, C_R, C_S, X,
+      R;
+  unsigned char pp[32], context[32], alpha[32], rho[32], lambda[32], beta[32],
+      delta[32], tau[32], gamma[32];
+  secp256k1_bppp_transcript t;
+  uint32_t i, j;
+  int ok = 1;
+
+  printf("shape k=%u N=%u b=%u N_n=%u N_h=%u\n", v->k, v->n_bits, v->base,
+         v->n_n, v->n_h);
+  if (!build_gens(ctx, &G, G_vec, v->n_n, H_vec, v->n_h))
+    return 0;
+  if (!check_h0_is_pedersen_h(ctx, &H_vec[0]))
+  {
+    printf("  H_0 != secp256k1_mpt_get_h_generator()\n");
+    return 0;
+  }
+  if (!secp256k1_bppp_params_digest(ctx, pp, v->k, v->n_bits, v->base, &G,
+                                    G_vec, v->n_n, H_vec, v->n_h))
+    return 0;
+  ok &= expect32("pp", pp, v->pp);
+
+  if (!hex32(context, v->context))
+    return 0;
+  for (i = 0; i < v->k; i++)
+    if (!mult_g(ctx, &V[i], v->v_mult[i]))
+      return 0;
+  if (!secp256k1_bppp_transcript_init(ctx, &t, pp, context, v->base, V, v->k))
+    return 0;
+  ok &= expect32("s0", t.state, v->s0);
+
+  if (!mult_g(ctx, &C_L, v->c_l_mult) || !mult_g(ctx, &C_O, v->c_o_mult) ||
+      !mult_g(ctx, &C_R, v->c_r_mult) || !mult_g(ctx, &C_S, v->c_s_mult))
+    return 0;
+
+  /* out of order: round2 before round1 must fail and leave the state alone */
+  if (secp256k1_bppp_transcript_round2(ctx, &t, &C_R, rho, lambda, beta, delta))
+  {
+    printf("  round2 accepted before round1\n");
+    ok = 0;
+  }
+  ok &= expect32("s0 after rejected call", t.state, v->s0);
+
+  if (!secp256k1_bppp_transcript_round1(ctx, &t, &C_L, &C_O, alpha))
+    return 0;
+  ok &= expect32("s1", t.state, v->s1);
+  ok &= expect32("alpha", alpha, v->alpha);
+
+  if (!secp256k1_bppp_transcript_round2(ctx, &t, &C_R, rho, lambda, beta,
+                                        delta))
+    return 0;
+  ok &= expect32("s2", t.state, v->s2);
+  ok &= expect32("rho", rho, v->rho);
+  ok &= expect32("lambda", lambda, v->lambda);
+  ok &= expect32("beta", beta, v->beta);
+  ok &= expect32("delta", delta, v->delta);
+
+  if (!secp256k1_bppp_transcript_round3(ctx, &t, &C_S, tau))
+    return 0;
+  ok &= expect32("s3", t.state, v->s3);
+  ok &= expect32("tau", tau, v->tau);
+
+  /* NLA round numbering is enforced: j=2 before j=1 must fail */
+  if (!mult_g(ctx, &X, v->x_mult[1]) || !mult_g(ctx, &R, v->r_mult[1]))
+    return 0;
+  if (secp256k1_bppp_transcript_nla_round(ctx, &t, 2, &X, &R, gamma))
+  {
+    printf("  nla round 2 accepted before round 1\n");
+    ok = 0;
+  }
+  for (j = 1; j <= NLA_ROUNDS; j++)
+  {
+    char what[16];
+    if (!mult_g(ctx, &X, v->x_mult[j - 1]) ||
+        !mult_g(ctx, &R, v->r_mult[j - 1]))
+      return 0;
+    if (!secp256k1_bppp_transcript_nla_round(ctx, &t, j, &X, &R, gamma))
+      return 0;
+    snprintf(what, sizeof what, "s_nla[%u]", j);
+    ok &= expect32(what, t.state, v->s_nla[j - 1]);
+    snprintf(what, sizeof what, "gamma[%u]", j);
+    ok &= expect32(what, gamma, v->gamma[j - 1]);
+  }
+  return ok;
+}
+
+/* The context is mandatory and bound: a different context gives a different
+ * s0; a mismatched base point in pp gives a different pp. */
+static int test_binding(const secp256k1_context *ctx)
+{
+  secp256k1_pubkey G, G_vec[16], H_vec[N_H], V;
+  unsigned char pp[32], pp2[32], c1[32] = {0}, c2[32] = {0};
+  secp256k1_bppp_transcript t1, t2;
+  c2[31] = 1;
+  if (!build_gens(ctx, &G, G_vec, 16, H_vec, N_H) || !mult_g(ctx, &V, 5))
+    return 0;
+  if (!secp256k1_bppp_params_digest(ctx, pp, 1, 64, 16, &G, G_vec, 16, H_vec,
+                                    N_H))
+    return 0;
+  if (!secp256k1_bppp_params_digest(ctx, pp2, 2, 64, 16, &G, G_vec, 16, H_vec,
+                                    N_H))
+    return 0;
+  if (memcmp(pp, pp2, 32) == 0)
+    return 0;
+  if (!secp256k1_bppp_transcript_init(ctx, &t1, pp, c1, 16, &V, 1) ||
+      !secp256k1_bppp_transcript_init(ctx, &t2, pp, c2, 16, &V, 1))
+    return 0;
+  if (memcmp(t1.state, t2.state, 32) == 0)
+    return 0;
+  /* null context is an error, not a "no context" mode */
+  if (secp256k1_bppp_transcript_init(ctx, &t1, pp, NULL, 16, &V, 1))
+    return 0;
+  return 1;
+}
+
+int main(void)
+{
+  secp256k1_context *ctx = secp256k1_context_create(SECP256K1_CONTEXT_NONE);
+  size_t i;
+  int ok = 1;
+  for (i = 0; i < sizeof VECTORS / sizeof VECTORS[0]; i++)
+    ok &= run_vector(ctx, &VECTORS[i]);
+  ok &= test_binding(ctx);
+  secp256k1_context_destroy(ctx);
+  printf("test_bppp_transcript: %s\n", ok ? "PASS" : "FAIL");
+  return ok ? 0 : 1;
+}
