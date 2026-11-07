@@ -1038,7 +1038,12 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   atomic_int found = 0;
   uint64_t found_m = 0;
   pthread_mutex_t found_mu;
-  pthread_mutex_init(&found_mu, NULL);
+  if (pthread_mutex_init(&found_mu, NULL) != 0)
+  {
+    free(tids);
+    free(args);
+    return 0;
+  }
 
   secp256k1_ge target_ge;
   pubkey_to_ge(target_pm, &target_ge);
