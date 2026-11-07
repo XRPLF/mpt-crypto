@@ -836,7 +836,6 @@ static void *bsgs_worker_thread(void *argp)
     if (atomic_load_explicit(a->found, memory_order_relaxed))
       break;
 
-    int early = 0;
     for (size_t w = 0; w < W; w++)
     {
       if (gej_eq_ge(&jMGj, &a->target_ge))
@@ -851,17 +850,20 @@ static void *bsgs_worker_thread(void *argp)
             atomic_store_explicit(a->found, 1, memory_order_relaxed);
           }
           pthread_mutex_unlock(a->found_mu);
-          early = 1;
-          break;
         }
+        /* As in bsgs_solve(): a direct hit determines m, and Qj is now the
+         * point at infinity, so stop here even when m is out of range. */
+        free(Q_win);
+        free(j_win);
+        free(bt1);
+        free(bt2);
+        return NULL;
       }
       Q_win[w] = Qj;
       j_win[w] = j + (uint64_t)w;
       secp256k1_gej_add_ge(&Qj, &Qj, &b->neg_MG_ge);
       secp256k1_gej_add_ge(&jMGj, &jMGj, &b->MG_ge);
     }
-    if (early)
-      break;
     j += (uint64_t)W;
 
     for (size_t w = 0; w < W; w++)
@@ -931,8 +933,8 @@ static void *bsgs_worker_thread(void *argp)
           atomic_store_explicit(a->found, 1, memory_order_relaxed);
         }
         pthread_mutex_unlock(a->found_mu);
-        break;
       }
+      break;
     }
     secp256k1_ge Q_ge;
     secp256k1_ge_set_gej(&Q_ge, &Qj);
