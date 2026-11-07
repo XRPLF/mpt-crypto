@@ -34,6 +34,7 @@
 #include "bsgs_dlp.h"
 #include "mpt_internal.h"
 
+#include <errno.h>
 #include <openssl/crypto.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -1048,6 +1049,7 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   uint64_t chunk = total / (uint64_t)nthreads;
   uint64_t rem = total % (uint64_t)nthreads;
   uint64_t jcur = 1;
+  int nstarted = 0;
 
   for (int t = 0; t < nthreads; t++)
   {
@@ -1063,10 +1065,21 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
     args[t].found_m = &found_m;
     args[t].found_mu = &found_mu;
     jcur += take;
-    pthread_create(&tids[t], NULL, bsgs_worker_thread, &args[t]);
+    /* If a thread cannot be spawned (e.g. EAGAIN at a thread limit, or ENOTSUP
+     * on a build without thread support), search this chunk on the calling
+     * thread instead; skipping it would report an in-range plaintext as not
+     * found. */
+    int rc =
+        pthread_create(&tids[nstarted], NULL, bsgs_worker_thread, &args[t]);
+    for (int tries = 1; rc == EAGAIN && tries < 3; tries++)
+      rc = pthread_create(&tids[nstarted], NULL, bsgs_worker_thread, &args[t]);
+    if (rc == 0)
+      nstarted++;
+    else
+      bsgs_worker_thread(&args[t]);
   }
 
-  for (int t = 0; t < nthreads; t++)
+  for (int t = 0; t < nstarted; t++)
     pthread_join(tids[t], NULL);
 
   int ok = atomic_load_explicit(&found, memory_order_relaxed);
