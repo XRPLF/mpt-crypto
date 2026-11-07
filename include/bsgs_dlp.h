@@ -187,14 +187,22 @@ secp256k1_elgamal_decrypt_bsgs(
 #define MPT_BSGS_DEFAULT_THREADS 1
 
 /**
+ * Upper bound on the threads argument of the parallel BSGS solver. Each
+ * thread allocates O(window) scratch points, so this bounds memory and
+ * thread creation the same way MPT_BSGS_MAX_WINDOW bounds the window.
+ */
+#define MPT_BSGS_MAX_THREADS 256
+
+/**
  * @brief Decrypts an ElGamal ciphertext using multi-threaded BSGS.
  *
  * Same as secp256k1_elgamal_decrypt_bsgs() but divides the giant-step
  * range across multiple threads for faster decryption at larger bit sizes.
  *
- * @param[in]  threads   Number of threads. Must be >= 1. Values > 1 enable
- *                       parallel search. Use MPT_BSGS_DEFAULT_THREADS for
- *                       single-threaded behaviour.
+ * @param[in]  threads   Number of threads, in [1, MPT_BSGS_MAX_THREADS];
+ *                       values outside that range return 0. Values > 1
+ *                       enable parallel search. Use MPT_BSGS_DEFAULT_THREADS
+ *                       for single-threaded behaviour.
  *
  * @return 1 if the amount was successfully recovered; 0 otherwise.
  */

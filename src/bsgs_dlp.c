@@ -1395,8 +1395,8 @@ int secp256k1_elgamal_decrypt_bsgs_parallel(
 
   if (window < 1 || window > MPT_BSGS_MAX_WINDOW)
     return 0;
-  if (threads < 1)
-    threads = 1;
+  if (threads < 1 || threads > MPT_BSGS_MAX_THREADS)
+    return 0;
 
   /* Round window up to next power of 2. */
   {
