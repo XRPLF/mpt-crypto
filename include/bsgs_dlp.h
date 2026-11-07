@@ -32,7 +32,10 @@ extern "C" {
  * Callers must initialize a secp256k1_elgamal_bsgs_ctx once — at process
  * startup or wallet initialization — and reuse it across all decrypt calls.
  * The context is read-only after initialization and safe to share across
- * threads for concurrent decrypt calls.
+ * threads for concurrent decrypt calls. It keeps the secp256k1_context passed
+ * to secp256k1_elgamal_bsgs_ctx_create and uses it for every decrypt, so that
+ * context must outlive it and must not be randomized or destroyed while a
+ * decrypt is running.
  *
  * **Baby table cache:**
  * If cache_path is non-NULL, the baby table is saved to / loaded from a
