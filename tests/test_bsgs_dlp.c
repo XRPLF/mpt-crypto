@@ -18,10 +18,22 @@
  *      baby-step index off-by-ones that drop odd multiples of 2^(l1-1))
  *  12. window parameter validation (reject out-of-range windows)
  *  13. Corrupt cache stash_count rejected (no out-of-bounds read on load)
+ *  14. Parallel decrypt matches single-threaded (threads=1,4,10)
+ *  15. Parallel decrypt for values answered by workers (chunk boundaries,
+ *      pseudo-random values), compared to single-threaded and ground truth
+ *  16. Parallel decrypt with small windows (W=1, 8) and threads > 1
+ *  17. Parallel argument checks (NULL, window, threads) and threads > J
+ *  18. Concurrent callers sharing one secp256k1_context and one bsgs ctx
+ *      (decrypt_bsgs and decrypt_bsgs_parallel from several threads)
  */
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
 #include "test_utils.h"
+/* MSVC has no pthreads; the concurrent-callers test needs them. */
+#if !defined(_WIN32) || defined(__MINGW32__)
+#define TEST_HAVE_PTHREADS 1
+#include <pthread.h>
+#endif
 #include <secp256k1.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -60,7 +72,19 @@ static void test_null_rejection(const secp256k1_context *ctx,
 static void test_decrypt_full_coverage(const secp256k1_context *ctx);
 static void test_window_validation(const secp256k1_context *ctx,
                                    secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_parallel_decrypt(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_cache_corrupt_stash(const secp256k1_context *ctx);
+static void test_parallel_workers(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs);
+static void test_parallel_small_windows(const secp256k1_context *ctx,
+                                        secp256k1_elgamal_bsgs_ctx *bsgs);
+#ifdef TEST_HAVE_PTHREADS
+static void test_concurrent_callers(const secp256k1_context *ctx,
+                                    secp256k1_elgamal_bsgs_ctx *bsgs);
+#endif
+static void test_parallel_arg_checks(const secp256k1_context *ctx,
+                                     secp256k1_elgamal_bsgs_ctx *bsgs);
 
 /* --- helpers --- */
 
@@ -108,6 +132,13 @@ int main(void)
   test_roundtrip(ctx, bsgs);
   test_window_validation(ctx, bsgs);
   test_decrypt_full_coverage(ctx);
+  test_parallel_decrypt(ctx, bsgs);
+  test_parallel_workers(ctx, bsgs);
+  test_parallel_small_windows(ctx, bsgs);
+  test_parallel_arg_checks(ctx, bsgs);
+#ifdef TEST_HAVE_PTHREADS
+  test_concurrent_callers(ctx, bsgs);
+#endif
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
   secp256k1_context_destroy(ctx);
@@ -361,7 +392,7 @@ static void test_cache_roundtrip(const secp256k1_context *ctx)
  *
  * The sweep is repeated across several window sizes. This matters because
  * the solver takes different code paths depending on W vs J:
- *   - W >= J  (e.g. the default 128): windowed loop never fires, tail only.
+ *   - W >= J  (e.g. the default 512): windowed loop never fires, tail only.
  *   - W <  J  (e.g. 8): full windowed batches exercise fe_batch_invert_tree.
  *   - W == 1: single-element batch-inversion tree (degenerate edge case).
  * Without the small-window passes the windowed TreeMon path is untested. */
@@ -518,3 +549,472 @@ static void test_null_rejection(const secp256k1_context *ctx,
 
   printf("Test passed!\n");
 }
+
+/* Correctness-only check for the parallel solver: confirms
+ * secp256k1_elgamal_decrypt_bsgs_parallel() recovers the right plaintext
+ * across threads=1,4,10 and agrees with the single-threaded path. This is a
+ * functional/parity test at TEST_BITS=28, not a performance benchmark — the
+ * small range decrypts near-instantly and says nothing about speedup. See the
+ * commit message / ePrint 2026/2102 for timing numbers at larger bit sizes. */
+static void test_parallel_decrypt(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel decrypt (threads=1,4,10)...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  /* Test m=0 */
+  encrypt_amount(ctx, 0, &pubkey, &c1, &c2);
+  uint64_t recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 1) == 1);
+  EXPECT(recovered == 0);
+
+  /* Test m=1 */
+  encrypt_amount(ctx, 1, &pubkey, &c1, &c2);
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(recovered == 1);
+
+  /* Test m=42 with 10 threads */
+  encrypt_amount(ctx, 42, &pubkey, &c1, &c2);
+  recovered = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &recovered, &c1, &c2, privkey, TEST_WINDOW, 10) == 1);
+  EXPECT(recovered == 42);
+
+  /* Verify parallel matches single-threaded */
+  uint64_t m_test = 1000;
+  encrypt_amount(ctx, m_test, &pubkey, &c1, &c2);
+  uint64_t r_single = 0, r_parallel = 0;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &r_single, &c1, &c2, privkey,
+                                        TEST_WINDOW) == 1);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &r_parallel, &c1, &c2, privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(r_single == r_parallel);
+  EXPECT(r_single == m_test);
+
+  /* Top-of-range regression for j=J: maxv, maxv-1, maxv-7 require the last
+   * giant step; check across thread counts and parity with single-threaded. */
+  {
+    const uint64_t maxv = (1ULL << TEST_BITS) - 1;
+    const uint64_t Mhalf = 1ULL << (TEST_L1 - 1);
+    uint64_t tops[] = {maxv, maxv - 1, maxv - 7, maxv - Mhalf};
+    int threadcts[] = {1, 4, 10};
+    for (size_t ti = 0; ti < sizeof(threadcts) / sizeof(threadcts[0]); ti++)
+    {
+      for (size_t vi = 0; vi < sizeof(tops) / sizeof(tops[0]); vi++)
+      {
+        encrypt_amount(ctx, tops[vi], &pubkey, &c1, &c2);
+        uint64_t rp = 0xDEADBEEFu, rs = 0xDEADBEEFu;
+        EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &rp, &c1, &c2,
+                                                       privkey, TEST_WINDOW,
+                                                       threadcts[ti]) == 1);
+        EXPECT(rp == tops[vi]);
+        EXPECT(secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &rs, &c1, &c2, privkey,
+                                              TEST_WINDOW) == 1);
+        EXPECT(rs == rp);
+      }
+    }
+
+    /* m = 2^TEST_BITS is one past the range: must be rejected. */
+    uint64_t oor = (1ULL << TEST_BITS);
+    encrypt_amount(ctx, oor, &pubkey, &c1, &c2);
+    uint64_t rp = 0xDEADBEEFu;
+    EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+               ctx, bsgs, &rp, &c1, &c2, privkey, TEST_WINDOW, 4) == 0);
+  }
+
+  printf("Test passed!\n");
+}
+
+/* Helpers for the parallel tests below. */
+
+/* Fixed-seed xorshift64: reproducible "random" plaintexts. */
+static uint64_t xorshift64(uint64_t *state)
+{
+  uint64_t x = *state;
+  x ^= x << 13;
+  x ^= x >> 7;
+  x ^= x << 17;
+  return *state = x;
+}
+
+/* Decrypt m with the parallel solver (given threads/window) and check it
+ * against the ground truth m and the single-threaded solver. */
+static void check_parallel_value(const secp256k1_context *ctx,
+                                 const secp256k1_elgamal_bsgs_ctx *bsgs,
+                                 const secp256k1_pubkey *pubkey,
+                                 const unsigned char *privkey, uint64_t m,
+                                 int window, int threads)
+{
+  secp256k1_pubkey c1, c2;
+  encrypt_amount(ctx, m, pubkey, &c1, &c2);
+  uint64_t rp = 0xDEADBEEFu, rs = 0xDEADBEEFu;
+  int okp = secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &rp, &c1, &c2,
+                                                    privkey, window, threads);
+  int oks =
+      secp256k1_elgamal_decrypt_bsgs(ctx, bsgs, &rs, &c1, &c2, privkey, window);
+  if (okp != 1 || oks != 1 || rp != m || rs != m)
+  {
+    printf("  FAILED at m=%llu (threads=%d, window=%d): parallel ok=%d "
+           "got=%llu, single ok=%d got=%llu\n",
+           (unsigned long long)m, threads, window, okp, (unsigned long long)rp,
+           oks, (unsigned long long)rs);
+    EXPECT(0);
+  }
+}
+
+/* Plaintexts that land in worker threads. At TEST_BITS=28, TEST_L1=15 the
+ * baby table covers [1, Mhalf] with Mhalf = 2^14, so every m below 2^14 is
+ * answered by the j=0 lookup before any worker starts; the values here are
+ * m = j*M + d for j on either side of each chunk boundary of
+ * bsgs_solve_parallel (giant steps 1..J split into `threads` chunks of J/T,
+ * the first J%T chunks one longer) and d around the baby-step range. */
+#define WORKER_VALUES_MAX 256
+static size_t build_worker_values(int threads, uint64_t *out)
+{
+  const uint64_t M = 1ULL << TEST_L1;
+  const int64_t Mhalf = (int64_t)(M / 2);
+  const uint64_t J = 1ULL << (TEST_BITS - TEST_L1);
+  const int64_t maxv = (int64_t)((1ULL << TEST_BITS) - 1);
+  const int64_t ds[] = {-Mhalf + 1, -1, 0, 1, Mhalf - 1};
+  uint64_t chunk = J / (uint64_t)threads;
+  uint64_t rem = J % (uint64_t)threads;
+  size_t n = 0;
+
+  /* Boundary t is the first giant step of chunk t; boundary `threads` is
+   * J + 1, whose predecessor is the last giant step J. */
+  uint64_t jb = 1;
+  for (int t = 0; t <= threads; t++)
+  {
+    uint64_t js[2] = {jb - 1, jb};
+    for (size_t ji = 0; ji < 2; ji++)
+    {
+      uint64_t j = js[ji];
+      if (j < 1)
+        j = 1;
+      if (j > J)
+        j = J;
+      for (size_t di = 0; di < sizeof(ds) / sizeof(ds[0]); di++)
+      {
+        int64_t m = (int64_t)(j * M) + ds[di];
+        if (m < 1)
+          m = 1;
+        if (m > maxv)
+          m = maxv;
+        EXPECT(n < WORKER_VALUES_MAX);
+        out[n++] = (uint64_t)m;
+      }
+    }
+    if (t < threads)
+      jb += chunk + ((uint64_t)t < rem ? 1 : 0);
+  }
+  return n;
+}
+
+#define NUM_RANDOM_VALUES 16
+static void build_random_values(uint64_t *out)
+{
+  uint64_t state = 0x9E3779B97F4A7C15ULL;
+  for (size_t i = 0; i < NUM_RANDOM_VALUES; i++)
+    out[i] = 1 + xorshift64(&state) % ((1ULL << TEST_BITS) - 1);
+}
+
+/* Values answered by workers rather than by the j=0 lookup: chunk-boundary
+ * plaintexts and fixed-seed pseudo-random plaintexts across the range, for
+ * threads=4 and 10, each compared to the single-threaded solver and to the
+ * ground truth. */
+static void test_parallel_workers(const secp256k1_context *ctx,
+                                  secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel decrypt, worker-answered values...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  int threadcts[] = {4, 10};
+  uint64_t rnd[NUM_RANDOM_VALUES];
+  build_random_values(rnd);
+
+  for (size_t ti = 0; ti < sizeof(threadcts) / sizeof(threadcts[0]); ti++)
+  {
+    int threads = threadcts[ti];
+    uint64_t vals[WORKER_VALUES_MAX];
+    size_t n = build_worker_values(threads, vals);
+    printf("  threads=%d: %zu boundary values, %d random values...\n", threads,
+           n, NUM_RANDOM_VALUES);
+    for (size_t vi = 0; vi < n; vi++)
+      check_parallel_value(ctx, bsgs, &pubkey, privkey, vals[vi], TEST_WINDOW,
+                           threads);
+    for (size_t vi = 0; vi < NUM_RANDOM_VALUES; vi++)
+      check_parallel_value(ctx, bsgs, &pubkey, privkey, rnd[vi], TEST_WINDOW,
+                           threads);
+  }
+
+  printf("Test passed!\n");
+}
+
+/* Windows smaller than a chunk with threads > 1: each worker runs full
+ * windowed batches (W=8) or the degenerate single-element batch (W=1) and
+ * then the tail loop for what is left of its chunk. A subset of the values
+ * above keeps the runtime low. */
+static void test_parallel_small_windows(const secp256k1_context *ctx,
+                                        secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel decrypt, small windows (W=1,8)...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  int windows[] = {1, 8};
+  int threadcts[] = {4, 10};
+  uint64_t rnd[NUM_RANDOM_VALUES];
+  build_random_values(rnd);
+
+  for (size_t ti = 0; ti < sizeof(threadcts) / sizeof(threadcts[0]); ti++)
+  {
+    int threads = threadcts[ti];
+    uint64_t vals[WORKER_VALUES_MAX];
+    size_t n = build_worker_values(threads, vals);
+    for (size_t wi = 0; wi < sizeof(windows) / sizeof(windows[0]); wi++)
+    {
+      printf("  threads=%d window=%d...\n", threads, windows[wi]);
+      /* Every fifth boundary value, plus the top of the range and a few
+       * random values. */
+      for (size_t vi = 0; vi < n; vi += 5)
+        check_parallel_value(ctx, bsgs, &pubkey, privkey, vals[vi], windows[wi],
+                             threads);
+      check_parallel_value(ctx, bsgs, &pubkey, privkey, (1ULL << TEST_BITS) - 1,
+                           windows[wi], threads);
+      for (size_t vi = 0; vi < 4; vi++)
+        check_parallel_value(ctx, bsgs, &pubkey, privkey, rnd[vi], windows[wi],
+                             threads);
+    }
+  }
+
+  printf("Test passed!\n");
+}
+
+/* Argument validation of decrypt_bsgs_parallel, and threads > J. Rejected
+ * arguments return 0 through MPT_ARG_CHECK (no illegal-argument callback is
+ * involved), as in test_null_rejection. */
+#define TINY_BITS 8
+#define TINY_L1 6
+static void test_parallel_arg_checks(const secp256k1_context *ctx,
+                                     secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: parallel decrypt argument checks...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey, c1, c2;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+  /* Above 2^(l1-1), so a valid call needs a worker. */
+  encrypt_amount(ctx, 5 * (1ULL << TEST_L1) + 3, &pubkey, &c1, &c2);
+
+  uint64_t out = 0;
+
+  /* NULL arguments */
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(NULL, bsgs, &out, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, NULL, &out, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, NULL, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, NULL, &c2,
+                                                 privkey, TEST_WINDOW, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, NULL,
+                                                 privkey, TEST_WINDOW, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 NULL, TEST_WINDOW, 4) == 0);
+
+  /* Out-of-range windows */
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 privkey, 0, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 privkey, -1, 4) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &out, &c1, &c2, privkey, MPT_BSGS_MAX_WINDOW + 1, 4) ==
+         0);
+
+#ifdef MPT_BSGS_MAX_THREADS
+  /* Out-of-range thread counts are rejected. */
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 0) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &out, &c1, &c2, privkey, TEST_WINDOW, -1) == 0);
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &out, &c1, &c2, privkey, TEST_WINDOW,
+             MPT_BSGS_MAX_THREADS + 1) == 0);
+#else
+  /* Without a thread cap, threads < 1 is clamped to a single-threaded solve
+   * and must still decrypt correctly. */
+  out = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 0) == 1);
+  EXPECT(out == 5 * (1ULL << TEST_L1) + 3);
+  out = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(
+             ctx, bsgs, &out, &c1, &c2, privkey, TEST_WINDOW, -1) == 1);
+  EXPECT(out == 5 * (1ULL << TEST_L1) + 3);
+#endif
+
+  /* Rejected calls did not report success for the valid ciphertext, and a
+   * valid call afterwards still works. */
+  out = 0xDEADBEEFu;
+  EXPECT(secp256k1_elgamal_decrypt_bsgs_parallel(ctx, bsgs, &out, &c1, &c2,
+                                                 privkey, TEST_WINDOW, 4) == 1);
+  EXPECT(out == 5 * (1ULL << TEST_L1) + 3);
+
+  /* threads > J: the solver clamps to J workers. A tiny context with
+   * J = 2^(TINY_BITS-TINY_L1) = 4 giant steps is swept exhaustively with 10
+   * threads (and with the thread cap, where defined). */
+  secp256k1_elgamal_bsgs_ctx *tiny =
+      secp256k1_elgamal_bsgs_ctx_create(ctx, TINY_BITS, TINY_L1, NULL);
+  EXPECT(tiny != NULL);
+  int tiny_threads[] = {
+      10,
+#ifdef MPT_BSGS_MAX_THREADS
+      MPT_BSGS_MAX_THREADS,
+#endif
+  };
+  for (size_t ti = 0; ti < sizeof(tiny_threads) / sizeof(tiny_threads[0]); ti++)
+  {
+    for (uint64_t m = 0; m < (1ULL << TINY_BITS); m++)
+    {
+      encrypt_amount(ctx, m, &pubkey, &c1, &c2);
+      uint64_t rp = 0xDEADBEEFu;
+      int ok = secp256k1_elgamal_decrypt_bsgs_parallel(
+          ctx, tiny, &rp, &c1, &c2, privkey, TEST_WINDOW, tiny_threads[ti]);
+      if (ok != 1 || rp != m)
+      {
+        printf("  FAILED at m=%llu (threads=%d, J=4): ok=%d recovered=%llu\n",
+               (unsigned long long)m, tiny_threads[ti], ok,
+               (unsigned long long)rp);
+        EXPECT(0);
+      }
+    }
+  }
+  secp256k1_elgamal_bsgs_ctx_destroy(tiny);
+
+  printf("Test passed!\n");
+}
+
+#ifdef TEST_HAVE_PTHREADS
+/* Concurrent callers: several threads share one secp256k1_context and one
+ * bsgs ctx and decrypt different values at the same time, half through
+ * decrypt_bsgs and half through decrypt_bsgs_parallel (threads=4), so
+ * parallel callers spawn their own workers while other callers are running.
+ * Ciphertexts are produced in the main thread; the caller threads only
+ * decrypt and record outcomes in per-thread result slots, which the main
+ * thread checks after join (EXPECT aborts and is not used in the callers). */
+#define CONC_CALLERS 4
+#define CONC_VALUES 7
+#define CONC_ROUNDS 3
+
+typedef struct
+{
+  const secp256k1_context *ctx;
+  secp256k1_elgamal_bsgs_ctx *bsgs;
+  const unsigned char *privkey;
+  int use_parallel;
+  uint64_t expect[CONC_VALUES];
+  int expect_ok[CONC_VALUES];
+  secp256k1_pubkey c1[CONC_VALUES];
+  secp256k1_pubkey c2[CONC_VALUES];
+  int failures;
+} conc_job;
+
+static void *conc_worker(void *arg)
+{
+  conc_job *job = (conc_job *)arg;
+  for (int round = 0; round < CONC_ROUNDS; round++)
+  {
+    for (int i = 0; i < CONC_VALUES; i++)
+    {
+      uint64_t out = 0xDEADBEEFu;
+      int rc;
+      if (job->use_parallel)
+        rc = secp256k1_elgamal_decrypt_bsgs_parallel(
+            job->ctx, job->bsgs, &out, &job->c1[i], &job->c2[i], job->privkey,
+            TEST_WINDOW, 4);
+      else
+        rc = secp256k1_elgamal_decrypt_bsgs(job->ctx, job->bsgs, &out,
+                                            &job->c1[i], &job->c2[i],
+                                            job->privkey, TEST_WINDOW);
+      if (job->expect_ok[i])
+      {
+        if (rc != 1 || out != job->expect[i])
+          job->failures++;
+      }
+      else if (rc != 0)
+        job->failures++;
+    }
+  }
+  return NULL;
+}
+
+static void test_concurrent_callers(const secp256k1_context *ctx,
+                                    secp256k1_elgamal_bsgs_ctx *bsgs)
+{
+  printf("Running test: concurrent callers on a shared bsgs ctx...\n");
+
+  unsigned char privkey[32];
+  secp256k1_pubkey pubkey;
+  EXPECT(secp256k1_elgamal_generate_keypair(ctx, privkey, &pubkey) == 1);
+
+  const uint64_t M = 1ULL << TEST_L1;
+  const uint64_t top = (1ULL << TEST_BITS) - 1;
+  /* Per caller: j=0 values, worker-answered values, one out-of-range value. */
+  uint64_t sets[CONC_CALLERS][CONC_VALUES] = {
+      {0, 1, 17, M + 5, M * 100 + 999, top, (1ULL << TEST_BITS) + 1},
+      {2, M - 1, 4242, M * 3 + 7, M * 4000 + 1, top - 1, (1ULL << TEST_BITS)},
+      {3, 100, M / 2, M * 1000 + 31, (1ULL << (TEST_BITS - 2)), top - M,
+       (1ULL << TEST_BITS) + 12345},
+      {5, 31337, M - 2, M * 7 + 11, M * 8191 + 3, top - 7,
+       (1ULL << TEST_BITS) + 2}};
+
+  conc_job jobs[CONC_CALLERS];
+  memset(jobs, 0, sizeof(jobs));
+  for (int t = 0; t < CONC_CALLERS; t++)
+  {
+    jobs[t].ctx = ctx;
+    jobs[t].bsgs = bsgs;
+    jobs[t].privkey = privkey;
+    jobs[t].use_parallel = t % 2;
+    for (int i = 0; i < CONC_VALUES; i++)
+    {
+      jobs[t].expect[i] = sets[t][i];
+      jobs[t].expect_ok[i] = (sets[t][i] <= top);
+      encrypt_amount(ctx, sets[t][i], &pubkey, &jobs[t].c1[i], &jobs[t].c2[i]);
+    }
+  }
+
+  pthread_t tids[CONC_CALLERS];
+  int created[CONC_CALLERS];
+  for (int t = 0; t < CONC_CALLERS; t++)
+  {
+    created[t] = pthread_create(&tids[t], NULL, conc_worker, &jobs[t]);
+    /* Builds without thread support (e.g. WASM without -pthread) cannot
+     * spawn callers; run them in turn so the results are still checked. */
+    if (created[t] != 0)
+      conc_worker(&jobs[t]);
+  }
+  int joined[CONC_CALLERS];
+  for (int t = 0; t < CONC_CALLERS; t++)
+    joined[t] = (created[t] == 0) ? pthread_join(tids[t], NULL) : -1;
+
+  for (int t = 0; t < CONC_CALLERS; t++)
+  {
+    EXPECT(created[t] != 0 || joined[t] == 0);
+    EXPECT(jobs[t].failures == 0);
+  }
+
+  printf("Test passed!\n");
+}
+#endif /* TEST_HAVE_PTHREADS */
