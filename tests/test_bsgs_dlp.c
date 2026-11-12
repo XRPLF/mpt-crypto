@@ -29,7 +29,11 @@
 #include "bsgs_dlp.h"
 #include "secp256k1_mpt.h"
 #include "test_utils.h"
+/* MSVC has no pthreads; the concurrent-callers test needs them. */
+#if !defined(_WIN32) || defined(__MINGW32__)
+#define TEST_HAVE_PTHREADS 1
 #include <pthread.h>
+#endif
 #include <secp256k1.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -75,8 +79,10 @@ static void test_parallel_workers(const secp256k1_context *ctx,
                                   secp256k1_elgamal_bsgs_ctx *bsgs);
 static void test_parallel_small_windows(const secp256k1_context *ctx,
                                         secp256k1_elgamal_bsgs_ctx *bsgs);
+#ifdef TEST_HAVE_PTHREADS
 static void test_concurrent_callers(const secp256k1_context *ctx,
                                     secp256k1_elgamal_bsgs_ctx *bsgs);
+#endif
 static void test_parallel_arg_checks(const secp256k1_context *ctx,
                                      secp256k1_elgamal_bsgs_ctx *bsgs);
 
@@ -130,7 +136,9 @@ int main(void)
   test_parallel_workers(ctx, bsgs);
   test_parallel_small_windows(ctx, bsgs);
   test_parallel_arg_checks(ctx, bsgs);
+#ifdef TEST_HAVE_PTHREADS
   test_concurrent_callers(ctx, bsgs);
+#endif
 
   secp256k1_elgamal_bsgs_ctx_destroy(bsgs);
   secp256k1_context_destroy(ctx);
@@ -897,6 +905,7 @@ static void test_parallel_arg_checks(const secp256k1_context *ctx,
   printf("Test passed!\n");
 }
 
+#ifdef TEST_HAVE_PTHREADS
 /* Concurrent callers: several threads share one secp256k1_context and one
  * bsgs ctx and decrypt different values at the same time, half through
  * decrypt_bsgs and half through decrypt_bsgs_parallel (threads=4), so
@@ -1008,3 +1017,4 @@ static void test_concurrent_callers(const secp256k1_context *ctx,
 
   printf("Test passed!\n");
 }
+#endif /* TEST_HAVE_PTHREADS */
