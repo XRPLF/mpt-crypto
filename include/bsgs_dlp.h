@@ -202,6 +202,11 @@ secp256k1_elgamal_decrypt_bsgs(
  * Same as secp256k1_elgamal_decrypt_bsgs() but divides the giant-step
  * range across multiple threads for faster decryption at larger bit sizes.
  *
+ * Available on all platforms. On platforms without POSIX threads (e.g.
+ * MSVC / Windows) the parallel implementation is not compiled and this
+ * function transparently falls back to the single-threaded solver, ignoring
+ * the threads argument; results are identical, only without the speedup.
+ *
  * @param[in]  threads   Number of threads, in [1, MPT_BSGS_MAX_THREADS];
  *                       values outside that range return 0. Values > 1
  *                       enable parallel search. Use MPT_BSGS_DEFAULT_THREADS

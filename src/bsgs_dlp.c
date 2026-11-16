@@ -34,13 +34,26 @@
 #include "bsgs_dlp.h"
 #include "mpt_internal.h"
 
-#include <errno.h>
 #include <openssl/crypto.h>
-#include <pthread.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* The parallel BSGS solver uses POSIX threads. MSVC / Windows has no
+ * <pthread.h>, so the parallel implementation is compiled only where pthreads
+ * are available; elsewhere secp256k1_elgamal_decrypt_bsgs_parallel() falls back
+ * to the single-threaded solver (see the "Public API - parallel decrypt"
+ * section). Define MPT_BSGS_NO_PTHREAD to force that fallback on any platform
+ * (used to compile-test the Windows path on POSIX). */
+#if !defined(_WIN32) && !defined(MPT_BSGS_NO_PTHREAD)
+#define MPT_BSGS_HAVE_PTHREAD 1
+#endif
+
+#if defined(MPT_BSGS_HAVE_PTHREAD)
+#include <errno.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#endif
 
 /* =========================================================================
  * Internal secp256k1 headers
@@ -767,7 +780,11 @@ void secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx *bsgs_ctx)
  *     does not pick between competing answers.
  *
  * Falls back to bsgs_solve() when threads <= 1.
+ *
+ * Compiled only where pthreads are available (see MPT_BSGS_HAVE_PTHREAD).
  * ========================================================================= */
+
+#if defined(MPT_BSGS_HAVE_PTHREAD)
 
 typedef struct
 {
@@ -1098,6 +1115,8 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   free(args);
   return ok;
 }
+
+#endif /* MPT_BSGS_HAVE_PTHREAD */
 
 /* =========================================================================
  * Single-threaded BSGS solver
@@ -1459,10 +1478,16 @@ int secp256k1_elgamal_decrypt_bsgs_parallel(
   if (!secp256k1_ec_pubkey_combine(ctx, &M_target, pts, 2))
     return 0;
 
-  /* 4. Solve M = m*G via parallel BSGS. */
+  /* 4. Solve M = m*G. Search in parallel where pthreads are available;
+   * otherwise (e.g. MSVC / Windows) fall back to the single-threaded solver. */
   uint64_t recovered = 0;
+#if defined(MPT_BSGS_HAVE_PTHREAD)
   int found =
       bsgs_solve_parallel(bsgs_ctx, &M_target, window, threads, &recovered);
+#else
+  (void)threads;
+  int found = bsgs_solve(bsgs_ctx, &M_target, window, &recovered);
+#endif
 
   if (found)
     *amount = recovered;
