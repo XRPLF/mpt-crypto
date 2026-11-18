@@ -95,7 +95,7 @@ extern "C" {
 /**
  * Default window size for the windowed TreeMon batch inversion in the
  * giant-step loop. Must be a power of 2. Larger values amortize field
- * inversions more aggressively at the cost of more stack allocation.
+ * inversions more aggressively at the cost of more heap allocation.
  */
 #define MPT_BSGS_DEFAULT_WINDOW 512
 
