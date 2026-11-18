@@ -212,7 +212,11 @@ secp256k1_elgamal_decrypt_bsgs(
  *                       enable parallel search. Use MPT_BSGS_DEFAULT_THREADS
  *                       for single-threaded behaviour.
  *
- * @return 1 if the amount was successfully recovered; 0 otherwise.
+ * @return 1 if the amount was successfully recovered and *amount is set;
+ *         0 if the window or threads argument is out of range, the plaintext
+ *         is out of range, or an internal resource failure occurred (OOM or
+ *         thread creation failure). Callers cannot distinguish resource
+ *         failure from an out-of-range plaintext.
  */
 SECP256K1_API int
 secp256k1_elgamal_decrypt_bsgs_parallel(
