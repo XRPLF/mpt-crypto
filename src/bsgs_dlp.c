@@ -297,7 +297,7 @@ static inline uint32_t ckey(int sec, const unsigned char xb[32])
 /*
  * Collect ALL candidates matching xb across the 3 sections and stash.
  * Returns the number of candidates found (0 = definite miss).
- * out[] must have room for at least (3 + CUCKOO_STASH_SZ) uint32_t.
+ * out[] must have room for at least (CUCKOO_K + CUCKOO_STASH_SZ) uint32_t.
  */
 static int map_get_all(const cuckoo_map *m, const unsigned char xb[32],
                        uint32_t *out)
@@ -766,7 +766,7 @@ void secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx *bsgs_ctx)
  *
  *   - j=0 is handled once, up front, on the calling thread: a direct baby
  *     lookup for Pm = i*G. Only the j >= 1 range is parallelized.
- *   - The giant-step range [1, J) is partitioned into N contiguous chunks
+ *   - The giant-step range [1, J] is partitioned into N contiguous chunks
  *     (remainder spread one-per-thread across the first few workers). Each
  *     worker owns [j_start, j_end) and recomputes its own starting point
  *     Q = Pm - j_start*M*G, so the threads share no mutable solver state.
@@ -900,7 +900,7 @@ static void *bsgs_worker_thread(void *argp)
       }
       unsigned char qxb[32];
       gej_xb32_from_zinv(&Q_win[w], &bt2[W + w], qxb);
-      uint32_t cands[3 + CUCKOO_STASH_SZ];
+      uint32_t cands[CUCKOO_K + CUCKOO_STASH_SZ];
       int nc = map_get_all(&b->baby, qxb, cands);
       for (int ci = 0; ci < nc && !found_in_window; ci++)
       {
@@ -957,7 +957,7 @@ static void *bsgs_worker_thread(void *argp)
     secp256k1_ge_set_gej(&Q_ge, &Qj);
     unsigned char qxb[32];
     ge_xb32(&Q_ge, qxb);
-    uint32_t cands[3 + CUCKOO_STASH_SZ];
+    uint32_t cands[CUCKOO_K + CUCKOO_STASH_SZ];
     int nc = map_get_all(&b->baby, qxb, cands);
     int got_it = 0;
     for (int ci = 0; ci < nc && !got_it; ci++)
@@ -1026,7 +1026,7 @@ static int bsgs_solve_parallel(const secp256k1_elgamal_bsgs_ctx *b,
   unsigned char txb[32];
   memcpy(txb, t33 + 1, 32);
   {
-    uint32_t cands[3 + CUCKOO_STASH_SZ];
+    uint32_t cands[CUCKOO_K + CUCKOO_STASH_SZ];
     int nc = map_get_all(&b->baby, txb, cands);
     for (int ci = 0; ci < nc; ci++)
       if (verify_candidate(ctx, (uint64_t)cands[ci], t33))
