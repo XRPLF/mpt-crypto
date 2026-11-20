@@ -246,6 +246,27 @@ mpt_encrypt_amount(
     uint8_t out_ciphertext[kMPT_ELGAMAL_TOTAL_SIZE]);
 
 /**
+ * @brief Checks that an amount is within the range of a public MPT amount.
+ *
+ * Public XRPL MPT amounts, such as the MPTAmount of ConfidentialMPTConvert,
+ * ConfidentialMPTConvertBack and ConfidentialMPTClawback, are in
+ * [0, INT64_MAX]; rippled rejects larger values in preflight. Call this before
+ * passing such an amount to mpt_encrypt_amount or a proof function.
+ *
+ * Only the upper bound is checked. Whether zero is allowed depends on the
+ * transaction (ConfidentialMPTConvert accepts it, ConfidentialMPTConvertBack
+ * and ConfidentialMPTClawback reject it), and the caller enforces that.
+ *
+ * The check is opt-in and changes nothing else: mpt_encrypt_amount still
+ * accepts any uint64_t amount.
+ *
+ * @param amount [in] The amount to check.
+ * @return true if amount is at most INT64_MAX, false otherwise.
+ */
+bool
+mpt_public_amount_is_valid(uint64_t amount);
+
+/**
  * @brief Decrypts an MPT amount from a ciphertext pair.
  *
  * Uses the Baby-Step Giant-Step solver (secp256k1_elgamal_decrypt_bsgs) with

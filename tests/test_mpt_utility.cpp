@@ -775,6 +775,35 @@ test_mpt_keypair_validation()
 }
 
 void
+test_mpt_public_amount_validation()
+{
+    uint64_t const max_public = static_cast<uint64_t>(INT64_MAX);
+
+    EXPECT(mpt_public_amount_is_valid(0));
+    EXPECT(mpt_public_amount_is_valid(1));
+    EXPECT(mpt_public_amount_is_valid(max_public));
+    EXPECT(!mpt_public_amount_is_valid(max_public + 1));
+    EXPECT(!mpt_public_amount_is_valid(UINT64_MAX));
+
+    // The check is opt-in: mpt_encrypt_amount still encrypts amounts above
+    // the public range, and the ciphertexts encrypt exactly that amount.
+    for (uint64_t amount : {max_public, max_public + 1, UINT64_MAX})
+    {
+        uint8_t priv[kMPT_PRIVKEY_SIZE];
+        uint8_t bf[kMPT_BLINDING_FACTOR_SIZE];
+        mpt_confidential_participant holder, issuer;
+
+        EXPECT(mpt_generate_keypair(priv, holder.pubkey) == 0);
+        EXPECT(mpt_generate_keypair(priv, issuer.pubkey) == 0);
+        EXPECT(mpt_generate_blinding_factor(bf) == 0);
+        EXPECT(mpt_encrypt_amount(amount, holder.pubkey, bf, holder.ciphertext) == 0);
+        EXPECT(mpt_encrypt_amount(amount, issuer.pubkey, bf, issuer.ciphertext) == 0);
+        EXPECT(mpt_verify_revealed_amount(amount, bf, &holder, &issuer, nullptr) == 0);
+        EXPECT(mpt_verify_revealed_amount(amount - 1, bf, &holder, &issuer, nullptr) != 0);
+    }
+}
+
+void
 test_mpt_make_ec_pair_validation()
 {
     uint8_t priv[kMPT_PRIVKEY_SIZE];
@@ -1673,6 +1702,7 @@ void
 run_unit_tests()
 {
     test_mpt_keypair_validation();
+    test_mpt_public_amount_validation();
     test_mpt_make_ec_pair_validation();
     test_mpt_context_hash_validation();
     test_mpt_compute_convert_back_remainder_validation();

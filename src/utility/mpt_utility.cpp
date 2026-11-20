@@ -7,6 +7,7 @@
 #include <secp256k1_mpt.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -602,6 +603,12 @@ mpt_encrypt_amount(
         return -1;
 
     return 0;
+}
+
+bool
+mpt_public_amount_is_valid(uint64_t amount)
+{
+    return amount <= static_cast<uint64_t>(INT64_MAX);
 }
 
 /**
