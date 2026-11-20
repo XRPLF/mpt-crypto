@@ -378,9 +378,11 @@ LINK_FLAGS=(
 # Both ESM glues use `new URL('mpt_crypto.wasm', import.meta.url)` so bundlers
 # auto-emit the .wasm as an asset instead of a runtime read. Keep the three links in
 # lockstep — they must wrap the byte-identical module.
-emcc "${LINK_FLAGS[@]}" -o "${OUT_DIR}/mpt_crypto.js"
+# Link with em++, not emcc: the module includes C++ (mpt_utility.cpp), and from
+# emsdk 6.0.6 emcc no longer links the C++ runtime by default (#154).
+em++ "${LINK_FLAGS[@]}" -o "${OUT_DIR}/mpt_crypto.js"
 wasm_sha_cjs="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
-emcc "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -o "${OUT_DIR}/mpt_crypto.mjs"
+em++ "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -o "${OUT_DIR}/mpt_crypto.mjs"
 wasm_sha_esm="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
 # Browser-only glue. -sENVIRONMENT=web,worker (overriding web,node) drops the Node
 # code path and its `node:` imports. Emscripten names the .wasm after the -o basename,
@@ -389,7 +391,7 @@ wasm_sha_esm="$(sha256_of "${OUT_DIR}/mpt_crypto.wasm")"
 # mpt_crypto.web.mjs would emit and reference a separate mpt_crypto.web.wasm.
 web_tmp="$(mktemp -d)"
 trap 'rm -rf "${web_tmp}"' EXIT
-emcc "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -sENVIRONMENT=web,worker -o "${web_tmp}/mpt_crypto.mjs"
+em++ "${LINK_FLAGS[@]}" -sEXPORT_ES6=1 -sENVIRONMENT=web,worker -o "${web_tmp}/mpt_crypto.mjs"
 wasm_sha_web="$(sha256_of "${web_tmp}/mpt_crypto.wasm")"
 mv "${web_tmp}/mpt_crypto.mjs" "${OUT_DIR}/mpt_crypto.web.mjs"
 
