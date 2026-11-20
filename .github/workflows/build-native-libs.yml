@@ -70,7 +70,7 @@ jobs:
       matrix:
         include:
           # ── macOS ARM64 (Apple Silicon) ──
-          - os: macos-14
+          - os: macos-15
             platform: darwin-aarch64
             lib_filename: libmpt-crypto.dylib
 
