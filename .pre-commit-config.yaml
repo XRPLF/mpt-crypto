@@ -12,6 +12,10 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 
+# nodeenv<1.12 resolves the default `latest` to Node pre-releases and crashes parsing them.
+default_language_version:
+  node: lts
+
 repos:
   # `pre-commit sample-config` default hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
