@@ -152,6 +152,73 @@ void run_test_case(secp256k1_context *ctx, const char *name, uint64_t *values,
   EXPECT(ok == 0);
   printf("  PASSED (Rejected same-value/different-blinding proof)\n");
 
+  /* ---- Negative Test C: tampered proof fields ----
+   * Changing a commitment also changes y and z, so Tests A and B never reach
+   * the final group check with the honest challenges. Here each proof field
+   * is altered in place. In particular tau_x only enters the polynomial
+   * identity and mu only enters the IPA side, so each of the two batched
+   * equations is exercised on its own. Scalars are bumped by 1 mod q; points
+   * are replaced with h_generator. */
+  {
+    size_t rounds = 0;
+    while (((size_t)1 << rounds) < n)
+      rounds++;
+
+    const size_t scalars_off = 4 * 33 + 2 * 33 * rounds;
+    const char *scalar_names[5] = {"a", "b", "t_hat", "tau_x", "mu"};
+    unsigned char one[32] = {0};
+    one[31] = 1;
+
+    unsigned char h_ser[33];
+    size_t h_len = sizeof(h_ser);
+    EXPECT(secp256k1_ec_pubkey_serialize(ctx, h_ser, &h_len, &h_generator,
+                                         SECP256K1_EC_COMPRESSED));
+
+    unsigned char *bad_proof = malloc(proof_len);
+    EXPECT(bad_proof != NULL);
+
+    for (size_t f = 0; f < 5; f++)
+    {
+      memcpy(bad_proof, proof, proof_len);
+      EXPECT(secp256k1_ec_seckey_tweak_add(
+          ctx, bad_proof + scalars_off + 32 * f, one));
+      ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, bad_proof,
+                                            proof_len, commitments, num_values,
+                                            &h_generator, context_id);
+      EXPECT(ok == 0);
+      printf("  PASSED (Rejected tampered %s)\n", scalar_names[f]);
+    }
+
+    /* A, S, T1, T2, then the first and last L and R. */
+    size_t point_offs[8] = {0,
+                            33,
+                            66,
+                            99,
+                            132,
+                            132 + 33 * (rounds - 1),
+                            132 + 33 * rounds,
+                            132 + 33 * (2 * rounds - 1)};
+    for (size_t f = 0; f < 8; f++)
+    {
+      memcpy(bad_proof, proof, proof_len);
+      memcpy(bad_proof + point_offs[f], h_ser, 33);
+      ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, bad_proof,
+                                            proof_len, commitments, num_values,
+                                            &h_generator, context_id);
+      EXPECT(ok == 0);
+    }
+    printf("  PASSED (Rejected tampered A, S, T1, T2, L, R)\n");
+
+    /* Untouched copy still verifies. */
+    memcpy(bad_proof, proof, proof_len);
+    ok = secp256k1_bulletproof_verify_agg(ctx, G_vec, H_vec, bad_proof,
+                                          proof_len, commitments, num_values,
+                                          &h_generator, context_id);
+    EXPECT(ok == 1);
+
+    free(bad_proof);
+  }
+
   free(bad_commitments);
   free(commitments);
   free(blindings);
