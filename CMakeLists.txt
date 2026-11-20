@@ -27,6 +27,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # (see MPT_CRYPTO_BUILD_SHARED below), so both are produced from one configure.
 set(MPT_CRYPTO_SOURCES
     src/bulletproof_aggregated.c
+    src/bppp_transcript.c
     src/commitments.c
     src/elgamal.c
     src/bsgs_dlp.c

@@ -111,6 +111,11 @@ add_mpt_test(
 )
 
 add_mpt_test(test_ipa test_ipa.c DEPENDENCIES mpt-crypto secp256k1::secp256k1)
+add_mpt_test(
+    test_bppp_transcript
+    test_bppp_transcript.c
+    DEPENDENCIES mpt-crypto secp256k1::secp256k1 OpenSSL::Crypto
+)
 
 add_mpt_test(
     test_bulletproof_agg
