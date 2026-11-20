@@ -749,6 +749,24 @@ void secp256k1_elgamal_bsgs_ctx_destroy(secp256k1_elgamal_bsgs_ctx *bsgs_ctx)
  * baby i, giving m = j*M + i  (or j*M - i for the negation shortcut).
  * ========================================================================= */
 
+/* Cleanse n bytes of a heap buffer that held secret-derived data, then free. */
+static void bsgs_free_cleansed(void *p, size_t n)
+{
+  if (!p)
+    return;
+  OPENSSL_cleanse(p, n);
+  free(p);
+}
+
+/* Cleanse the secret-derived stack state of bsgs_solve(). */
+static void bsgs_solve_wipe(unsigned char t33[33], secp256k1_ge *target_ge,
+                            secp256k1_gej *Qj)
+{
+  OPENSSL_cleanse(t33, 33);
+  OPENSSL_cleanse(target_ge, sizeof(*target_ge));
+  OPENSSL_cleanse(Qj, sizeof(*Qj));
+}
+
 static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
                       const secp256k1_pubkey *target_pm, int window,
                       uint64_t *out_m)
@@ -761,7 +779,10 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
   if (!secp256k1_ec_pubkey_serialize(ctx, t33, &t33_len, target_pm,
                                      SECP256K1_EC_COMPRESSED) ||
       t33_len != 33)
+  {
+    OPENSSL_cleanse(t33, sizeof(t33));
     return 0;
+  }
 
   /* j=0 check: target itself is a baby entry (m = i, giant step = 0). */
   {
@@ -774,9 +795,14 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
       if (verify_candidate(ctx, (uint64_t)cands[ci], t33))
       {
         *out_m = (uint64_t)cands[ci];
+        OPENSSL_cleanse(txb, sizeof(txb));
+        OPENSSL_cleanse(cands, sizeof(cands));
+        OPENSSL_cleanse(t33, sizeof(t33));
         return 1;
       }
     }
+    OPENSSL_cleanse(txb, sizeof(txb));
+    OPENSSL_cleanse(cands, sizeof(cands));
   }
 
   secp256k1_ge target_ge;
@@ -807,10 +833,11 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
 
   if (!Q_win || !j_win || !bt1 || !bt2)
   {
-    free(Q_win);
-    free(j_win);
-    free(bt1);
-    free(bt2);
+    bsgs_free_cleansed(Q_win, W * sizeof(secp256k1_gej));
+    bsgs_free_cleansed(j_win, W * sizeof(uint64_t));
+    bsgs_free_cleansed(bt1, 2 * W * sizeof(secp256k1_fe));
+    bsgs_free_cleansed(bt2, 2 * W * sizeof(secp256k1_fe));
+    bsgs_solve_wipe(t33, &target_ge, &Qj);
     return 0;
   }
 
@@ -837,10 +864,11 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
           *out_m = cand;
           result = 1;
         }
-        free(Q_win);
-        free(j_win);
-        free(bt1);
-        free(bt2);
+        bsgs_free_cleansed(Q_win, W * sizeof(secp256k1_gej));
+        bsgs_free_cleansed(j_win, W * sizeof(uint64_t));
+        bsgs_free_cleansed(bt1, 2 * W * sizeof(secp256k1_fe));
+        bsgs_free_cleansed(bt2, 2 * W * sizeof(secp256k1_fe));
+        bsgs_solve_wipe(t33, &target_ge, &Qj);
         return result;
       }
       Q_win[w] = Qj;
@@ -881,6 +909,8 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
           result = 1;
         }
       }
+      OPENSSL_cleanse(qxb, sizeof(qxb));
+      OPENSSL_cleanse(cands, sizeof(cands));
     }
   }
 
@@ -921,6 +951,9 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
         result = 1;
       }
     }
+    OPENSSL_cleanse(qxb, sizeof(qxb));
+    OPENSSL_cleanse(cands, sizeof(cands));
+    OPENSSL_cleanse(&Q_ge, sizeof(Q_ge));
 
     if (!result)
     {
@@ -929,10 +962,11 @@ static int bsgs_solve(const secp256k1_elgamal_bsgs_ctx *b,
     }
   }
 
-  free(Q_win);
-  free(j_win);
-  free(bt1);
-  free(bt2);
+  bsgs_free_cleansed(Q_win, W * sizeof(secp256k1_gej));
+  bsgs_free_cleansed(j_win, W * sizeof(uint64_t));
+  bsgs_free_cleansed(bt1, 2 * W * sizeof(secp256k1_fe));
+  bsgs_free_cleansed(bt2, 2 * W * sizeof(secp256k1_fe));
+  bsgs_solve_wipe(t33, &target_ge, &Qj);
   return result;
 }
 
@@ -966,7 +1000,10 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
   /* 1. Recover shared secret S = privkey * C1. */
   secp256k1_pubkey S = *c1;
   if (!mpt_ct_pubkey_tweak_mul(ctx, &S, privkey))
+  {
+    OPENSSL_cleanse(&S, sizeof(S));
     return 0;
+  }
 
   /* 2. Constant-time check for m=0: C2 == S means C2 - S = infinity.
    *    The BSGS solver cannot accept the point at infinity as input,
@@ -977,7 +1014,10 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
   if (!secp256k1_ec_pubkey_serialize(ctx, c2_ser, &ser_len, c2,
                                      SECP256K1_EC_COMPRESSED) ||
       ser_len != 33)
+  {
+    OPENSSL_cleanse(&S, sizeof(S));
     return 0;
+  }
 
   ser_len = 33;
   if (!secp256k1_ec_pubkey_serialize(ctx, S_ser, &ser_len, &S,
@@ -985,6 +1025,7 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
       ser_len != 33)
   {
     OPENSSL_cleanse(c2_ser, sizeof(c2_ser));
+    OPENSSL_cleanse(&S, sizeof(S));
     return 0;
   }
 
@@ -993,6 +1034,7 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
     *amount = 0;
     OPENSSL_cleanse(c2_ser, sizeof(c2_ser));
     OPENSSL_cleanse(S_ser, sizeof(S_ser));
+    OPENSSL_cleanse(&S, sizeof(S));
     return 1;
   }
 
@@ -1002,12 +1044,23 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
   /* 3. Compute M = C2 - S = C2 + (-S). */
   secp256k1_pubkey neg_S = S;
   if (!secp256k1_ec_pubkey_negate(ctx, &neg_S))
+  {
+    OPENSSL_cleanse(&S, sizeof(S));
+    OPENSSL_cleanse(&neg_S, sizeof(neg_S));
     return 0;
+  }
 
   secp256k1_pubkey M_target;
   const secp256k1_pubkey *pts[2] = {c2, &neg_S};
   if (!secp256k1_ec_pubkey_combine(ctx, &M_target, pts, 2))
+  {
+    OPENSSL_cleanse(&S, sizeof(S));
+    OPENSSL_cleanse(&neg_S, sizeof(neg_S));
+    OPENSSL_cleanse(&M_target, sizeof(M_target));
     return 0;
+  }
+  OPENSSL_cleanse(&S, sizeof(S));
+  OPENSSL_cleanse(&neg_S, sizeof(neg_S));
 
   /* 4. Solve M = m*G via BSGS. */
   uint64_t recovered = 0;
@@ -1016,5 +1069,7 @@ int secp256k1_elgamal_decrypt_bsgs(const secp256k1_context *ctx,
   if (found)
     *amount = recovered;
 
+  OPENSSL_cleanse(&M_target, sizeof(M_target));
+  OPENSSL_cleanse(&recovered, sizeof(recovered));
   return found;
 }
